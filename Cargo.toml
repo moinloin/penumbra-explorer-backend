@@ -1,0 +1,37 @@
+[package]
+name = "penumbra-explorer"
+version = "0.1.0"
+edition = "2021"
+description = "A backend service for exploring the Penumbra blockchain made by PK Labs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.4", features = ["derive"] }
+cometindex = { git = "https://github.com/penumbra-zone/penumbra", package = "cometindex" }
+ethnum = "1.4"
+penumbra-sdk-app = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-app" }
+penumbra-sdk-asset = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-asset" }
+penumbra-sdk-dex = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-dex" }
+penumbra-sdk-fee = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-fee" }
+penumbra-sdk-governance = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-governance" }
+penumbra-sdk-keys = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-keys" }
+penumbra-sdk-num = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-num" }
+penumbra-sdk-proto = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-proto" }
+penumbra-sdk-sct = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-sct" }
+penumbra-sdk-stake = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-stake" }
+penumbra-sdk-transaction = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-transaction" }
+prost = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "json"] }
+tokio = { version = "1.32", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "penumbra-explorer"
+path = "src/main.rs"
