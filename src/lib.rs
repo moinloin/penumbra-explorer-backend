@@ -1,16 +1,19 @@
 pub mod app_views;
 pub mod options;
 pub mod parsing;
+pub mod coordination;
 
 pub use options::ExplorerOptions;
 
 use anyhow::{Context, Result};
-use cometindex::{AppView, Indexer, PgTransaction, opt::Options as CometOptions};
-use std::sync::Arc;
+use cometindex::{opt::Options as CometOptions, Indexer, PgTransaction};
 use sqlx::postgres::PgPoolOptions;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use std::time::Duration;
 
 use crate::app_views::{block_details::BlockDetails, transactions::Transactions};
+use crate::coordination::TransactionQueue;
 
 pub struct Explorer {
     options: ExplorerOptions,
@@ -33,9 +36,13 @@ impl Explorer {
 
         self.init_database().await?;
 
+        // Create shared transaction queue for coordination between app views
+        let transaction_queue = Arc::new(Mutex::new(TransactionQueue::new()));
+
+        // Initialize app views with shared coordination
         let indexer = Indexer::new(comet_options)
-            .with_index(Box::new(BlockDetails::new()))
-            .with_index(Box::new(Transactions::new()));
+            .with_index(Box::new(BlockDetails::new(transaction_queue.clone())))
+            .with_index(Box::new(Transactions::new(transaction_queue)));
 
         indexer.run().await?;
 
@@ -150,4 +157,5 @@ impl Explorer {
             .await?;
 
         Ok(())
-    }}
+    }
+}

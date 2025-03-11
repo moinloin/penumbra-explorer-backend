@@ -2,47 +2,25 @@ use anyhow::Result;
 use cometindex::{
     async_trait, index::EventBatch, sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
-use penumbra_sdk_proto::{
-    core::component::sct::v1 as pb,
-    event::ProtoEvent,
-    util::tendermint_proxy::v1::GetTxResponse,
-};
+use penumbra_sdk_proto::core::component::sct::v1 as pb;
+use penumbra_sdk_proto::event::ProtoEvent;
 use sqlx::types::chrono::DateTime;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-use crate::parsing::{encode_to_hex, parse_attribute_string};
+use crate::coordination::{PendingTransaction, TransactionQueue};
+use crate::parsing::{encode_to_hex, event_to_json};
 
 #[derive(Debug)]
 pub struct BlockDetails {
+    tx_queue: Arc<Mutex<TransactionQueue>>,
 }
 
 impl BlockDetails {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    fn event_to_json(&self, event: ContextualizedEvent<'_>, tx_hash: Option<[u8; 32]>) -> Result<Value> {
-        let mut attributes = Vec::new();
-
-        for attr in &event.event.attributes {
-            let attr_str = format!("{:?}", attr);
-
-            attributes.push(json!({
-                "key": attr_str.clone(),
-                "composite_key": format!("{}.{}", event.event.kind, attr_str),
-                "value": "Unknown"
-            }));
-        }
-
-        let json_event = json!({
-            "block_id": event.block_height,
-            "tx_id": tx_hash.map(encode_to_hex),
-            "type": event.event.kind,
-            "attributes": attributes
-        });
-
-        Ok(json_event)
+    pub fn new(tx_queue: Arc<Mutex<TransactionQueue>>) -> Self {
+        Self { tx_queue }
     }
 }
 
@@ -65,20 +43,20 @@ impl AppView for BlockDetails {
         dbtx: &mut PgTransaction,
         batch: EventBatch,
     ) -> Result<(), anyhow::Error> {
-        for block in batch.events_by_block() {
-            let mut block_root = None;
-            let mut timestamp = None;
-            let tx_count = block.transactions().count();
-            let height = block.height();
+        for block_data in batch.events_by_block() {
+            let height = block_data.height();
+            let tx_count = block_data.transactions().count();
 
             tracing::info!("Processing block height {} with {} transactions", height, tx_count);
 
+            let mut block_root = None;
+            let mut timestamp = None;
             let mut block_events = Vec::new();
             let mut tx_events = Vec::new();
 
-            let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
+            let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent<'static>>> = HashMap::new();
 
-            for event in block.events() {
+            for event in block_data.events() {
                 if let Ok(pe) = pb::EventBlockRoot::from_event(&event.event) {
                     let timestamp_proto = pe.timestamp.unwrap_or_default();
                     timestamp = DateTime::from_timestamp(
@@ -88,15 +66,18 @@ impl AppView for BlockDetails {
                     block_root = Some(pe.root.unwrap().inner);
                 }
 
+                let event_json = event_to_json(event.clone(), event.tx_hash())?;
+
                 if let Some(tx_hash) = event.tx_hash() {
-                    events_by_tx_hash.entry(tx_hash).or_default().push(event.clone());
-                    tx_events.push(self.event_to_json(event, Some(tx_hash))?);
+                    let owned_event = convert_to_static_event(event.clone());
+                    events_by_tx_hash.entry(tx_hash).or_default().push(owned_event);
+                    tx_events.push(event_json);
                 } else {
-                    block_events.push(self.event_to_json(event, None)?);
+                    block_events.push(event_json);
                 }
             }
 
-            let transactions: Vec<Value> = block.transactions()
+            let transactions: Vec<Value> = block_data.transactions()
                 .enumerate()
                 .map(|(index, (tx_hash, _))| {
                     json!({
@@ -129,18 +110,18 @@ impl AppView for BlockDetails {
 
                 sqlx::query(
                     "
-                INSERT INTO explorer_block_details
-                (height, root, timestamp, num_transactions, validator_identity_key, previous_block_hash, block_hash, raw_json)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (height) DO UPDATE SET
-                root = EXCLUDED.root,
-                timestamp = EXCLUDED.timestamp,
-                num_transactions = EXCLUDED.num_transactions,
-                validator_identity_key = EXCLUDED.validator_identity_key,
-                previous_block_hash = EXCLUDED.previous_block_hash,
-                block_hash = EXCLUDED.block_hash,
-                raw_json = EXCLUDED.raw_json
-                "
+                    INSERT INTO explorer_block_details
+                    (height, root, timestamp, num_transactions, validator_identity_key, previous_block_hash, block_hash, raw_json)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (height) DO UPDATE SET
+                    root = EXCLUDED.root,
+                    timestamp = EXCLUDED.timestamp,
+                    num_transactions = EXCLUDED.num_transactions,
+                    validator_identity_key = EXCLUDED.validator_identity_key,
+                    previous_block_hash = EXCLUDED.previous_block_hash,
+                    block_hash = EXCLUDED.block_hash,
+                    raw_json = EXCLUDED.raw_json
+                    "
                 )
                     .bind(i64::try_from(height)?)
                     .bind(root)
@@ -152,9 +133,60 @@ impl AppView for BlockDetails {
                     .bind(raw_json)
                     .execute(dbtx.as_mut())
                     .await?;
+
+                if tx_count > 0 {
+                    let mut pending_transactions = Vec::with_capacity(tx_count);
+
+                    for (tx_index, (tx_hash, tx_bytes)) in block_data.transactions().enumerate() {
+                        let tx_events_for_hash = events_by_tx_hash
+                            .get(&tx_hash)
+                            .cloned()
+                            .unwrap_or_default();
+
+                        pending_transactions.push(PendingTransaction {
+                            tx_hash,
+                            tx_bytes: tx_bytes.to_vec(),
+                            tx_index: tx_index as u64,
+                            events: tx_events_for_hash,
+                        });
+                    }
+
+                    let mut queue = self.tx_queue.lock().await;
+                    queue.create_batch(height, ts, pending_transactions);
+
+                    tracing::info!(
+                        "Queued batch of {} transactions from block {} for processing",
+                        tx_count, height
+                    );
+                }
             }
         }
 
         Ok(())
+    }
+}
+
+// Helper function to convert an event with a potentially shorter lifetime to a 'static lifetime to keep a high security level
+fn convert_to_static_event(event: ContextualizedEvent<'_>) -> ContextualizedEvent<'static> {
+    let cloned_event = event.event.clone();
+    let boxed_event = Box::new(cloned_event);
+    let static_event = Box::leak(boxed_event);
+
+    let static_tx = if let Some((tx_hash, tx_bytes)) = &event.tx {
+        let bytes_vec = tx_bytes.to_vec();
+        let boxed_bytes = Box::new(bytes_vec);
+        let static_bytes_vec = Box::leak(boxed_bytes);
+        let static_bytes: &'static [u8] = static_bytes_vec.as_slice();
+
+        Some((*tx_hash, static_bytes))
+    } else {
+        None
+    };
+
+    ContextualizedEvent {
+        block_height: event.block_height,
+        event: static_event,
+        tx: static_tx,
+        local_rowid: event.local_rowid,
     }
 }

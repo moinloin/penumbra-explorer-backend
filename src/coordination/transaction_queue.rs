@@ -22,7 +22,6 @@ pub struct PendingTransaction {
 /// A thread-safe queue for coordinating transaction processing between app views
 #[derive(Debug, Default)]
 pub struct TransactionQueue {
-    // Queue of transaction batches waiting to be processed
     pending_batches: VecDeque<TransactionBatch>,
 }
 
