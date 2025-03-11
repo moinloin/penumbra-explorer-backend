@@ -1,28 +1,7 @@
-use anyhow::{anyhow, Context as _};
-use penumbra_sdk_app::genesis::{AppState, Content};
-use serde_json::Value;
-
-const GENESIS_NO_CONTENT_ERROR: &str = r#"
-Error: using an upgrade genesis file instead of an initial genesis file.
-This genesis file only contains a checkpoint hash of the state,
-rather than information about how the initial state of the chain was initialized,
-at the very first genesis.
-Make sure that you're using the very first genesis file, before any upgrades.
-"#;
-
-/// Attempt to parse content from a value.
-///
-/// This is useful to get the initial chain state for app views.
-///
-/// This has a nice error message, so you should use this.
-pub fn parse_content(data: Value) -> anyhow::Result<Content> {
-    let app_state: AppState = serde_json::from_value(data)
-        .context("error decoding app_state json: make sure that this is a penumbra genesis file")?;
-    let content = app_state
-        .content()
-        .ok_or(anyhow!(GENESIS_NO_CONTENT_ERROR))?;
-    Ok(content.clone())
-}
+use anyhow::Result;
+use cometindex::ContextualizedEvent;
+use serde_json::{json, Value};
+use std::fmt::Write;
 
 /// Helper function to convert bytes to a hexadecimal string
 pub fn encode_to_hex<T: AsRef<[u8]>>(data: T) -> String {
@@ -30,7 +9,6 @@ pub fn encode_to_hex<T: AsRef<[u8]>>(data: T) -> String {
     let mut hex_string = String::with_capacity(bytes.len() * 2);
 
     for &byte in bytes {
-        use std::fmt::Write;
         let _ = write!(&mut hex_string, "{:02X}", byte);
     }
 
@@ -62,4 +40,28 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
     }
 
     None
+}
+
+/// Convert event to JSON format
+pub fn event_to_json(event: ContextualizedEvent<'_>, tx_hash: Option<[u8; 32]>) -> Result<Value, anyhow::Error> {
+    let mut attributes = Vec::new();
+
+    for attr in &event.event.attributes {
+        let attr_str = format!("{:?}", attr);
+
+        attributes.push(json!({
+            "key": attr_str.clone(),
+            "composite_key": format!("{}.{}", event.event.kind, attr_str),
+            "value": "Unknown"
+        }));
+    }
+
+    let json_event = json!({
+        "block_id": event.block_height,
+        "tx_id": tx_hash.map(encode_to_hex),
+        "type": event.event.kind,
+        "attributes": attributes
+    });
+
+    Ok(json_event)
 }
