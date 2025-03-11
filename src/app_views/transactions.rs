@@ -1,38 +1,24 @@
 use anyhow::Result;
 use cometindex::{
-    async_trait, index::EventBatch, sqlx, AppView, ContextualizedEvent, PgTransaction,
+    async_trait, index::EventBatch, sqlx, AppView, PgTransaction,
 };
-use penumbra_sdk_proto::{
-    core::{
-        component::sct::v1 as pb,
-        transaction::v1::{Transaction, TransactionView},
-    },
-};
+use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use prost::Message;
-use sqlx::types::chrono::DateTime;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
+use crate::coordination::TransactionQueue;
 use crate::parsing::{encode_to_hex, parse_attribute_string};
 
 #[derive(Debug)]
 pub struct Transactions {
+    tx_queue: Arc<Mutex<TransactionQueue>>,
 }
 
 impl Transactions {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    async fn get_block_timestamp(&self, dbtx: &mut PgTransaction<'_>, height: u64) -> Result<Option<DateTime<sqlx::types::chrono::Utc>>, anyhow::Error> {
-        let timestamp: Option<DateTime<sqlx::types::chrono::Utc>> = sqlx::query_scalar(
-            "SELECT timestamp FROM explorer_block_details WHERE height = $1"
-        )
-            .bind(i64::try_from(height)?)
-            .fetch_optional(dbtx.as_mut())
-            .await?;
-
-        Ok(timestamp)
+    pub fn new(tx_queue: Arc<Mutex<TransactionQueue>>) -> Self {
+        Self { tx_queue }
     }
 
     fn create_transaction_json(
@@ -40,9 +26,9 @@ impl Transactions {
         tx_hash: [u8; 32],
         tx_bytes: &[u8],
         height: u64,
-        timestamp: DateTime<sqlx::types::chrono::Utc>,
+        timestamp: sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
         tx_index: u64,
-        tx_events: &[ContextualizedEvent<'_>],
+        tx_events: &[cometindex::ContextualizedEvent<'_>],
     ) -> Value {
         let mut processed_events = Vec::new();
 
@@ -132,47 +118,42 @@ impl AppView for Transactions {
     async fn index_batch(
         &self,
         dbtx: &mut PgTransaction,
-        batch: EventBatch,
+        _batch: EventBatch,
     ) -> Result<(), anyhow::Error> {
-        for block in batch.events_by_block() {
-            let height = block.height();
-            let tx_count = block.transactions().count();
-
-            tracing::info!("Transactions: Processing block height {} with {} transactions", height, tx_count);
-
-            if tx_count == 0 {
-                continue;
+        let batches = {
+            let mut queue = self.tx_queue.lock().await;
+            if queue.is_empty() {
+                return Ok(());
             }
+            queue.take_all_batches()
+        };
 
-            let timestamp = self.get_block_timestamp(dbtx, height).await?;
+        let tx_count: usize = batches.iter().map(|b| b.transactions.len()).sum();
+        if tx_count == 0 {
+            return Ok(());
+        }
 
-            if timestamp.is_none() {
-                tracing::warn!("Transactions: No timestamp found for block height {}, skipping transactions", height);
-                continue;
-            }
+        tracing::info!("Processing {} transaction batches with {} total transactions",
+                      batches.len(), tx_count);
 
-            let block_time = timestamp.unwrap();
+        for batch in batches {
+            let height = batch.block_height;
+            let timestamp = batch.timestamp;
 
-            let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
+            tracing::info!("Transactions: Processing batch for block {} with {} transactions",
+                          height, batch.transactions.len());
 
-            for event in block.events() {
-                if let Some(tx_hash) = event.tx_hash() {
-                    events_by_tx_hash.entry(tx_hash).or_default().push(event.clone());
-                }
-            }
-
-            for (tx_index, (tx_hash, tx_bytes)) in block.transactions().enumerate() {
-                tracing::debug!("Transactions: Processing transaction {} in block {}", encode_to_hex(tx_hash), height);
-
-                let tx_events = events_by_tx_hash.get(&tx_hash).cloned().unwrap_or_default();
+            for tx in batch.transactions {
+                tracing::debug!("Transactions: Processing transaction {} in block {}",
+                               encode_to_hex(tx.tx_hash), height);
 
                 let decoded_tx_json = self.create_transaction_json(
-                    tx_hash,
-                    tx_bytes,
+                    tx.tx_hash,
+                    &tx.tx_bytes,
                     height,
-                    block_time,
-                    tx_index as u64,
-                    &tx_events
+                    timestamp,
+                    tx.tx_index,
+                    &tx.events,
                 );
 
                 let result = sqlx::query(
@@ -187,17 +168,17 @@ impl AppView for Transactions {
                     raw_json = EXCLUDED.raw_json
                     "
                 )
-                    .bind(tx_hash.as_ref())
+                    .bind(tx.tx_hash.as_ref())
                     .bind(i64::try_from(height)?)
-                    .bind(block_time)
-                    .bind(tx_bytes)
+                    .bind(timestamp)
+                    .bind(&tx.tx_bytes)
                     .bind(decoded_tx_json)
                     .execute(dbtx.as_mut())
                     .await;
 
                 match result {
-                    Ok(_) => tracing::debug!("Transactions: Successfully inserted transaction {}", encode_to_hex(tx_hash)),
-                    Err(e) => tracing::error!("Transactions: Error inserting transaction {}: {:?}", encode_to_hex(tx_hash), e),
+                    Ok(_) => tracing::debug!("Successfully inserted transaction {}", encode_to_hex(tx.tx_hash)),
+                    Err(e) => tracing::error!("Error inserting transaction {}: {:?}", encode_to_hex(tx.tx_hash), e),
                 }
             }
         }
