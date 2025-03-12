@@ -5,17 +5,14 @@ use sqlx::PgPool;
 
 use crate::api::graphql::context::Context as ApiContext;
 
-// Define the GraphQL schema type
 pub type PenumbraSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 
-// Create a new schema instance
 pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
     Schema::build(QueryRoot, EmptyMutation, EmptySubscription)
         .data(ApiContext::new(db_pool))
         .finish()
 }
 
-// GraphQL object for Block
 #[derive(async_graphql::SimpleObject)]
 struct Block {
     id: ID,
@@ -27,7 +24,6 @@ struct Block {
     chain_id: Option<String>,
 }
 
-// GraphQL object for Transaction
 #[derive(async_graphql::SimpleObject)]
 struct Transaction {
     id: ID,
@@ -38,7 +34,6 @@ struct Transaction {
     chain_id: Option<String>,
 }
 
-// Query root for the GraphQL schema
 pub struct QueryRoot;
 
 #[Object]
@@ -117,7 +112,6 @@ impl QueryRoot {
     async fn transaction(&self, ctx: &Context<'_>, hash: String) -> Result<Option<Transaction>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
 
-        // Convert hash string to bytes
         let hash_bytes = match hex::decode(hash.trim_start_matches("0x")) {
             Ok(bytes) => bytes,
             Err(_) => return Ok(None),
