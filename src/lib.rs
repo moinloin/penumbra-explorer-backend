@@ -36,10 +36,8 @@ impl Explorer {
 
         self.init_database().await?;
 
-        // Create shared transaction queue for coordination between app views
         let transaction_queue = Arc::new(Mutex::new(TransactionQueue::new()));
 
-        // Initialize app views with shared coordination
         let indexer = Indexer::new(comet_options)
             .with_index(Box::new(BlockDetails::new(transaction_queue.clone())))
             .with_index(Box::new(Transactions::new(transaction_queue)));
@@ -68,18 +66,19 @@ impl Explorer {
     async fn create_schema(&self, tx: &mut PgTransaction<'_>) -> Result<()> {
         sqlx::query(
             r#"
-        CREATE TABLE IF NOT EXISTS explorer_block_details (
-            height BIGINT PRIMARY KEY,
-            root BYTEA NOT NULL,
-            timestamp TIMESTAMPTZ NOT NULL,
-            num_transactions INT NOT NULL DEFAULT 0,
-            total_fees NUMERIC(39, 0) DEFAULT 0,
-            validator_identity_key TEXT,
-            previous_block_hash BYTEA,
-            block_hash BYTEA,
-            raw_json JSONB
-        )
-        "#
+    CREATE TABLE IF NOT EXISTS explorer_block_details (
+        height BIGINT PRIMARY KEY,
+        root BYTEA NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL,
+        num_transactions INT NOT NULL DEFAULT 0,
+        total_fees NUMERIC(39, 0) DEFAULT 0,
+        validator_identity_key TEXT,
+        previous_block_hash BYTEA,
+        block_hash BYTEA,
+        chain_id TEXT,
+        raw_json JSONB
+    )
+    "#
         )
             .execute(tx.as_mut())
             .await?;
@@ -94,21 +93,18 @@ impl Explorer {
 
         sqlx::query(
             r#"
-        CREATE TABLE IF NOT EXISTS explorer_transactions (
-            id SERIAL PRIMARY KEY,
-            tx_hash BYTEA NOT NULL UNIQUE,
-            block_height BIGINT NOT NULL,
-            timestamp TIMESTAMPTZ NOT NULL,
-            raw_data BYTEA,
-            raw_json JSONB,
-            FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
+    CREATE TABLE IF NOT EXISTS explorer_transactions (
+        tx_hash BYTEA PRIMARY KEY,
+        block_height BIGINT NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL,
+        fee_amount NUMERIC(39, 0) DEFAULT 0,
+        chain_id TEXT,
+        raw_data BYTEA,
+        raw_json JSONB,
+        FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
+    )
+    "#
         )
-        "#
-        )
-            .execute(tx.as_mut())
-            .await?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_explorer_transactions_tx_hash ON explorer_transactions(tx_hash)")
             .execute(tx.as_mut())
             .await?;
 
@@ -122,40 +118,42 @@ impl Explorer {
 
         sqlx::query(
             r#"
-        CREATE OR REPLACE VIEW explorer_recent_blocks AS
-        SELECT
-            height,
-            timestamp,
-            num_transactions,
-            total_fees,
-            validator_identity_key,
-            raw_json
-        FROM
-            explorer_block_details
-        ORDER BY
-            height DESC
-        "#
+    CREATE OR REPLACE VIEW explorer_recent_blocks AS
+    SELECT
+        height,
+        timestamp,
+        num_transactions,
+        total_fees,
+        validator_identity_key,
+        chain_id,
+        raw_json
+    FROM
+        explorer_block_details
+    ORDER BY
+        height DESC
+    "#
         )
             .execute(tx.as_mut())
             .await?;
 
         sqlx::query(
             r#"
-        CREATE OR REPLACE VIEW explorer_transaction_summary AS
-        SELECT
-            t.tx_hash,
-            t.block_height,
-            t.timestamp,
-            t.raw_json
-        FROM
-            explorer_transactions t
-        ORDER BY
-            t.timestamp DESC
-        "#
+    CREATE OR REPLACE VIEW explorer_transaction_summary AS
+    SELECT
+        t.tx_hash,
+        t.block_height,
+        t.timestamp,
+        t.fee_amount,
+        t.chain_id,
+        t.raw_json
+    FROM
+        explorer_transactions t
+    ORDER BY
+        t.timestamp DESC
+    "#
         )
             .execute(tx.as_mut())
             .await?;
 
         Ok(())
-    }
-}
+    }}

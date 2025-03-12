@@ -4,7 +4,7 @@ use cometindex::{
 };
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use prost::Message;
-use serde_json::{json, Value};
+use serde_json::{json, Value, Map};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -19,6 +19,40 @@ pub struct Transactions {
 impl Transactions {
     pub fn new(tx_queue: Arc<Mutex<TransactionQueue>>) -> Self {
         Self { tx_queue }
+    }
+
+    fn extract_fee_amount(&self, tx_result: &Value) -> u64 {
+        if let Some(body) = tx_result.get("body") {
+            if let Some(params) = body.get("transactionParameters") {
+                if let Some(fee) = params.get("fee") {
+                    if let Some(amount) = fee.get("amount") {
+                        if let Some(lo) = amount.get("lo") {
+                            if let Some(lo_str) = lo.as_str() {
+                                if let Ok(fee_amount) = lo_str.parse::<u64>() {
+                                    return fee_amount;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        0
+    }
+
+    fn extract_chain_id(&self, tx_result: &Value) -> Option<String> {
+        if let Some(body) = tx_result.get("body") {
+            if let Some(params) = body.get("transactionParameters") {
+                if let Some(chain_id) = params.get("chainId") {
+                    if let Some(chain_id_str) = chain_id.as_str() {
+                        return Some(chain_id_str.to_string());
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     fn create_transaction_json(
@@ -88,16 +122,17 @@ impl Transactions {
             }
         };
 
-        let mut ordered_json = serde_json::Map::new();
-        ordered_json.insert("hash".to_string(), json!(encode_to_hex(tx_hash)));
-        ordered_json.insert("height".to_string(), json!(height.to_string()));
-        ordered_json.insert("index".to_string(), json!(tx_index.to_string()));
-        ordered_json.insert("timestamp".to_string(), json!(timestamp));
-        ordered_json.insert("tx_result".to_string(), json!(encode_to_hex(tx_bytes)));
-        ordered_json.insert("tx_result_decoded".to_string(), json!(tx_result_decoded));
-        ordered_json.insert("events".to_string(), json!(processed_events));
+        let mut ordered_map = Map::new();
+        ordered_map.insert("hash".to_string(), json!(encode_to_hex(tx_hash)));
+        ordered_map.insert("height".to_string(), json!(height.to_string()));
+        ordered_map.insert("index".to_string(), json!(tx_index.to_string()));
+        ordered_map.insert("timestamp".to_string(), json!(timestamp));
+        ordered_map.insert("tx_result".to_string(), json!(encode_to_hex(tx_bytes)));
+        ordered_map.insert("tx_result_decoded".to_string(), tx_result_decoded.clone());
 
-        Value::Object(ordered_json)
+        ordered_map.insert("events".to_string(), json!(processed_events));
+
+        Value::Object(ordered_map)
     }
 }
 
@@ -156,14 +191,20 @@ impl AppView for Transactions {
                     &tx.events,
                 );
 
+                let fee_amount = self.extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
+                let chain_id = self.extract_chain_id(&decoded_tx_json["tx_result_decoded"])
+                    .unwrap_or_else(|| "penumbra-1".to_string());
+
                 let result = sqlx::query(
                     "
                     INSERT INTO explorer_transactions
-                    (tx_hash, block_height, timestamp, raw_data, raw_json)
-                    VALUES ($1, $2, $3, $4, $5)
+                    (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (tx_hash) DO UPDATE SET
                     block_height = EXCLUDED.block_height,
                     timestamp = EXCLUDED.timestamp,
+                    fee_amount = EXCLUDED.fee_amount,
+                    chain_id = EXCLUDED.chain_id,
                     raw_data = EXCLUDED.raw_data,
                     raw_json = EXCLUDED.raw_json
                     "
@@ -171,13 +212,16 @@ impl AppView for Transactions {
                     .bind(tx.tx_hash.as_ref())
                     .bind(i64::try_from(height)?)
                     .bind(timestamp)
+                    .bind(fee_amount as i64)
+                    .bind(chain_id)
                     .bind(&tx.tx_bytes)
                     .bind(decoded_tx_json)
                     .execute(dbtx.as_mut())
                     .await;
 
                 match result {
-                    Ok(_) => tracing::debug!("Successfully inserted transaction {}", encode_to_hex(tx.tx_hash)),
+                    Ok(_) => tracing::debug!("Successfully inserted transaction {} with fee {}",
+                                            encode_to_hex(tx.tx_hash), fee_amount),
                     Err(e) => tracing::error!("Error inserting transaction {}: {:?}", encode_to_hex(tx.tx_hash), e),
                 }
             }

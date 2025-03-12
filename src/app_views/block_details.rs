@@ -51,6 +51,7 @@ impl AppView for BlockDetails {
 
             let mut block_root = None;
             let mut timestamp = None;
+            let mut chain_id = "penumbra-1".to_string(); // Default chain ID
             let mut block_events = Vec::new();
             let mut tx_events = Vec::new();
 
@@ -77,6 +78,14 @@ impl AppView for BlockDetails {
                 }
             }
 
+            if tx_count > 0 {
+                if let Some((_, tx_bytes)) = block_data.transactions().next() {
+                    if let Some(extracted_chain_id) = extract_chain_id(tx_bytes) {
+                        chain_id = extracted_chain_id;
+                    }
+                }
+            }
+
             let transactions: Vec<Value> = block_data.transactions()
                 .enumerate()
                 .map(|(index, (tx_hash, _))| {
@@ -96,7 +105,7 @@ impl AppView for BlockDetails {
             let raw_json = json!({
                 "block": {
                     "height": height,
-                    "chain_id": "penumbra-1",
+                    "chain_id": chain_id,
                     "created_at": timestamp,
                     "transactions": transactions,
                     "events": all_events
@@ -111,12 +120,13 @@ impl AppView for BlockDetails {
                 sqlx::query(
                     "
                     INSERT INTO explorer_block_details
-                    (height, root, timestamp, num_transactions, validator_identity_key, previous_block_hash, block_hash, raw_json)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    (height, root, timestamp, num_transactions, chain_id, validator_identity_key, previous_block_hash, block_hash, raw_json)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     ON CONFLICT (height) DO UPDATE SET
                     root = EXCLUDED.root,
                     timestamp = EXCLUDED.timestamp,
                     num_transactions = EXCLUDED.num_transactions,
+                    chain_id = EXCLUDED.chain_id,
                     validator_identity_key = EXCLUDED.validator_identity_key,
                     previous_block_hash = EXCLUDED.previous_block_hash,
                     block_hash = EXCLUDED.block_hash,
@@ -127,6 +137,7 @@ impl AppView for BlockDetails {
                     .bind(root)
                     .bind(ts)
                     .bind(i32::try_from(tx_count)?)
+                    .bind(chain_id)
                     .bind(validator_key)
                     .bind(previous_hash)
                     .bind(block_hash)
@@ -166,7 +177,6 @@ impl AppView for BlockDetails {
     }
 }
 
-// Helper function to convert an event with a potentially shorter lifetime to a 'static lifetime to keep a high security level
 fn convert_to_static_event(event: ContextualizedEvent<'_>) -> ContextualizedEvent<'static> {
     let cloned_event = event.event.clone();
     let boxed_event = Box::new(cloned_event);
@@ -189,4 +199,33 @@ fn convert_to_static_event(event: ContextualizedEvent<'_>) -> ContextualizedEven
         tx: static_tx,
         local_rowid: event.local_rowid,
     }
+}
+
+fn extract_chain_id(tx_bytes: &[u8]) -> Option<String> {
+    use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
+    use prost::Message;
+
+    match TransactionView::decode(tx_bytes) {
+        Ok(tx_view) => {
+            if let Some(body) = &tx_view.body_view {
+                if let Some(params) = &body.transaction_parameters {
+                    return Some(params.chain_id.clone());
+                }
+            }
+        },
+        Err(_) => {
+            match Transaction::decode(tx_bytes) {
+                Ok(tx) => {
+                    if let Some(body) = &tx.body {
+                        if let Some(params) = &body.transaction_parameters {
+                            return Some(params.chain_id.clone());
+                        }
+                    }
+                },
+                Err(_) => {}
+            }
+        }
+    }
+
+    None
 }
