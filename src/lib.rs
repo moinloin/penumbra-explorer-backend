@@ -2,15 +2,24 @@ pub mod app_views;
 pub mod options;
 pub mod parsing;
 pub mod coordination;
+pub mod api;
 
 pub use options::ExplorerOptions;
 
+use axum::{
+    Router,
+    routing::{get, post},
+    extract::Extension,
+    Server,
+};
 use anyhow::{Context, Result};
 use cometindex::{opt::Options as CometOptions, Indexer, PgTransaction};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::time::Duration;
+use std::net::SocketAddr;
+use tracing::{info, error};
 
 use crate::app_views::{block_details::BlockDetails, transactions::Transactions};
 use crate::coordination::TransactionQueue;
@@ -25,6 +34,28 @@ impl Explorer {
     }
 
     pub async fn run(&self) -> Result<()> {
+        self.init_database().await?;
+
+        let pool = PgPoolOptions::new()
+            .max_connections(10)
+            .connect(&self.options.dest_db_url)
+            .await
+            .context("Failed to connect to destination database for API")?;
+
+        let schema = crate::api::graphql::schema::create_schema(pool.clone());
+
+        let api_router = Router::new()
+            .route("/graphql", post(crate::api::handlers::graphql_handler))
+            .route("/graphql/playground", get(crate::api::handlers::graphql_playground))
+            .route("/health", get(crate::api::handlers::health_check))
+            .layer(Extension(schema));
+
+        let api_host = "0.0.0.0";
+        let api_port = 3000;
+
+        let addr = format!("{}:{}", api_host, api_port).parse::<SocketAddr>()?;
+        info!("Starting API server on {}", addr);
+
         let comet_options = CometOptions {
             src_database_url: self.options.source_db_url.clone(),
             dst_database_url: self.options.dest_db_url.clone(),
@@ -34,15 +65,22 @@ impl Explorer {
             exit_on_catchup: false,
         };
 
-        self.init_database().await?;
-
         let transaction_queue = Arc::new(Mutex::new(TransactionQueue::new()));
 
         let indexer = Indexer::new(comet_options)
             .with_index(Box::new(BlockDetails::new(transaction_queue.clone())))
             .with_index(Box::new(Transactions::new(transaction_queue)));
 
-        indexer.run().await?;
+        tokio::select! {
+            indexer_result = indexer.run() => {
+                error!("Indexer exited: {:?}", indexer_result);
+                indexer_result?;
+            },
+            server_result = Server::bind(&addr).serve(api_router.into_make_service()) => {
+                error!("API server exited: {:?}", server_result);
+                server_result.map_err(|e| anyhow::anyhow!("API server error: {}", e))?;
+            }
+        }
 
         Ok(())
     }
