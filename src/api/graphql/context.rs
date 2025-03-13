@@ -1,18 +1,16 @@
 use sqlx::PgPool;
-use std::sync::Arc;
 
 /// Context for GraphQL resolvers to access shared resources
-pub struct Context {
+pub struct ApiContext {
     /// Database connection pool
     pub db: PgPool,
 }
 
-impl Context {
+impl ApiContext {
     /// Create a new context with the given database pool
     pub fn new(db: PgPool) -> Self {
         Self { db }
     }
 }
 
-//TODO Implement the async_graphql Context marker trait
-impl async_graphql::Context for Context {}
+impl async_graphql::Context for ApiContext {}
