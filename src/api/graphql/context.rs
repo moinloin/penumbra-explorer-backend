@@ -12,5 +12,3 @@ impl ApiContext {
         Self { db }
     }
 }
-
-impl async_graphql::Context for ApiContext {}
