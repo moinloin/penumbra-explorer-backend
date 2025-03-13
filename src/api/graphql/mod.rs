@@ -1,8 +1,9 @@
-mod schema;
-mod context;
-mod resolvers;
+pub mod context;
+pub mod schema;
+pub mod scalars;
+pub mod types;
+pub mod resolvers;
 
 pub use schema::{create_schema, PenumbraSchema};
-pub use context::Context;
-
-pub use resolvers::handlers;
+pub use types::*;
+pub use resolvers::QueryRoot;
