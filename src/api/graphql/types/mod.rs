@@ -4,12 +4,14 @@ mod event;
 mod transaction;
 mod inputs;
 mod unions;
-mod enums;
+mod stats;
 
 pub use asset::*;
 pub use block::*;
 pub use event::*;
-pub use transaction::*;
 pub use inputs::*;
+pub use stats::*;
+pub use transaction::*;
 pub use unions::*;
-pub use enums::*;
+
+pub use transaction::extract_transaction_body;
