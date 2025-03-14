@@ -1,11 +1,11 @@
-use async_graphql::{Context, Result};
+use async_graphql::Result;
 use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
     types::{Block, BlocksSelector},
 };
 
-pub async fn resolve_block(ctx: &Context<'_>, height: i32) -> Result<Option<Block>> {
+pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Result<Option<Block>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
     let row = sqlx::query(
@@ -31,7 +31,7 @@ pub async fn resolve_block(ctx: &Context<'_>, height: i32) -> Result<Option<Bloc
     )))
 }
 
-pub async fn resolve_blocks(ctx: &Context<'_>, selector: BlocksSelector) -> Result<Vec<Block>> {
+pub async fn resolve_blocks(ctx: &async_graphql::Context<'_>, selector: BlocksSelector) -> Result<Vec<Block>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
     let (query, _params) = build_blocks_query(&selector);
@@ -57,7 +57,6 @@ pub async fn resolve_blocks(ctx: &Context<'_>, selector: BlocksSelector) -> Resu
     Ok(blocks)
 }
 
-// Helper to build the SQL query based on the selector
 fn build_blocks_query(selector: &BlocksSelector) -> (String, usize) {
     let mut query = String::from(
         "SELECT height, timestamp, raw_json FROM explorer_block_details"
@@ -71,7 +70,6 @@ fn build_blocks_query(selector: &BlocksSelector) -> (String, usize) {
         query.push_str(" ORDER BY height DESC LIMIT $1");
         param_count = 1;
     } else {
-        // Default to latest 10 blocks
         query.push_str(" ORDER BY height DESC LIMIT 10");
         param_count = 0;
     }
