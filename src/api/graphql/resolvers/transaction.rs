@@ -1,11 +1,11 @@
-use async_graphql::{Context, Result};
+use async_graphql::Result;
 use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
     types::{Transaction, TransactionsSelector, Block, Event},
 };
 
-pub async fn resolve_transaction(ctx: &Context<'_>, hash: String) -> Result<Option<Transaction>> {
+pub async fn resolve_transaction(ctx: &async_graphql::Context<'_>, hash: String) -> Result<Option<Transaction>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
     let hash_bytes = match hex::decode(hash.trim_start_matches("0x")) {
@@ -41,6 +41,8 @@ pub async fn resolve_transaction(ctx: &Context<'_>, hash: String) -> Result<Opti
         let tx_hash: Vec<u8> = r.get("tx_hash");
         let block_height: i64 = r.get("block_height");
         let timestamp: chrono::DateTime<chrono::Utc> = r.get("block_timestamp");
+        let _fee_amount_str: String = r.get("fee_amount_str");
+        let _chain_id: Option<String> = r.get("chain_id");
         let raw_data: Vec<u8> = r.get("raw_data");
         let raw_json: Option<serde_json::Value> = r.get("raw_json");
 
@@ -70,7 +72,7 @@ pub async fn resolve_transaction(ctx: &Context<'_>, hash: String) -> Result<Opti
     }
 }
 
-pub async fn resolve_transactions(ctx: &Context<'_>, selector: TransactionsSelector) -> Result<Vec<Transaction>> {
+pub async fn resolve_transactions(ctx: &async_graphql::Context<'_>, selector: TransactionsSelector) -> Result<Vec<Transaction>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
     let base_query = r#"
@@ -92,7 +94,6 @@ pub async fn resolve_transactions(ctx: &Context<'_>, selector: TransactionsSelec
     let (query, _params_count) = build_transactions_query(&selector, base_query);
 
     if let Some(range) = &selector.range {
-        // Create the query with explicit binding
         let from_hash_bytes = match hex::decode(range.from_tx_hash.trim_start_matches("0x")) {
             Ok(bytes) => bytes,
             Err(_) => return Ok(vec![]),
@@ -132,11 +133,13 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
     for r in rows {
         let tx_hash: Vec<u8> = r.get("tx_hash");
         let block_height: i64 = r.get("block_height");
-        let block_timestamp: chrono::DateTime<chrono::Utc> = r.get("block_timestamp");
+        let timestamp: chrono::DateTime<chrono::Utc> = r.get("timestamp");
+        let _fee_amount_str: String = r.get("fee_amount_str");
+        let _chain_id: Option<String> = r.get("chain_id");
         let raw_data: Vec<u8> = r.get("raw_data");
         let raw_json: Option<serde_json::Value> = r.get("raw_json");
 
-        if let Some(json) = raw_json {
+        if let Some(json) = raw_json.clone() {
             let hash = hex::encode_upper(&tx_hash);
 
             transactions.push(Transaction {
@@ -147,7 +150,7 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
                 raw: hex::encode_upper(&raw_data),
                 block: Block::new(
                     block_height as i32,
-                    block_timestamp,
+                    timestamp,
                     None,
                 ),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
