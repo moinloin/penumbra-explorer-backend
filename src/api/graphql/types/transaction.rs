@@ -1,11 +1,11 @@
-use async_graphql::{SimpleObject, Context, Result};
+use async_graphql::{Context, Result, Object, SimpleObject};
 use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
-    types::{Block, DbBlock},
+    types::{Block, Event, DbBlock, Action, NotYetSupportedAction},
 };
 
-#[derive(SimpleObject)]
+// Define Transaction without SimpleObject
 pub struct Transaction {
     pub hash: String,
     pub anchor: String,
@@ -14,13 +14,55 @@ pub struct Transaction {
     pub raw: String,
     pub block: Block,
     pub body: TransactionBody,
-    pub raw_events: Vec<crate::api::graphql::types::Event>,
+    pub raw_events: Vec<Event>,
     pub result: TransactionResult,
 }
 
-#[derive(SimpleObject)]
+// Implement fields using Object trait
+#[Object]
+impl Transaction {
+    async fn hash(&self) -> &str {
+        &self.hash
+    }
+
+    async fn anchor(&self) -> &str {
+        &self.anchor
+    }
+
+    #[graphql(name = "bindingSig")]
+    async fn binding_sig(&self) -> &str {
+        &self.binding_sig
+    }
+
+    async fn index(&self) -> i32 {
+        self.index
+    }
+
+    async fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    async fn block(&self) -> &Block {
+        &self.block
+    }
+
+    async fn body(&self) -> &TransactionBody {
+        &self.body
+    }
+
+    #[graphql(name = "rawEvents")]
+    async fn raw_events(&self) -> &[Event] {
+        &self.raw_events
+    }
+
+    async fn result(&self) -> &TransactionResult {
+        &self.result
+    }
+}
+
+// Rest of the definitions
 pub struct TransactionBody {
-    pub actions: Vec<crate::api::graphql::types::Action>,
+    pub actions: Vec<Action>,
     pub actions_count: i32,
     pub detection_data: Vec<String>,
     pub memo: Option<String>,
@@ -28,20 +70,76 @@ pub struct TransactionBody {
     pub raw_actions: Vec<String>,
 }
 
-#[derive(SimpleObject)]
+#[Object]
+impl TransactionBody {
+    async fn actions(&self) -> &[Action] {
+        &self.actions
+    }
+
+    #[graphql(name = "actionsCount")]
+    async fn actions_count(&self) -> i32 {
+        self.actions_count
+    }
+
+    #[graphql(name = "detectionData")]
+    async fn detection_data(&self) -> &[String] {
+        &self.detection_data
+    }
+
+    async fn memo(&self) -> &Option<String> {
+        &self.memo
+    }
+
+    async fn parameters(&self) -> &TransactionParameters {
+        &self.parameters
+    }
+
+    #[graphql(name = "rawActions")]
+    async fn raw_actions(&self) -> &[String] {
+        &self.raw_actions
+    }
+}
+
 pub struct TransactionParameters {
     pub chain_id: String,
     pub expiry_height: i32,
     pub fee: Fee,
 }
 
-#[derive(SimpleObject)]
-pub struct Fee {
-    pub amount: String,
-    pub asset_id: Option<crate::api::graphql::types::asset::AssetId>,
+#[Object]
+impl TransactionParameters {
+    #[graphql(name = "chainId")]
+    async fn chain_id(&self) -> &str {
+        &self.chain_id
+    }
+
+    #[graphql(name = "expiryHeight")]
+    async fn expiry_height(&self) -> i32 {
+        self.expiry_height
+    }
+
+    async fn fee(&self) -> &Fee {
+        &self.fee
+    }
 }
 
-#[derive(SimpleObject, Default)]
+pub struct Fee {
+    pub amount: String,
+    pub asset_id: Option<crate::api::graphql::types::AssetId>,
+}
+
+#[Object]
+impl Fee {
+    async fn amount(&self) -> &str {
+        &self.amount
+    }
+
+    #[graphql(name = "assetId")]
+    async fn asset_id(&self) -> &Option<crate::api::graphql::types::AssetId> {
+        &self.asset_id
+    }
+}
+
 pub struct TransactionResult {
     pub code: i32,
     pub codespace: String,
@@ -53,6 +151,59 @@ pub struct TransactionResult {
     pub log: String,
 }
 
+impl Default for TransactionResult {
+    fn default() -> Self {
+        Self {
+            code: 0,
+            codespace: String::new(),
+            data: String::new(),
+            events: Vec::new(),
+            gas_used: 0,
+            gas_wanted: 0,
+            info: String::new(),
+            log: String::new(),
+        }
+    }
+}
+
+#[Object]
+impl TransactionResult {
+    async fn code(&self) -> i32 {
+        self.code
+    }
+
+    async fn codespace(&self) -> &str {
+        &self.codespace
+    }
+
+    async fn data(&self) -> &str {
+        &self.data
+    }
+
+    async fn events(&self) -> &[String] {
+        &self.events
+    }
+
+    #[graphql(name = "gasUsed")]
+    async fn gas_used(&self) -> i32 {
+        self.gas_used
+    }
+
+    #[graphql(name = "gasWanted")]
+    async fn gas_wanted(&self) -> i32 {
+        self.gas_wanted
+    }
+
+    async fn info(&self) -> &str {
+        &self.info
+    }
+
+    async fn log(&self) -> &str {
+        &self.log
+    }
+}
+
+// Direct database access type
 #[derive(SimpleObject)]
 pub struct DbTransaction {
     pub tx_hash_hex: String,
@@ -234,14 +385,19 @@ pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
         .unwrap_or("0")
         .to_string();
 
+    // Create a placeholder action
+    let action = Action::NotYetSupportedAction(NotYetSupportedAction {
+        debug: "Transaction action not fully implemented yet".to_string(),
+    });
+
     TransactionBody {
-        actions: Vec::new(),
-        actions_count: 0,
+        actions: vec![action], // Populate with actual actions later
+        actions_count: 1,
         detection_data: Vec::new(),
         memo,
         parameters: TransactionParameters {
             chain_id,
-            expiry_height: 0,
+            expiry_height: 0, // Extract if available
             fee: Fee {
                 amount: fee_amount,
                 asset_id: None,
