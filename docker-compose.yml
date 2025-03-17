@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  explorer-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - SOURCE_DB_URL=${SOURCE_DB_URL}
+      - DEST_DB_URL=postgresql://postgres:postgres@explorer-db:5432/explorer?sslmode=disable
+      - API_PORT=3000
+      - API_HOST=0.0.0.0
+      - POLLING_INTERVAL_MS=1000
+      - BATCH_SIZE=100
+      - RUST_LOG=info
+      - GENESIS_JSON_PATH=/home/penumbra/config/genesis.json
+    volumes:
+      - ./genesis.json:/home/penumbra/config/genesis.json
+    depends_on:
+      explorer-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  explorer-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=explorer
+    volumes:
+      - explorer-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  explorer-data:
