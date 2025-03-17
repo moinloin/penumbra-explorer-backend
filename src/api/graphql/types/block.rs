@@ -6,14 +6,12 @@ use crate::api::graphql::{
     types::{Transaction, Event},
 };
 
-// Define Block without SimpleObject
 pub struct Block {
     pub height: i32,
     pub created_at: DateTime,
     pub raw_json: Option<serde_json::Value>,
 }
 
-// Implement all fields using Object trait
 #[Object]
 impl Block {
     async fn height(&self) -> i32 {
@@ -108,10 +106,8 @@ impl Block {
     }
 }
 
-// Keep DbBlock the same
 use async_graphql::SimpleObject;
 
-// Direct DB access type
 #[derive(SimpleObject)]
 pub struct DbBlock {
     pub height: i64,

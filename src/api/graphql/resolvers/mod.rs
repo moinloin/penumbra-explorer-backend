@@ -63,17 +63,15 @@ impl QueryRoot {
     }
 
     /// Get a transaction directly from the database by hash
-    async fn db_transaction(&self, ctx: &async_graphql::Context<'_>, tx_hash_hex: String) -> async_graphql::Result<Option<crate::api::graphql::types::DbTransaction>> {
-        crate::api::graphql::types::DbTransaction::get_by_hash(ctx, tx_hash_hex).await
+    // Add this to your QueryRoot implementation in resolvers/mod.rs:
+
+    /// Get raw transaction data directly from the database by hash
+    async fn db_raw_transaction(&self, ctx: &async_graphql::Context<'_>, tx_hash_hex: String) -> async_graphql::Result<Option<crate::api::graphql::types::DbRawTransaction>> {
+        crate::api::graphql::types::DbRawTransaction::get_by_hash(ctx, tx_hash_hex).await
     }
 
-    /// Get a list of transactions directly from the database
-    async fn db_transactions(&self, ctx: &async_graphql::Context<'_>, limit: Option<i64>, offset: Option<i64>) -> async_graphql::Result<Vec<crate::api::graphql::types::DbTransaction>> {
-        crate::api::graphql::types::DbTransaction::get_all(ctx, limit, offset).await
-    }
-
-    /// Get transactions from a specific block directly from the database
-    async fn db_transactions_by_block(&self, ctx: &async_graphql::Context<'_>, block_height: i64) -> async_graphql::Result<Vec<crate::api::graphql::types::DbTransaction>> {
-        crate::api::graphql::types::DbTransaction::get_by_block(ctx, block_height).await
+    /// Get raw transaction data directly from the database
+    async fn db_raw_transactions(&self, ctx: &async_graphql::Context<'_>, limit: Option<i64>, offset: Option<i64>) -> async_graphql::Result<Vec<crate::api::graphql::types::DbRawTransaction>> {
+        crate::api::graphql::types::DbRawTransaction::get_all(ctx, limit, offset).await
     }
 }

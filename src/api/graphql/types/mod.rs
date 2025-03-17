@@ -15,3 +15,4 @@ pub use transaction::*;
 pub use unions::*;
 
 pub use transaction::extract_transaction_body;
+pub use transaction::DbRawTransaction;

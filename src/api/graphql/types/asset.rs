@@ -1,6 +1,5 @@
 use async_graphql::SimpleObject;
 
-// Rename fields to match what the frontend expects
 #[derive(SimpleObject, Clone)]
 pub struct AssetId {
     pub alt_base_denom: String,

@@ -5,7 +5,6 @@ use crate::api::graphql::{
     types::{Block, Event, DbBlock, Action, NotYetSupportedAction},
 };
 
-// Define Transaction without SimpleObject
 pub struct Transaction {
     pub hash: String,
     pub anchor: String,
@@ -18,7 +17,6 @@ pub struct Transaction {
     pub result: TransactionResult,
 }
 
-// Implement fields using Object trait
 #[Object]
 impl Transaction {
     async fn hash(&self) -> &str {
@@ -60,7 +58,6 @@ impl Transaction {
     }
 }
 
-// Rest of the definitions
 pub struct TransactionBody {
     pub actions: Vec<Action>,
     pub actions_count: i32,
@@ -203,19 +200,18 @@ impl TransactionResult {
     }
 }
 
-// Direct database access type
 #[derive(SimpleObject)]
-pub struct DbTransaction {
+pub struct DbRawTransaction {
     pub tx_hash_hex: String,
     pub block_height: i64,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub fee_amount: Option<String>,
     pub chain_id: Option<String>,
     pub raw_data_hex: Option<String>,
-    pub json: Option<serde_json::Value>,
+    pub raw_json: Option<serde_json::Value>,
 }
 
-impl DbTransaction {
+impl DbRawTransaction {
     pub async fn get_by_hash(ctx: &Context<'_>, tx_hash_hex: String) -> Result<Option<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
 
@@ -255,7 +251,7 @@ impl DbTransaction {
                 fee_amount: row.get("fee_amount"),
                 chain_id: row.get("chain_id"),
                 raw_data_hex: raw_data.map(|data| hex::encode_upper(&data)),
-                json: row.get("raw_json"),
+                raw_json: row.get("raw_json"),
             }))
         } else {
             Ok(None)
@@ -303,63 +299,13 @@ impl DbTransaction {
                 fee_amount: row.get("fee_amount"),
                 chain_id: row.get("chain_id"),
                 raw_data_hex: raw_data.map(|data| hex::encode_upper(&data)),
-                json: row.get("raw_json"),
+                raw_json: row.get("raw_json"),
             });
         }
 
         Ok(transactions)
-    }
-
-    pub async fn get_by_block(ctx: &Context<'_>, block_height: i64) -> Result<Vec<Self>> {
-        let db = &ctx.data_unchecked::<ApiContext>().db;
-
-        let rows = sqlx::query(
-            r#"
-            SELECT
-                tx_hash,
-                block_height,
-                timestamp,
-                COALESCE(fee_amount::TEXT, '0') as fee_amount,
-                chain_id,
-                raw_data,
-                raw_json
-            FROM
-                explorer_transactions
-            WHERE
-                block_height = $1
-            ORDER BY
-                timestamp ASC
-            "#
-        )
-            .bind(block_height)
-            .fetch_all(db)
-            .await?;
-
-        let mut transactions = Vec::with_capacity(rows.len());
-
-        for row in rows {
-            let tx_hash: Vec<u8> = row.get("tx_hash");
-            let raw_data: Option<Vec<u8>> = row.get("raw_data");
-
-            transactions.push(Self {
-                tx_hash_hex: hex::encode_upper(&tx_hash),
-                block_height: row.get("block_height"),
-                timestamp: row.get("timestamp"),
-                fee_amount: row.get("fee_amount"),
-                chain_id: row.get("chain_id"),
-                raw_data_hex: raw_data.map(|data| hex::encode_upper(&data)),
-                json: row.get("raw_json"),
-            });
-        }
-
-        Ok(transactions)
-    }
-
-    pub async fn get_block(&self, ctx: &Context<'_>) -> Result<Option<DbBlock>> {
-        DbBlock::get_by_height(ctx, self.block_height).await
     }
 }
-
 pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
     let memo = json.get("tx_result_decoded")
         .and_then(|tx| tx.get("body"))
@@ -385,19 +331,18 @@ pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
         .unwrap_or("0")
         .to_string();
 
-    // Create a placeholder action
     let action = Action::NotYetSupportedAction(NotYetSupportedAction {
         debug: "Transaction action not fully implemented yet".to_string(),
     });
 
     TransactionBody {
-        actions: vec![action], // Populate with actual actions later
+        actions: vec![action],
         actions_count: 1,
         detection_data: Vec::new(),
         memo,
         parameters: TransactionParameters {
             chain_id,
-            expiry_height: 0, // Extract if available
+            expiry_height: 0,
             fee: Fee {
                 amount: fee_amount,
                 asset_id: None,

@@ -18,7 +18,6 @@ pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
     let builder = Schema::build(QueryRoot, EmptyMutation, EmptySubscription)
         .data(ApiContext::new(db_pool));
 
-    // Register all Object implementations
     let builder = builder
         .register_output_type::<Block>()
         .register_output_type::<Transaction>()
