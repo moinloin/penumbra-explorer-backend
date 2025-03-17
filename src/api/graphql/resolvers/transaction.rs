@@ -2,7 +2,7 @@ use async_graphql::Result;
 use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
-    types::{Transaction, TransactionsSelector, Block, Event},
+    types::{Transaction, TransactionsSelector, Block, Event, TransactionResult},
 };
 
 pub async fn resolve_transaction(ctx: &async_graphql::Context<'_>, hash: String) -> Result<Option<Transaction>> {
@@ -62,7 +62,7 @@ pub async fn resolve_transaction(ctx: &async_graphql::Context<'_>, hash: String)
                 ),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
-                result: Default::default(),
+                result: TransactionResult::default(),
             }))
         } else {
             Ok(None)
@@ -155,7 +155,7 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
                 ),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
-                result: Default::default(),
+                result: TransactionResult::default(),
             });
         }
     }
