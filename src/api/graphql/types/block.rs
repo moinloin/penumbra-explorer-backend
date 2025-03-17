@@ -1,4 +1,4 @@
-use async_graphql::{SimpleObject, Context, Result, ComplexObject};
+use async_graphql::{Context, Result, Object};
 use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
@@ -6,17 +6,27 @@ use crate::api::graphql::{
     types::{Transaction, Event},
 };
 
-#[derive(SimpleObject)]
+// Define Block without SimpleObject
 pub struct Block {
     pub height: i32,
     pub created_at: DateTime,
-    #[graphql(skip)]
     pub raw_json: Option<serde_json::Value>,
 }
 
-#[ComplexObject]
+// Implement all fields using Object trait
+#[Object]
 impl Block {
+    async fn height(&self) -> i32 {
+        self.height
+    }
+
+    #[graphql(name = "createdAt")]
+    async fn created_at(&self) -> &DateTime {
+        &self.created_at
+    }
+
     /// Get the number of transactions in this block
+    #[graphql(name = "transactionsCount")]
     async fn transactions_count(&self, ctx: &Context<'_>) -> Result<i32> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
 
@@ -85,6 +95,7 @@ impl Block {
     }
 
     /// Get raw events for this block
+    #[graphql(name = "rawEvents")]
     async fn raw_events(&self) -> Result<Vec<Event>> {
         // Extract events from the raw_json
         let events = if let Some(json) = &self.raw_json {
@@ -97,6 +108,10 @@ impl Block {
     }
 }
 
+// Keep DbBlock the same
+use async_graphql::SimpleObject;
+
+// Direct DB access type
 #[derive(SimpleObject)]
 pub struct DbBlock {
     pub height: i64,
