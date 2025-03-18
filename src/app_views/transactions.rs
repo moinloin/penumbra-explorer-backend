@@ -1,6 +1,6 @@
 use anyhow::Result;
 use cometindex::{
-    async_trait, index::EventBatch, sqlx, AppView, PgTransaction,
+    async_trait, index::{EventBatch, EventBatchContext}, sqlx, AppView, PgTransaction,
 };
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use prost::Message;
@@ -154,6 +154,7 @@ impl AppView for Transactions {
         &self,
         dbtx: &mut PgTransaction,
         _batch: EventBatch,
+        _ctx: EventBatchContext,
     ) -> Result<(), anyhow::Error> {
         let batches = {
             let mut queue = self.tx_queue.lock().await;
