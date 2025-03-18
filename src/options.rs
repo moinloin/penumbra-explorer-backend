@@ -4,15 +4,15 @@ use clap::Parser;
 #[command(version, about = "Penumbra Explorer Backend")]
 pub struct ExplorerOptions {
     /// The database URL for the source raw events
-    #[arg(short = 's', long)]
+    #[arg(short = 's', long, default_value = "")]
     pub source_db_url: String,
 
     /// The database URL for the destination compiled events
-    #[arg(short = 'd', long)]
+    #[arg(short = 'd', long, default_value = "")]
     pub dest_db_url: String,
 
     /// The genesis JSON file path
-    #[arg(long)]
+    #[arg(long, default_value = "genesis.json")]
     pub genesis_json: String,
 
     /// The height to start processing from (inclusive)
