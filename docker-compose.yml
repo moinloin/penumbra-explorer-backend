@@ -1,44 +1,47 @@
 version: '3.8'
 
 services:
-  explorer-api:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: penumbra-explorer
+    restart: unless-stopped
+    depends_on:
+      - db
     ports:
       - "3000:3000"
     environment:
+      - RUST_LOG=${RUST_LOG:-info}
       - SOURCE_DB_URL=${SOURCE_DB_URL}
-      - DEST_DB_URL=postgresql://postgres:postgres@explorer-db:5432/explorer?sslmode=disable
-      - API_PORT=3000
-      - API_HOST=0.0.0.0
-      - POLLING_INTERVAL_MS=1000
-      - BATCH_SIZE=100
-      - RUST_LOG=info
-      - GENESIS_JSON_PATH=/home/penumbra/config/genesis.json
+      - DEST_DB_URL=${DEST_DB_URL:-postgresql://postgres:postgres@db:5432/explorer}
+    command: ["-s", "${SOURCE_DB_URL}", "-d", "${DEST_DB_URL:-postgresql://postgres:postgres@db:5432/explorer}", "--genesis-json", "/app/genesis.json"]
     volumes:
-      - ./genesis.json:/home/penumbra/config/genesis.json
-    depends_on:
-      explorer-db:
-        condition: service_healthy
-    restart: unless-stopped
+      - ./genesis.json:/app/genesis.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  explorer-db:
-    image: postgres:15-alpine
+  db:
+    image: postgres:16-alpine
+    container_name: penumbra-explorer-db
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=explorer
-    volumes:
-      - explorer-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     ports:
       - "5432:5432"
-    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  explorer-data:
+  postgres_data:
