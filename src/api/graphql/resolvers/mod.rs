@@ -62,9 +62,6 @@ impl QueryRoot {
         crate::api::graphql::types::DbBlock::get_latest(ctx).await
     }
 
-    /// Get a transaction directly from the database by hash
-    // Add this to your QueryRoot implementation in resolvers/mod.rs:
-
     /// Get raw transaction data directly from the database by hash
     async fn db_raw_transaction(&self, ctx: &async_graphql::Context<'_>, tx_hash_hex: String) -> async_graphql::Result<Option<crate::api::graphql::types::DbRawTransaction>> {
         crate::api::graphql::types::DbRawTransaction::get_by_hash(ctx, tx_hash_hex).await
