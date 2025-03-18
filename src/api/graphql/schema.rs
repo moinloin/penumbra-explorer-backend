@@ -1,4 +1,4 @@
-use async_graphql::{EmptyMutation, EmptySubscription, Schema, SchemaBuilder};
+use async_graphql::{EmptyMutation, EmptySubscription, Schema};
 use sqlx::PgPool;
 
 use crate::api::graphql::{

@@ -2,7 +2,7 @@ use async_graphql::{Context, Result, Object, SimpleObject};
 use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
-    types::{Block, Event, DbBlock, Action, NotYetSupportedAction},
+    types::{Block, Event, Action, NotYetSupportedAction},
 };
 
 pub struct Transaction {
