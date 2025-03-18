@@ -1,0 +1,6 @@
+target/
+Cargo.lock
+Cargo.toml
+node_modules/
+*.log
+.env
