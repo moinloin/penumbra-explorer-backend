@@ -119,4 +119,4 @@ This project is configured for deployment to Google Cloud Run using GitHub Actio
 
 ## License
 
-© 2024 PK Labs
+© 2025 PK Labs
