@@ -1,6 +1,6 @@
 use anyhow::Result;
 use cometindex::{
-    async_trait, index::EventBatch, sqlx, AppView, ContextualizedEvent, PgTransaction,
+    async_trait, index::{EventBatch, EventBatchContext}, sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
 use penumbra_sdk_proto::event::ProtoEvent;
@@ -42,6 +42,7 @@ impl AppView for BlockDetails {
         &self,
         dbtx: &mut PgTransaction,
         batch: EventBatch,
+        _ctx: EventBatchContext,
     ) -> Result<(), anyhow::Error> {
         for block_data in batch.events_by_block() {
             let height = block_data.height();
