@@ -4,10 +4,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev libpq-dev ca-certificates \
     clang libclang-dev llvm-dev \
-    cmake \
+    cmake g++-10 \
  && rm -rf /var/lib/apt/lists/*
 
 ENV LIBCLANG_PATH=/usr/lib/llvm-11/lib
+ENV CC=gcc-10
+ENV CXX=g++-10
+ENV RUSTFLAGS="-C target-feature=-sse4.2"
+ENV CXXFLAGS="-march=x86-64 -msse2"
 
 COPY . .
 
@@ -26,6 +30,7 @@ COPY genesis.json /app/genesis.json
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 3000
+ENV PORT=8080
+EXPOSE ${PORT}
 
-ENTRYPOINT ["/app/penumbra-explorer"]
+CMD ["/app/penumbra-explorer"]
