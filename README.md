@@ -1,10 +1,4 @@
-<p align="center">
-  <br />
-  <span style="font-size: 32px; font-weight: bold;">Penumbra Explorer Backend</span>
-</p>
-<p align="center">
-  A high-performance backend indexer for exploring the Penumbra blockchain built with Rust
-</p>
+
 <p align="center">
   <a href="https://github.com/tokio-rs/tokio">
     <img src="https://img.shields.io/badge/powered%20by-tokio-blue?style=flat&logo=rust" alt="Powered by Tokio" />
@@ -26,6 +20,9 @@
   <br />
 </p>
 
+# Penumbra Explorer Backend
+
+A high-performance backend indexer for exploring the Penumbra blockchain built with Rust
 
 ## Features
 
