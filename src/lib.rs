@@ -52,7 +52,7 @@ impl Explorer {
             .layer(Extension(schema));
 
         let api_host = "0.0.0.0";
-        let api_port = env::var("API_PORT").unwrap_or_else(|_| "8080".to_string());
+        let api_port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
 
         let addr = format!("{}:{}", api_host, api_port)
             .parse::<SocketAddr>()
