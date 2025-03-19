@@ -20,6 +20,7 @@ use tokio::sync::Mutex;
 use std::time::Duration;
 use std::net::SocketAddr;
 use tracing::{info, error};
+use std::env;
 
 use crate::app_views::{block_details::BlockDetails, transactions::Transactions};
 use crate::coordination::TransactionQueue;
@@ -51,9 +52,11 @@ impl Explorer {
             .layer(Extension(schema));
 
         let api_host = "0.0.0.0";
-        let api_port = 3000;
+        let api_port = env::var("API_PORT").unwrap_or_else(|_| "8080".to_string());
 
-        let addr = format!("{}:{}", api_host, api_port).parse::<SocketAddr>()?;
+        let addr = format!("{}:{}", api_host, api_port)
+            .parse::<SocketAddr>()
+            .expect("Invalid socket address");
         info!("Starting API server on {}", addr);
 
         let comet_options = CometOptions {
