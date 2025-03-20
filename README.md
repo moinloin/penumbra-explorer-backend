@@ -59,7 +59,7 @@ A high-performance backend indexer for exploring the Penumbra blockchain built w
    docker-compose logs -f app
    ```
 
-3. Access the GraphQL API at http://localhost:3000/graphql
+3. Access the GraphQL API at http://localhost:8080/graphql
 
 ### Running without Docker
 
@@ -81,19 +81,6 @@ A high-performance backend indexer for exploring the Penumbra blockchain built w
 - **Health Check**: `/health`
 
 ## Deployment
-
-### Google Cloud Run Deployment
-
-This project is configured for deployment to Google Cloud Run using GitHub Actions:
-
-1. Add the following secrets to your GitHub repository:
-    - `GCP_CREDENTIALS`: Google Cloud service account credentials JSON
-    - `GCP_PROJECT_ID`: Your Google Cloud project ID
-    - `GCP_REGION`: Deployment region (e.g., `europe-west6`)
-
-2. Push to the `main` branch to trigger the deployment workflow
-
-### Manual Deployment
 
 1. Build the Docker image:
    ```sh
