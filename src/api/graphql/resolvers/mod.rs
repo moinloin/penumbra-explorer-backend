@@ -69,7 +69,6 @@ impl QueryRoot {
     }
 
     /// --- Direct database queries ---
-
     /// Get a block directly from the database by height
     async fn db_block(
         &self,
