@@ -1,11 +1,8 @@
-use async_graphql::{Context, Result};
 use crate::api::graphql::{
+    resolvers::{block::resolve_block, transaction::resolve_transaction},
     types::SearchResult,
-    resolvers::{
-        block::resolve_block,
-        transaction::resolve_transaction
-    },
 };
+use async_graphql::{Context, Result};
 
 pub async fn resolve_search(ctx: &Context<'_>, slug: String) -> Result<Option<SearchResult>> {
     if let Ok(height) = slug.parse::<i32>() {
