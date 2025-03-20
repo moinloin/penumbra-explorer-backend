@@ -110,7 +110,7 @@ pub async fn resolve_transactions(
             .fetch_all(db)
             .await?;
 
-        return process_transaction_rows(rows);
+        process_transaction_rows(rows)
     } else if let Some(latest) = &selector.latest {
         let limit = latest.limit;
 
