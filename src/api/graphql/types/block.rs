@@ -1,10 +1,10 @@
-use async_graphql::{Context, Result, Object};
-use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
     scalars::DateTime,
-    types::{Transaction, Event},
+    types::{Event, Transaction},
 };
+use async_graphql::{Context, Object, Result};
+use sqlx::Row;
 
 pub struct Block {
     pub height: i32,
@@ -28,10 +28,12 @@ impl Block {
     async fn transactions_count(&self, ctx: &Context<'_>) -> Result<i32> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
 
-        let result = sqlx::query_as::<_, (i32,)>("SELECT num_transactions FROM explorer_block_details WHERE height = $1")
-            .bind(self.height as i64)
-            .fetch_one(db)
-            .await?;
+        let result = sqlx::query_as::<_, (i32,)>(
+            "SELECT num_transactions FROM explorer_block_details WHERE height = $1",
+        )
+        .bind(self.height as i64)
+        .fetch_one(db)
+        .await?;
 
         Ok(result.0)
     }
@@ -56,11 +58,11 @@ impl Block {
                 block_height = $1
             ORDER BY
                 timestamp ASC
-            "#
+            "#,
         )
-            .bind(self.height as i64)
-            .fetch_all(db)
-            .await?;
+        .bind(self.height as i64)
+        .fetch_all(db)
+        .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
@@ -141,11 +143,11 @@ impl DbBlock {
                 explorer_block_details
             WHERE
                 height = $1
-            "#
+            "#,
         )
-            .bind(height)
-            .fetch_optional(db)
-            .await?;
+        .bind(height)
+        .fetch_optional(db)
+        .await?;
 
         if let Some(row) = row_result {
             let root: Vec<u8> = row.get("root");
@@ -168,7 +170,11 @@ impl DbBlock {
         }
     }
 
-    pub async fn get_all(ctx: &Context<'_>, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Self>> {
+    pub async fn get_all(
+        ctx: &Context<'_>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
 
         let limit = limit.unwrap_or(10);
@@ -191,12 +197,12 @@ impl DbBlock {
             ORDER BY
                 height DESC
             LIMIT $1 OFFSET $2
-            "#
+            "#,
         )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(db)
-            .await?;
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(db)
+        .await?;
 
         let mut blocks = Vec::with_capacity(rows.len());
 
@@ -241,10 +247,10 @@ impl DbBlock {
             ORDER BY
                 height DESC
             LIMIT 1
-            "#
+            "#,
         )
-            .fetch_optional(db)
-            .await?;
+        .fetch_optional(db)
+        .await?;
 
         if let Some(row) = row_result {
             let root: Vec<u8> = row.get("root");
@@ -269,7 +275,11 @@ impl DbBlock {
 }
 
 impl Block {
-    pub fn new(height: i32, created_at: chrono::DateTime<chrono::Utc>, raw_json: Option<serde_json::Value>) -> Self {
+    pub fn new(
+        height: i32,
+        created_at: chrono::DateTime<chrono::Utc>,
+        raw_json: Option<serde_json::Value>,
+    ) -> Self {
         Self {
             height,
             created_at: DateTime(created_at),
