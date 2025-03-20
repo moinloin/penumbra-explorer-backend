@@ -1,26 +1,25 @@
+pub mod api;
 pub mod app_views;
+pub mod coordination;
 pub mod options;
 pub mod parsing;
-pub mod coordination;
-pub mod api;
 
 pub use options::ExplorerOptions;
 
-use axum::{
-    Router,
-    routing::{get, post},
-    extract::Extension,
-    Server,
-};
 use anyhow::{Context, Result};
+use axum::{
+    extract::Extension,
+    routing::{get, post},
+    Router, Server,
+};
 use cometindex::{opt::Options as CometOptions, Indexer, PgTransaction};
 use sqlx::postgres::PgPoolOptions;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use std::time::Duration;
-use std::net::SocketAddr;
-use tracing::{info, error};
 use std::env;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex;
+use tracing::{error, info};
 
 use crate::app_views::{block_details::BlockDetails, transactions::Transactions};
 use crate::coordination::TransactionQueue;
@@ -47,7 +46,10 @@ impl Explorer {
 
         let api_router = Router::new()
             .route("/graphql", post(crate::api::handlers::graphql_handler))
-            .route("/graphql/playground", get(crate::api::handlers::graphql_playground))
+            .route(
+                "/graphql/playground",
+                get(crate::api::handlers::graphql_playground),
+            )
             .route("/health", get(crate::api::handlers::health_check))
             .layer(Extension(schema));
 
@@ -119,10 +121,10 @@ impl Explorer {
         chain_id TEXT,
         raw_json JSONB
     )
-    "#
+    "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_explorer_block_details_timestamp ON explorer_block_details(timestamp DESC)")
             .execute(tx.as_mut())
@@ -144,10 +146,10 @@ impl Explorer {
         raw_json JSONB,
         FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
     )
-    "#
+    "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_explorer_transactions_block_height ON explorer_transactions(block_height)")
             .execute(tx.as_mut())
@@ -172,10 +174,10 @@ impl Explorer {
         explorer_block_details
     ORDER BY
         height DESC
-    "#
+    "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         sqlx::query(
             r#"
@@ -191,10 +193,11 @@ impl Explorer {
         explorer_transactions t
     ORDER BY
         t.timestamp DESC
-    "#
+    "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         Ok(())
-    }}
+    }
+}
