@@ -1,11 +1,14 @@
-use async_graphql::Result;
-use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
-    types::{Transaction, TransactionsSelector, Block, Event, TransactionResult},
+    types::{Block, Event, Transaction, TransactionResult, TransactionsSelector},
 };
+use async_graphql::Result;
+use sqlx::Row;
 
-pub async fn resolve_transaction(ctx: &async_graphql::Context<'_>, hash: String) -> Result<Option<Transaction>> {
+pub async fn resolve_transaction(
+    ctx: &async_graphql::Context<'_>,
+    hash: String,
+) -> Result<Option<Transaction>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
     let hash_bytes = match hex::decode(hash.trim_start_matches("0x")) {
@@ -31,11 +34,11 @@ pub async fn resolve_transaction(ctx: &async_graphql::Context<'_>, hash: String)
             explorer_block_details b ON t.block_height = b.height
         WHERE
             t.tx_hash = $1
-        "#
+        "#,
     )
-        .bind(hash_bytes.as_slice())
-        .fetch_optional(db)
-        .await?;
+    .bind(hash_bytes.as_slice())
+    .fetch_optional(db)
+    .await?;
 
     if let Some(r) = row {
         let tx_hash: Vec<u8> = r.get("tx_hash");
@@ -55,11 +58,7 @@ pub async fn resolve_transaction(ctx: &async_graphql::Context<'_>, hash: String)
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
                 raw: hex::encode_upper(&raw_data),
-                block: Block::new(
-                    block_height as i32,
-                    timestamp,
-                    None,
-                ),
+                block: Block::new(block_height as i32, timestamp, None),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
                 result: TransactionResult::default(),
@@ -72,7 +71,10 @@ pub async fn resolve_transaction(ctx: &async_graphql::Context<'_>, hash: String)
     }
 }
 
-pub async fn resolve_transactions(ctx: &async_graphql::Context<'_>, selector: TransactionsSelector) -> Result<Vec<Transaction>> {
+pub async fn resolve_transactions(
+    ctx: &async_graphql::Context<'_>,
+    selector: TransactionsSelector,
+) -> Result<Vec<Transaction>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
     let base_query = r#"
@@ -112,16 +114,11 @@ pub async fn resolve_transactions(ctx: &async_graphql::Context<'_>, selector: Tr
     } else if let Some(latest) = &selector.latest {
         let limit = latest.limit;
 
-        let rows = sqlx::query(&query)
-            .bind(limit as i64)
-            .fetch_all(db)
-            .await?;
+        let rows = sqlx::query(&query).bind(limit as i64).fetch_all(db).await?;
 
         return process_transaction_rows(rows);
     } else {
-        let rows = sqlx::query(&query)
-            .fetch_all(db)
-            .await?;
+        let rows = sqlx::query(&query).fetch_all(db).await?;
 
         return process_transaction_rows(rows);
     }
@@ -148,11 +145,7 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
                 raw: hex::encode_upper(&raw_data),
-                block: Block::new(
-                    block_height as i32,
-                    timestamp,
-                    None,
-                ),
+                block: Block::new(block_height as i32, timestamp, None),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
                 result: TransactionResult::default(),
