@@ -1,9 +1,9 @@
-use async_graphql::Result;
-use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
     types::{Block, BlocksSelector},
 };
+use async_graphql::Result;
+use sqlx::Row;
 
 pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Result<Option<Block>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
@@ -18,20 +18,25 @@ pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Res
             explorer_block_details
         WHERE
             height = $1
-        "#
+        "#,
     )
-        .bind(height as i64)
-        .fetch_optional(db)
-        .await?;
+    .bind(height as i64)
+    .fetch_optional(db)
+    .await?;
 
-    Ok(row.map(|r| Block::new(
-        r.get::<i64, _>("height") as i32,
-        r.get("timestamp"),
-        r.get("raw_json"),
-    )))
+    Ok(row.map(|r| {
+        Block::new(
+            r.get::<i64, _>("height") as i32,
+            r.get("timestamp"),
+            r.get("raw_json"),
+        )
+    }))
 }
 
-pub async fn resolve_blocks(ctx: &async_graphql::Context<'_>, selector: BlocksSelector) -> Result<Vec<Block>> {
+pub async fn resolve_blocks(
+    ctx: &async_graphql::Context<'_>,
+    selector: BlocksSelector,
+) -> Result<Vec<Block>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
     let (query, _params) = build_blocks_query(&selector);
@@ -46,21 +51,22 @@ pub async fn resolve_blocks(ctx: &async_graphql::Context<'_>, selector: BlocksSe
 
     let rows = query_builder.fetch_all(db).await?;
 
-    let blocks = rows.into_iter()
-        .map(|row| Block::new(
-            row.get::<i64, _>("height") as i32,
-            row.get("timestamp"),
-            row.get("raw_json"),
-        ))
+    let blocks = rows
+        .into_iter()
+        .map(|row| {
+            Block::new(
+                row.get::<i64, _>("height") as i32,
+                row.get("timestamp"),
+                row.get("raw_json"),
+            )
+        })
         .collect();
 
     Ok(blocks)
 }
 
 fn build_blocks_query(selector: &BlocksSelector) -> (String, usize) {
-    let mut query = String::from(
-        "SELECT height, timestamp, raw_json FROM explorer_block_details"
-    );
+    let mut query = String::from("SELECT height, timestamp, raw_json FROM explorer_block_details");
     let param_count;
 
     if let Some(_range) = &selector.range {
