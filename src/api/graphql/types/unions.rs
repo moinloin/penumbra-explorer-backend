@@ -1,5 +1,5 @@
-use async_graphql::Union;
 use crate::api::graphql::types::{Block, Transaction};
+use async_graphql::Union;
 
 #[derive(Union)]
 pub enum SearchResult {
