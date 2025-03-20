@@ -1,0 +1,35 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '--platform', 'linux/amd64', '-t', 'gcr.io/$PROJECT_ID/pe-backend:$COMMIT_SHA', '.']
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/pe-backend:$COMMIT_SHA']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'pe-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/pe-backend:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--service-account'
+      - '${_SERVICE_ACCOUNT}'
+      - '--set-secrets'
+      - 'SOURCE_DB_URL=SOURCE_DB_URL:latest,DEST_DB_URL=DEST_DB_URL:latest'
+      - '--set-env-vars'
+      - '_BRANCH_NAME=${_BRANCH_NAME},_COMMIT_SHA=${_COMMIT_SHA}'
+
+substitutions:
+  _SERVICE_ACCOUNT: '564694434950-compute@developer.gserviceaccount.com'
+
+images:
+  - 'gcr.io/$PROJECT_ID/pe-backend:$COMMIT_SHA'
