@@ -148,19 +148,16 @@ pub struct TransactionResult {
     pub log: String,
 }
 
-impl Default for TransactionResult {
-    fn default() -> Self {
-        Self {
-            code: 0,
-            codespace: String::new(),
-            data: String::new(),
-            events: Vec::new(),
-            gas_used: 0,
-            gas_wanted: 0,
-            info: String::new(),
-            log: String::new(),
-        }
-    }
+#[derive(SimpleObject, Default)]
+pub struct TransactionResult {
+    pub code: i32,
+    pub codespace: String,
+    pub data: String,
+    pub events: Vec<String>,
+    pub gas_used: i32,
+    pub gas_wanted: i32,
+    pub info: String,
+    pub log: String,
 }
 
 #[Object]
