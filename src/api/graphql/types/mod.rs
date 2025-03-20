@@ -1,10 +1,10 @@
 mod asset;
 mod block;
 mod event;
-mod transaction;
 mod inputs;
-mod unions;
 mod stats;
+mod transaction;
+mod unions;
 
 pub use asset::*;
 pub use block::*;
