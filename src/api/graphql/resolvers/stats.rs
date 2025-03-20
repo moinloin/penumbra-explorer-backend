@@ -1,8 +1,5 @@
+use crate::api::graphql::{context::ApiContext, types::Stats};
 use async_graphql::{Context, Result};
-use crate::api::graphql::{
-    context::ApiContext,
-    types::Stats,
-};
 
 pub async fn resolve_stats(ctx: &Context<'_>) -> Result<Stats> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
