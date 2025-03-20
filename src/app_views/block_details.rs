@@ -1,11 +1,13 @@
 use anyhow::Result;
 use cometindex::{
-    async_trait, index::{EventBatch, EventBatchContext}, sqlx, AppView, ContextualizedEvent, PgTransaction,
+    async_trait,
+    index::{EventBatch, EventBatchContext},
+    sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
 use penumbra_sdk_proto::event::ProtoEvent;
-use sqlx::types::chrono::DateTime;
 use serde_json::{json, Value};
+use sqlx::types::chrono::DateTime;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -48,7 +50,11 @@ impl AppView for BlockDetails {
             let height = block_data.height();
             let tx_count = block_data.transactions().count();
 
-            tracing::info!("Processing block height {} with {} transactions", height, tx_count);
+            tracing::info!(
+                "Processing block height {} with {} transactions",
+                height,
+                tx_count
+            );
 
             let mut block_root = None;
             let mut timestamp = None;
@@ -56,7 +62,8 @@ impl AppView for BlockDetails {
             let mut block_events = Vec::new();
             let mut tx_events = Vec::new();
 
-            let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent<'static>>> = HashMap::new();
+            let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent<'static>>> =
+                HashMap::new();
 
             for event in block_data.events() {
                 if let Ok(pe) = pb::EventBlockRoot::from_event(&event.event) {
@@ -72,7 +79,10 @@ impl AppView for BlockDetails {
 
                 if let Some(tx_hash) = event.tx_hash() {
                     let owned_event = convert_to_static_event(event.clone());
-                    events_by_tx_hash.entry(tx_hash).or_default().push(owned_event);
+                    events_by_tx_hash
+                        .entry(tx_hash)
+                        .or_default()
+                        .push(owned_event);
                     tx_events.push(event_json);
                 } else {
                     block_events.push(event_json);
@@ -87,7 +97,8 @@ impl AppView for BlockDetails {
                 }
             }
 
-            let transactions: Vec<Value> = block_data.transactions()
+            let transactions: Vec<Value> = block_data
+                .transactions()
                 .enumerate()
                 .map(|(index, (tx_hash, _))| {
                     json!({
@@ -150,10 +161,8 @@ impl AppView for BlockDetails {
                     let mut pending_transactions = Vec::with_capacity(tx_count);
 
                     for (tx_index, (tx_hash, tx_bytes)) in block_data.transactions().enumerate() {
-                        let tx_events_for_hash = events_by_tx_hash
-                            .get(&tx_hash)
-                            .cloned()
-                            .unwrap_or_default();
+                        let tx_events_for_hash =
+                            events_by_tx_hash.get(&tx_hash).cloned().unwrap_or_default();
 
                         pending_transactions.push(PendingTransaction {
                             tx_hash,
@@ -168,7 +177,8 @@ impl AppView for BlockDetails {
 
                     tracing::info!(
                         "Queued batch of {} transactions from block {} for processing",
-                        tx_count, height
+                        tx_count,
+                        height
                     );
                 }
             }
@@ -213,19 +223,17 @@ fn extract_chain_id(tx_bytes: &[u8]) -> Option<String> {
                     return Some(params.chain_id.clone());
                 }
             }
-        },
-        Err(_) => {
-            match Transaction::decode(tx_bytes) {
-                Ok(tx) => {
-                    if let Some(body) = &tx.body {
-                        if let Some(params) = &body.transaction_parameters {
-                            return Some(params.chain_id.clone());
-                        }
-                    }
-                },
-                Err(_) => {}
-            }
         }
+        Err(_) => match Transaction::decode(tx_bytes) {
+            Ok(tx) => {
+                if let Some(body) = &tx.body {
+                    if let Some(params) = &body.transaction_parameters {
+                        return Some(params.chain_id.clone());
+                    }
+                }
+            }
+            Err(_) => {}
+        },
     }
 
     None
