@@ -1,10 +1,10 @@
-use axum::{
-    extract::Extension,
-    response::{Html, IntoResponse},
-    http::StatusCode,
-};
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use axum::{
+    extract::Extension,
+    http::StatusCode,
+    response::{Html, IntoResponse},
+};
 
 use crate::api::graphql::schema::PenumbraSchema;
 
