@@ -7,8 +7,7 @@ use async_graphql::{EmptyMutation, EmptySubscription, SchemaBuilder};
 pub fn register_scalars(
     builder: SchemaBuilder<QueryRoot, EmptyMutation, EmptySubscription>,
 ) -> SchemaBuilder<QueryRoot, EmptyMutation, EmptySubscription> {
-    let builder = datetime::register(builder);
-    builder
+    datetime::register(builder)
 }
 
 pub use datetime::DateTime;
