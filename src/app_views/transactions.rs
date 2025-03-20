@@ -1,10 +1,12 @@
 use anyhow::Result;
 use cometindex::{
-    async_trait, index::{EventBatch, EventBatchContext}, sqlx, AppView, PgTransaction,
+    async_trait,
+    index::{EventBatch, EventBatchContext},
+    sqlx, AppView, PgTransaction,
 };
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use prost::Message;
-use serde_json::{json, Value, Map};
+use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -100,22 +102,28 @@ impl Transactions {
         }
 
         let tx_result_decoded = match TransactionView::decode(tx_bytes) {
-            Ok(tx_view) => {
-                serde_json::to_value(&tx_view).unwrap_or(json!({}))
-            },
+            Ok(tx_view) => serde_json::to_value(&tx_view).unwrap_or(json!({})),
             Err(e) => {
-                tracing::debug!("Error decoding transaction with hash {} using TransactionView: {:?}",
-                         encode_to_hex(tx_hash), e);
+                tracing::debug!(
+                    "Error decoding transaction with hash {} using TransactionView: {:?}",
+                    encode_to_hex(tx_hash),
+                    e
+                );
 
                 match Transaction::decode(tx_bytes) {
                     Ok(tx) => {
-                        tracing::debug!("Successfully decoded transaction with hash {} using Transaction",
-                                 encode_to_hex(tx_hash));
+                        tracing::debug!(
+                            "Successfully decoded transaction with hash {} using Transaction",
+                            encode_to_hex(tx_hash)
+                        );
                         serde_json::to_value(&tx).unwrap_or(json!({}))
-                    },
+                    }
                     Err(e2) => {
-                        tracing::warn!("Error decoding transaction with hash {} using Transaction: {:?}",
-                                 encode_to_hex(tx_hash), e2);
+                        tracing::warn!(
+                            "Error decoding transaction with hash {} using Transaction: {:?}",
+                            encode_to_hex(tx_hash),
+                            e2
+                        );
                         json!({})
                     }
                 }
@@ -169,19 +177,28 @@ impl AppView for Transactions {
             return Ok(());
         }
 
-        tracing::info!("Processing {} transaction batches with {} total transactions",
-                      batches.len(), tx_count);
+        tracing::info!(
+            "Processing {} transaction batches with {} total transactions",
+            batches.len(),
+            tx_count
+        );
 
         for batch in batches {
             let height = batch.block_height;
             let timestamp = batch.timestamp;
 
-            tracing::info!("Transactions: Processing batch for block {} with {} transactions",
-                          height, batch.transactions.len());
+            tracing::info!(
+                "Transactions: Processing batch for block {} with {} transactions",
+                height,
+                batch.transactions.len()
+            );
 
             for tx in batch.transactions {
-                tracing::debug!("Transactions: Processing transaction {} in block {}",
-                               encode_to_hex(tx.tx_hash), height);
+                tracing::debug!(
+                    "Transactions: Processing transaction {} in block {}",
+                    encode_to_hex(tx.tx_hash),
+                    height
+                );
 
                 let decoded_tx_json = self.create_transaction_json(
                     tx.tx_hash,
@@ -193,7 +210,8 @@ impl AppView for Transactions {
                 );
 
                 let fee_amount = self.extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
-                let chain_id = self.extract_chain_id(&decoded_tx_json["tx_result_decoded"])
+                let chain_id = self
+                    .extract_chain_id(&decoded_tx_json["tx_result_decoded"])
                     .unwrap_or_else(|| "penumbra-1".to_string());
 
                 let result = sqlx::query(
@@ -208,22 +226,29 @@ impl AppView for Transactions {
                     chain_id = EXCLUDED.chain_id,
                     raw_data = EXCLUDED.raw_data,
                     raw_json = EXCLUDED.raw_json
-                    "
+                    ",
                 )
-                    .bind(tx.tx_hash.as_ref())
-                    .bind(i64::try_from(height)?)
-                    .bind(timestamp)
-                    .bind(fee_amount as i64)
-                    .bind(chain_id)
-                    .bind(&tx.tx_bytes)
-                    .bind(decoded_tx_json)
-                    .execute(dbtx.as_mut())
-                    .await;
+                .bind(tx.tx_hash.as_ref())
+                .bind(i64::try_from(height)?)
+                .bind(timestamp)
+                .bind(fee_amount as i64)
+                .bind(chain_id)
+                .bind(&tx.tx_bytes)
+                .bind(decoded_tx_json)
+                .execute(dbtx.as_mut())
+                .await;
 
                 match result {
-                    Ok(_) => tracing::debug!("Successfully inserted transaction {} with fee {}",
-                                            encode_to_hex(tx.tx_hash), fee_amount),
-                    Err(e) => tracing::error!("Error inserting transaction {}: {:?}", encode_to_hex(tx.tx_hash), e),
+                    Ok(_) => tracing::debug!(
+                        "Successfully inserted transaction {} with fee {}",
+                        encode_to_hex(tx.tx_hash),
+                        fee_amount
+                    ),
+                    Err(e) => tracing::error!(
+                        "Error inserting transaction {}: {:?}",
+                        encode_to_hex(tx.tx_hash),
+                        e
+                    ),
                 }
             }
         }
