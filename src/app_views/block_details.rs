@@ -66,7 +66,7 @@ impl AppView for BlockDetails {
                 HashMap::new();
 
             for event in block_data.events() {
-                if let Ok(pe) = pb::EventBlockRoot::from_event(&event.event) {
+                if let Ok(pe) = pb::EventBlockRoot::from_event(event.event) {
                     let timestamp_proto = pe.timestamp.unwrap_or_default();
                     timestamp = DateTime::from_timestamp(
                         timestamp_proto.seconds,
@@ -75,7 +75,7 @@ impl AppView for BlockDetails {
                     block_root = Some(pe.root.unwrap().inner);
                 }
 
-                let event_json = event_to_json(event.clone(), event.tx_hash())?;
+                let event_json = event_to_json(event, event.tx_hash())?;
 
                 if let Some(tx_hash) = event.tx_hash() {
                     let owned_event = convert_to_static_event(event.clone());
@@ -224,16 +224,15 @@ fn extract_chain_id(tx_bytes: &[u8]) -> Option<String> {
                 }
             }
         }
-        Err(_) => match Transaction::decode(tx_bytes) {
-            Ok(tx) => {
+        Err(_) => {
+            if let Ok(tx) = Transaction::decode(tx_bytes) {
                 if let Some(body) = &tx.body {
                     if let Some(params) = &body.transaction_parameters {
                         return Some(params.chain_id.clone());
                     }
                 }
             }
-            Err(_) => {}
-        },
+        }
     }
 
     None
