@@ -1,9 +1,9 @@
-use async_graphql::{Context, Result, Object, SimpleObject};
-use sqlx::Row;
 use crate::api::graphql::{
     context::ApiContext,
-    types::{Block, Event, Action, NotYetSupportedAction},
+    types::{Action, Block, Event, NotYetSupportedAction},
 };
+use async_graphql::{Context, Object, Result, SimpleObject};
+use sqlx::Row;
 
 pub struct Transaction {
     pub hash: String,
@@ -234,11 +234,11 @@ impl DbRawTransaction {
                 explorer_transactions
             WHERE
                 tx_hash = $1
-            "#
+            "#,
         )
-            .bind(&tx_hash_bytes)
-            .fetch_optional(db)
-            .await?;
+        .bind(&tx_hash_bytes)
+        .fetch_optional(db)
+        .await?;
 
         if let Some(row) = row_result {
             let tx_hash: Vec<u8> = row.get("tx_hash");
@@ -258,7 +258,11 @@ impl DbRawTransaction {
         }
     }
 
-    pub async fn get_all(ctx: &Context<'_>, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Self>> {
+    pub async fn get_all(
+        ctx: &Context<'_>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
 
         let limit = limit.unwrap_or(10);
@@ -279,12 +283,12 @@ impl DbRawTransaction {
             ORDER BY
                 timestamp DESC
             LIMIT $1 OFFSET $2
-            "#
+            "#,
         )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(db)
-            .await?;
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(db)
+        .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
@@ -307,13 +311,15 @@ impl DbRawTransaction {
     }
 }
 pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
-    let memo = json.get("tx_result_decoded")
+    let memo = json
+        .get("tx_result_decoded")
         .and_then(|tx| tx.get("body"))
         .and_then(|body| body.get("memo"))
         .and_then(|memo| memo.as_str())
         .map(|s| s.to_string());
 
-    let chain_id = json.get("tx_result_decoded")
+    let chain_id = json
+        .get("tx_result_decoded")
         .and_then(|tx| tx.get("body"))
         .and_then(|body| body.get("transactionParameters"))
         .and_then(|params| params.get("chainId"))
@@ -321,7 +327,8 @@ pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
         .unwrap_or("penumbra-1")
         .to_string();
 
-    let fee_amount = json.get("tx_result_decoded")
+    let fee_amount = json
+        .get("tx_result_decoded")
         .and_then(|tx| tx.get("body"))
         .and_then(|body| body.get("transactionParameters"))
         .and_then(|params| params.get("fee"))
