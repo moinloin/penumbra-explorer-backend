@@ -5,8 +5,8 @@ use crate::api::graphql::{
     context::ApiContext,
     resolvers::QueryRoot,
     types::{
-        Block, Transaction, TransactionBody, TransactionParameters,
-        Fee, TransactionResult, Event, Action
+        Action, Block, Event, Fee, Transaction, TransactionBody, TransactionParameters,
+        TransactionResult,
     },
 };
 
@@ -15,8 +15,8 @@ pub type PenumbraSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 
 /// Create a new GraphQL schema with the given database pool
 pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
-    let builder = Schema::build(QueryRoot, EmptyMutation, EmptySubscription)
-        .data(ApiContext::new(db_pool));
+    let builder =
+        Schema::build(QueryRoot, EmptyMutation, EmptySubscription).data(ApiContext::new(db_pool));
 
     let builder = builder
         .register_output_type::<Block>()
