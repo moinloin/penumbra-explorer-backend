@@ -86,8 +86,10 @@ impl TransactionQueue {
             let all_ready = batch
                 .transactions
                 .iter()
-                .all(|tx| tx.retry_info.as_ref().map_or(true, |r| r.next_retry <= now));
-
+                .all(|tx| match tx.retry_info.as_ref() {
+                    None => true,
+                    Some(r) => r.next_retry <= now,
+                });
             if all_ready {
                 ready_batches.push(batch);
             } else {
