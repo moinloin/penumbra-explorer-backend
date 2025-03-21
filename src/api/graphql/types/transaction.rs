@@ -137,17 +137,6 @@ impl Fee {
     }
 }
 
-pub struct TransactionResult {
-    pub code: i32,
-    pub codespace: String,
-    pub data: String,
-    pub events: Vec<String>,
-    pub gas_used: i32,
-    pub gas_wanted: i32,
-    pub info: String,
-    pub log: String,
-}
-
 #[derive(SimpleObject, Default)]
 pub struct TransactionResult {
     pub code: i32,
@@ -160,42 +149,7 @@ pub struct TransactionResult {
     pub log: String,
 }
 
-#[Object]
-impl TransactionResult {
-    async fn code(&self) -> i32 {
-        self.code
-    }
-
-    async fn codespace(&self) -> &str {
-        &self.codespace
-    }
-
-    async fn data(&self) -> &str {
-        &self.data
-    }
-
-    async fn events(&self) -> &[String] {
-        &self.events
-    }
-
-    #[graphql(name = "gasUsed")]
-    async fn gas_used(&self) -> i32 {
-        self.gas_used
-    }
-
-    #[graphql(name = "gasWanted")]
-    async fn gas_wanted(&self) -> i32 {
-        self.gas_wanted
-    }
-
-    async fn info(&self) -> &str {
-        &self.info
-    }
-
-    async fn log(&self) -> &str {
-        &self.log
-    }
-}
+// Removed duplicate #[Object] implementation for TransactionResult
 
 #[derive(SimpleObject)]
 pub struct DbRawTransaction {
@@ -233,9 +187,9 @@ impl DbRawTransaction {
                 tx_hash = $1
             "#,
         )
-        .bind(&tx_hash_bytes)
-        .fetch_optional(db)
-        .await?;
+            .bind(&tx_hash_bytes)
+            .fetch_optional(db)
+            .await?;
 
         if let Some(row) = row_result {
             let tx_hash: Vec<u8> = row.get("tx_hash");
@@ -282,10 +236,10 @@ impl DbRawTransaction {
             LIMIT $1 OFFSET $2
             "#,
         )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(db)
-        .await?;
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(db)
+            .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
@@ -307,6 +261,7 @@ impl DbRawTransaction {
         Ok(transactions)
     }
 }
+
 pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
     let memo = json
         .get("tx_result_decoded")
