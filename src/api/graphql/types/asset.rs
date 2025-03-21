@@ -1,18 +1,5 @@
 use async_graphql::SimpleObject;
 
-#[derive(SimpleObject, Clone)]
-pub struct AssetId {
-    pub alt_base_denom: String,
-    #[graphql(name = "altBaseDenom")]
-    pub _alt_base_denom: String,
-
-    pub alt_bech32m: String,
-    #[graphql(name = "altBech32M")]
-    pub _alt_bech32m: String,
-
-    pub inner: String,
-}
-
 #[derive(SimpleObject, Clone, Default)]
 pub struct AssetId {
     pub alt_base_denom: String,
