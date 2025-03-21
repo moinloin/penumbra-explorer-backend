@@ -123,8 +123,8 @@ CREATE TABLE IF NOT EXISTS explorer_block_details (
 )
 "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_explorer_block_details_timestamp ON explorer_block_details(timestamp DESC)")
             .execute(tx.as_mut())
@@ -149,8 +149,8 @@ CREATE TABLE IF NOT EXISTS explorer_transactions (
 )
 "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_explorer_transactions_block_height ON explorer_transactions(block_height)")
             .execute(tx.as_mut())
@@ -177,8 +177,8 @@ ORDER BY
     height DESC
 "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         sqlx::query(
             r#"
@@ -196,8 +196,8 @@ ORDER BY
     t.timestamp DESC
 "#,
         )
-            .execute(tx.as_mut())
-            .await?;
+        .execute(tx.as_mut())
+        .await?;
 
         Ok(())
     }
