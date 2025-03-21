@@ -78,7 +78,7 @@ impl AppView for BlockDetails {
                 let event_json = event_to_json(event, event.tx_hash())?;
 
                 if let Some(tx_hash) = event.tx_hash() {
-                    let owned_event = convert_to_static_event(event.clone());
+                    let owned_event = convert_to_static_event(event);
                     events_by_tx_hash
                         .entry(tx_hash)
                         .or_default()
