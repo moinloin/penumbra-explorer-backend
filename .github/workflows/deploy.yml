@@ -61,7 +61,15 @@ jobs:
         run: cargo install cargo-audit
 
       - name: Security audit
-        run: cargo audit --file Cargo.lock --config audit.toml
+        run: |
+          cargo audit --file Cargo.lock \
+            --ignore RUSTSEC-2023-0071 \
+            --ignore RUSTSEC-2024-0375 \
+            --ignore RUSTSEC-2024-0388 \
+            --ignore RUSTSEC-2021-0141 \
+            --ignore RUSTSEC-2024-0436 \
+            --ignore RUSTSEC-2024-0370 \
+            --ignore RUSTSEC-2021-0145
 
       - if: failure()
         uses: chrnorm/deployment-status@v2
