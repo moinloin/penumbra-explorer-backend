@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context as AnyhowContext, Result};
 use cometindex::{
     async_trait,
     index::{EventBatch, EventBatchContext},
@@ -21,6 +21,23 @@ pub struct Transactions {
 impl Transactions {
     pub fn new(tx_queue: Arc<Mutex<TransactionQueue>>) -> Self {
         Self { tx_queue }
+    }
+
+    // Helper function to check if a block exists
+    async fn block_exists(dbtx: &mut PgTransaction<'_>, height: u64) -> Result<bool, sqlx::Error> {
+        let height_i64 = i64::try_from(height).map_err(|_| {
+            sqlx::Error::Decode(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Height value too large",
+            )))
+        })?;
+
+        let result = sqlx::query("SELECT 1 FROM explorer_block_details WHERE height = $1")
+            .bind(height_i64)
+            .fetch_optional(dbtx.as_mut())
+            .await?;
+
+        Ok(result.is_some())
     }
 
     fn extract_fee_amount(&self, tx_result: &Value) -> u64 {
@@ -169,7 +186,7 @@ impl AppView for Transactions {
             if queue.is_empty() {
                 return Ok(());
             }
-            queue.take_all_batches()
+            queue.take_ready_batches() // Use the ready_batches implementation
         };
 
         let tx_count: usize = batches.iter().map(|b| b.transactions.len()).sum();
@@ -187,13 +204,37 @@ impl AppView for Transactions {
             let height = batch.block_height;
             let timestamp = batch.timestamp;
 
+            // Check if this block exists before processing its transactions
+            if !Self::block_exists(dbtx, height).await.context("Failed to check block existence")? {
+                tracing::info!(
+                    "Block {} not yet processed, re-queuing {} transactions",
+                    height,
+                    batch.transactions.len()
+                );
+
+                // Re-queue the batch for later processing
+                {
+                    let mut queue = self.tx_queue.lock().await;
+                    queue.mark_block_failed(height);
+                    // Clone the batch to avoid ownership issues
+                    queue.enqueue_batch(batch.clone());
+                }
+                continue;
+            }
+
             tracing::info!(
                 "Transactions: Processing batch for block {} with {} transactions",
                 height,
                 batch.transactions.len()
             );
 
-            for tx in batch.transactions {
+            // Use manual savepoint for transaction safety
+            sqlx::query("SAVEPOINT batch_tx").execute(dbtx.as_mut()).await?;
+
+            let mut has_error = false;
+            let mut failed_tx_hashes = Vec::new();
+
+            for tx in &batch.transactions {
                 tracing::debug!(
                     "Transactions: Processing transaction {} in block {}",
                     encode_to_hex(tx.tx_hash),
@@ -214,6 +255,16 @@ impl AppView for Transactions {
                     .extract_chain_id(&decoded_tx_json["tx_result_decoded"])
                     .unwrap_or_else(|| "penumbra-1".to_string());
 
+                let height_i64 = match i64::try_from(height) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        tracing::error!("Height conversion error: {:?}", e);
+                        has_error = true;
+                        failed_tx_hashes.push((tx.tx_hash, format!("Height conversion error: {:?}", e)));
+                        continue;
+                    }
+                };
+
                 let result = sqlx::query(
                     "
                     INSERT INTO explorer_transactions
@@ -228,15 +279,15 @@ impl AppView for Transactions {
                     raw_json = EXCLUDED.raw_json
                     ",
                 )
-                .bind(tx.tx_hash.as_ref())
-                .bind(i64::try_from(height)?)
-                .bind(timestamp)
-                .bind(fee_amount as i64)
-                .bind(chain_id)
-                .bind(&tx.tx_bytes)
-                .bind(decoded_tx_json)
-                .execute(dbtx.as_mut())
-                .await;
+                    .bind(tx.tx_hash.as_ref())
+                    .bind(height_i64)
+                    .bind(timestamp)
+                    .bind(fee_amount as i64)
+                    .bind(chain_id)
+                    .bind(&tx.tx_bytes)
+                    .bind(decoded_tx_json)
+                    .execute(dbtx.as_mut())
+                    .await;
 
                 match result {
                     Ok(_) => tracing::debug!(
@@ -244,12 +295,56 @@ impl AppView for Transactions {
                         encode_to_hex(tx.tx_hash),
                         fee_amount
                     ),
-                    Err(e) => tracing::error!(
-                        "Error inserting transaction {}: {:?}",
-                        encode_to_hex(tx.tx_hash),
-                        e
-                    ),
+                    Err(e) => {
+                        let is_fk_error = match e.as_database_error() {
+                            Some(dbe) => {
+                                if let Some(pg_err) = dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
+                                    pg_err.code() == "23503" // Foreign key constraint code
+                                } else {
+                                    false
+                                }
+                            },
+                            None => false,
+                        };
+
+                        if is_fk_error {
+                            tracing::warn!(
+                                "Block {} not found for transaction {}. Will retry later.",
+                                height,
+                                encode_to_hex(tx.tx_hash)
+                            );
+                        } else {
+                            tracing::error!(
+                                "Error inserting transaction {}: {:?}",
+                                encode_to_hex(tx.tx_hash),
+                                e
+                            );
+                        }
+
+                        failed_tx_hashes.push((tx.tx_hash, format!("Error: {:?}", e)));
+                        has_error = true;
+                    }
                 }
+            }
+
+            if has_error {
+                sqlx::query("ROLLBACK TO SAVEPOINT batch_tx")
+                    .execute(dbtx.as_mut())
+                    .await?;
+
+                {
+                    let mut queue = self.tx_queue.lock().await;
+                    if failed_tx_hashes.is_empty() {
+                        queue.mark_block_failed(height);
+                        queue.enqueue_batch(batch.clone());
+                    } else {
+                        queue.requeue_batch_with_retries(batch.clone(), &failed_tx_hashes);
+                    }
+                }
+            } else {
+                sqlx::query("RELEASE SAVEPOINT batch_tx")
+                    .execute(dbtx.as_mut())
+                    .await?;
             }
         }
 
