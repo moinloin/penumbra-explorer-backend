@@ -205,7 +205,10 @@ impl AppView for Transactions {
             let timestamp = batch.timestamp;
 
             // Check if this block exists before processing its transactions
-            if !Self::block_exists(dbtx, height).await.context("Failed to check block existence")? {
+            if !Self::block_exists(dbtx, height)
+                .await
+                .context("Failed to check block existence")?
+            {
                 tracing::info!(
                     "Block {} not yet processed, re-queuing {} transactions",
                     height,
@@ -229,7 +232,9 @@ impl AppView for Transactions {
             );
 
             // Use manual savepoint for transaction safety
-            sqlx::query("SAVEPOINT batch_tx").execute(dbtx.as_mut()).await?;
+            sqlx::query("SAVEPOINT batch_tx")
+                .execute(dbtx.as_mut())
+                .await?;
 
             let mut has_error = false;
             let mut failed_tx_hashes = Vec::new();
@@ -260,7 +265,8 @@ impl AppView for Transactions {
                     Err(e) => {
                         tracing::error!("Height conversion error: {:?}", e);
                         has_error = true;
-                        failed_tx_hashes.push((tx.tx_hash, format!("Height conversion error: {:?}", e)));
+                        failed_tx_hashes
+                            .push((tx.tx_hash, format!("Height conversion error: {:?}", e)));
                         continue;
                     }
                 };
@@ -279,15 +285,15 @@ impl AppView for Transactions {
                     raw_json = EXCLUDED.raw_json
                     ",
                 )
-                    .bind(tx.tx_hash.as_ref())
-                    .bind(height_i64)
-                    .bind(timestamp)
-                    .bind(fee_amount as i64)
-                    .bind(chain_id)
-                    .bind(&tx.tx_bytes)
-                    .bind(decoded_tx_json)
-                    .execute(dbtx.as_mut())
-                    .await;
+                .bind(tx.tx_hash.as_ref())
+                .bind(height_i64)
+                .bind(timestamp)
+                .bind(fee_amount as i64)
+                .bind(chain_id)
+                .bind(&tx.tx_bytes)
+                .bind(decoded_tx_json)
+                .execute(dbtx.as_mut())
+                .await;
 
                 match result {
                     Ok(_) => tracing::debug!(
@@ -298,12 +304,14 @@ impl AppView for Transactions {
                     Err(e) => {
                         let is_fk_error = match e.as_database_error() {
                             Some(dbe) => {
-                                if let Some(pg_err) = dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
+                                if let Some(pg_err) =
+                                    dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+                                {
                                     pg_err.code() == "23503" // Foreign key constraint code
                                 } else {
                                     false
                                 }
-                            },
+                            }
                             None => false,
                         };
 
