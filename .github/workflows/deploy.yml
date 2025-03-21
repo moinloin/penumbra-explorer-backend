@@ -102,7 +102,7 @@ jobs:
       - name: Deploy to Google Cloud
         run: |
           gcloud config set compute/region ${{ secrets.GCP_REGION }}
-          gcloud builds submit --config cloudbuild.yaml --no-stream-logs --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }}
+          gcloud builds submit --config cloudbuild.yaml --suppress-logs --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }}
 
       - uses: chrnorm/deployment-status@v2
         if: success()
