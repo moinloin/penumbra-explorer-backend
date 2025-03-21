@@ -31,4 +31,5 @@ jobs:
           gcloud config set compute/region ${{ secrets.GCP_REGION }}
           gcloud builds submit \
             --config cloudbuild.yaml \
-            --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }}
+            --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }} \
+            --no-user-output-enabled --no-stream
