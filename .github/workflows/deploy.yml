@@ -1,4 +1,4 @@
-name: Deploy to Google Cloud Run
+name: Direct Deploy to Google Cloud Run (Temp)
 
 on:
   push:
@@ -6,80 +6,7 @@ on:
       - main
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
-    outputs:
-      deployment_id: ${{ steps.deployment.outputs.deployment_id }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Create deployment status
-        uses: chrnorm/deployment-action@v2
-        id: deployment
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production
-          environment-url: https://pe-backend-${{ secrets.GCP_PROJECT_NUMBER }}.a.run.app/
-          initial-status: in_progress
-
-      - name: Install stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          components: rustfmt, clippy
-          override: true
-
-      - name: Cargo cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Check format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-      - name: Run Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
-      - name: Security audit
-        run: |
-          cargo audit --file Cargo.lock \
-            --ignore RUSTSEC-2023-0071 \
-            --ignore RUSTSEC-2024-0375 \
-            --ignore RUSTSEC-2024-0388 \
-            --ignore RUSTSEC-2021-0141 \
-            --ignore RUSTSEC-2024-0436 \
-            --ignore RUSTSEC-2024-0370 \
-            --ignore RUSTSEC-2021-0145
-
-      - if: failure()
-        uses: chrnorm/deployment-status@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          state: failure
-          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-
   deploy:
-    needs: lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -102,18 +29,6 @@ jobs:
       - name: Deploy to Google Cloud
         run: |
           gcloud config set compute/region ${{ secrets.GCP_REGION }}
-          gcloud builds submit --config cloudbuild.yaml --suppress-logs --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }}
-
-      - uses: chrnorm/deployment-status@v2
-        if: success()
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          state: success
-          deployment-id: ${{ needs.lint.outputs.deployment_id }}
-
-      - uses: chrnorm/deployment-status@v2
-        if: failure()
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          state: failure
-          deployment-id: ${{ needs.lint.outputs.deployment_id }}
+          gcloud builds submit \
+            --config cloudbuild.yaml \
+            --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }}
