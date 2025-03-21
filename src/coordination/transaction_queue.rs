@@ -72,7 +72,8 @@ impl TransactionQueue {
         let mut ready_batches = Vec::new();
         let mut not_ready = VecDeque::new();
 
-        self.failed_blocks.retain(|_, retry_info| retry_info.next_retry > now);
+        self.failed_blocks
+            .retain(|_, retry_info| retry_info.next_retry > now);
 
         while let Some(batch) = self.pending_batches.pop_front() {
             if let Some(retry_info) = self.failed_blocks.get(&batch.block_height) {
@@ -82,9 +83,10 @@ impl TransactionQueue {
                 }
             }
 
-            let all_ready = batch.transactions.iter().all(|tx| {
-                tx.retry_info.as_ref().map_or(true, |r| r.next_retry <= now)
-            });
+            let all_ready = batch
+                .transactions
+                .iter()
+                .all(|tx| tx.retry_info.as_ref().map_or(true, |r| r.next_retry <= now));
 
             if all_ready {
                 ready_batches.push(batch);
@@ -99,26 +101,33 @@ impl TransactionQueue {
 
     /// Mark a block as having failed processing (usually due to FK constraint)
     pub fn mark_block_failed(&mut self, block_height: u64) {
-        let attempts = self.failed_blocks
+        let attempts = self
+            .failed_blocks
             .get(&block_height)
             .map_or(1, |retry| retry.attempts + 1);
 
         // Exponential backoff with a cap
         let delay = Duration::from_millis(500) * (1 << attempts.min(8));
 
-        self.failed_blocks.insert(block_height, RetryInfo {
-            attempts,
-            next_retry: Instant::now() + delay,
-        });
+        self.failed_blocks.insert(
+            block_height,
+            RetryInfo {
+                attempts,
+                next_retry: Instant::now() + delay,
+            },
+        );
     }
 
     /// Requeue a batch of transactions with one transaction marked for retry
-    pub fn requeue_batch_with_retries(&mut self, mut batch: TransactionBatch, failed_tx_hashes: &[([u8; 32], String)]) {
+    pub fn requeue_batch_with_retries(
+        &mut self,
+        mut batch: TransactionBatch,
+        failed_tx_hashes: &[([u8; 32], String)],
+    ) {
         let now = Instant::now();
 
-        let tx_hash_set: std::collections::HashSet<_> = failed_tx_hashes.iter()
-            .map(|(hash, _)| hash)
-            .collect();
+        let tx_hash_set: std::collections::HashSet<_> =
+            failed_tx_hashes.iter().map(|(hash, _)| hash).collect();
 
         for tx in &mut batch.transactions {
             if tx_hash_set.contains(&tx.tx_hash) {
