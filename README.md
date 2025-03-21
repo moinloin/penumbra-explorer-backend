@@ -1,4 +1,3 @@
-
 <p align="center">
   <a href="https://github.com/tokio-rs/tokio">
     <img src="https://img.shields.io/badge/powered%20by-tokio-blue?style=flat&logo=rust" alt="Powered by Tokio" />
@@ -16,6 +15,15 @@
     <img src="https://img.shields.io/badge/containerized-docker-2496ED?style=flat&logo=docker" alt="Containerized with Docker" />
   </a>
   <br />
+  <a href="https://github.com/rust-lang/rustfmt">
+    <img src="https://img.shields.io/badge/code--style-rustfmt-fc8d62?style=flat" alt="Code Style: rustfmt" />
+  </a>
+  <a href="https://github.com/rust-lang/rust-clippy">
+    <img src="https://img.shields.io/badge/linted%20with-clippy-ffc832?style=flat" alt="Linted with Clippy" />
+  </a>
+  <a href="https://github.com/rustsec/rustsec">
+    <img src="https://img.shields.io/badge/security-audited-success?style=flat" alt="Security Audited" />
+  </a>
   <br />
   <br />
 </p>
