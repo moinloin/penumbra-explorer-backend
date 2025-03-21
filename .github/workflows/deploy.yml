@@ -61,7 +61,7 @@ jobs:
         run: cargo install cargo-audit
 
       - name: Security audit
-        run: cargo audit
+        run: cargo audit --file Cargo.lock
 
       - if: failure()
         uses: chrnorm/deployment-status@v2
