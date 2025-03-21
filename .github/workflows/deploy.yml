@@ -1,4 +1,4 @@
-name: Direct Deploy to Google Cloud Run (Temp)
+name: Deploy to Cloud Run
 
 on:
   push:
@@ -8,28 +8,19 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
-      id-token: write
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Deploy to Google Cloud
+      - name: Deploy to Cloud Run
         run: |
-          gcloud config set compute/region ${{ secrets.GCP_REGION }}
-          gcloud builds submit \
-            --config cloudbuild.yaml \
-            --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }} \
-            --no-user-output-enabled
+          gcloud run deploy pe-backend \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/pe-backend:latest \
+            --platform managed \
+            --region ${{ secrets.GCP_REGION }} \
+            --allow-unauthenticated
