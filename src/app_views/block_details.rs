@@ -169,6 +169,7 @@ impl AppView for BlockDetails {
                             tx_bytes: tx_bytes.to_vec(),
                             tx_index: tx_index as u64,
                             events: tx_events_for_hash,
+                            retry_info: None,
                         });
                     }
 
