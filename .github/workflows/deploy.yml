@@ -32,4 +32,4 @@ jobs:
           gcloud builds submit \
             --config cloudbuild.yaml \
             --substitutions=_BRANCH_NAME=${{ github.ref_name }},_COMMIT_SHA=${{ github.sha }},_REGION=${{ secrets.GCP_REGION }} \
-            --no-user-output-enabled --no-stream
+            --no-user-output-enabled
