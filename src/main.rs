@@ -67,6 +67,8 @@ async fn main() -> Result<()> {
     tracing::info!("  Batch Size: {}", opts.batch_size);
     tracing::info!("  Polling Interval (ms): {}", opts.polling_interval_ms);
 
+    penumbra_explorer::db_migrations::run_migrations(&opts.dest_db_url)?;
+
     let explorer = Explorer::new(opts);
     explorer.run().await?;
 
