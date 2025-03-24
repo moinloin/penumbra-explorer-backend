@@ -8,19 +8,8 @@ description = "A backend service for exploring the Penumbra blockchain made by P
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.4", features = ["derive"] }
-cometindex = { git = "https://github.com/penumbra-zone/penumbra", package = "cometindex" }
-ethnum = "1.4"
-penumbra-sdk-app = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-app" }
-penumbra-sdk-asset = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-asset" }
-penumbra-sdk-dex = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-dex" }
-penumbra-sdk-fee = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-fee" }
-penumbra-sdk-governance = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-governance" }
-penumbra-sdk-keys = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-keys" }
-penumbra-sdk-num = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-num" }
-penumbra-sdk-proto = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-proto" }
-penumbra-sdk-sct = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-sct" }
-penumbra-sdk-stake = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-stake" }
-penumbra-sdk-transaction = { git = "https://github.com/penumbra-zone/penumbra", package = "penumbra-sdk-transaction" }
+cometindex = { git = "https://github.com/penumbra-zone/penumbra", rev = "2192ac38", package = "cometindex" }
+penumbra-sdk-proto = { git = "https://github.com/penumbra-zone/penumbra", rev = "2192ac38", package = "penumbra-sdk-proto" }
 prost = "=0.13.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -35,6 +24,10 @@ tower-http = { version = "0.4", features = ["cors"] }
 async-graphql = { version = "6.0", features = ["chrono"] }
 async-graphql-axum = "6.0"
 hex = "0.4"
+diesel = { version = "2.1.0", features = ["postgres", "chrono"] }
+diesel_migrations = { version = "2.1.0", features = ["postgres"] }
+pq-sys = "= 0.6.0"
+
 [lib]
 path = "src/lib.rs"
 
