@@ -23,7 +23,6 @@ impl Transactions {
         Self { tx_queue }
     }
 
-    // Helper function to check if a block exists
     async fn block_exists(dbtx: &mut PgTransaction<'_>, height: u64) -> Result<bool, sqlx::Error> {
         let height_i64 = i64::try_from(height).map_err(|_| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
