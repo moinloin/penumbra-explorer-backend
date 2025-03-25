@@ -27,6 +27,8 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
         }
     }
 
+    ensure_cometindex_tables(&mut conn)?;
+
     Ok(())
 }
 
@@ -38,14 +40,59 @@ fn reset_database(conn: &mut PgConnection) -> Result<()> {
     diesel::sql_query("DROP TABLE IF EXISTS explorer_block_details CASCADE").execute(conn)?;
 
     diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE").execute(conn)?;
-
-    diesel::sql_query("DROP TABLE IF EXISTS cometindex_tracking CASCADE").execute(conn)?;
-    diesel::sql_query("DROP TABLE IF EXISTS cometbt_tx_log CASCADE").execute(conn)?;
-    diesel::sql_query("DROP TABLE IF EXISTS cometbt_kvstore CASCADE").execute(conn)?;
-    diesel::sql_query("DROP TABLE IF EXISTS cometbt_block_results CASCADE").execute(conn)?;
-    diesel::sql_query("DROP TABLE IF EXISTS cometbt_abci_tx CASCADE").execute(conn)?;
-    diesel::sql_query("DROP TABLE IF EXISTS cometbt_event CASCADE").execute(conn)?;
-
     info!("Database reset complete");
+    Ok(())
+}
+
+fn ensure_cometindex_tables(conn: &mut PgConnection) -> Result<()> {
+    diesel::sql_query("
+        CREATE TABLE IF NOT EXISTS index_watermarks (
+            app_name TEXT PRIMARY KEY,
+            height BIGINT NOT NULL,
+            version BIGINT NOT NULL DEFAULT 1
+        )
+    ").execute(conn)?;
+
+    diesel::sql_query("
+        CREATE TABLE IF NOT EXISTS cometindex_tracking (
+            app_name TEXT PRIMARY KEY,
+            height BIGINT NOT NULL,
+            version BIGINT NOT NULL DEFAULT 1
+        )
+    ").execute(conn)?;
+
+    diesel::sql_query("
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'index_watermarks'
+            ) AND NOT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = 'index_watermarks' AND column_name = 'version'
+            ) THEN
+                ALTER TABLE index_watermarks ADD COLUMN version BIGINT NOT NULL DEFAULT 1;
+            END IF;
+        END
+        $$;
+    ").execute(conn)?;
+
+    diesel::sql_query("
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'cometindex_tracking'
+            ) AND NOT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = 'cometindex_tracking' AND column_name = 'version'
+            ) THEN
+                ALTER TABLE cometindex_tracking ADD COLUMN version BIGINT NOT NULL DEFAULT 1;
+            END IF;
+        END
+        $$;
+    ").execute(conn)?;
+
+    info!("CometIndex tables verified");
     Ok(())
 }
