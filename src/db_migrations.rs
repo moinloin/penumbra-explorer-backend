@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
+use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use std::fs;
-use std::path::Path;
 use tracing::{info, warn};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
@@ -13,10 +12,16 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
     let mut conn =
         PgConnection::establish(database_url).context("Failed to connect to database")?;
 
-    info!("Resetting database...");
-    reset_database(&mut conn)?;
+    let tables_exist = check_tables_exist(&mut conn)?;
 
-    info!("Running migrations to create fresh schema");
+    if !tables_exist {
+        info!("Tables don't exist, dropping existing migrations to ensure fresh start");
+        diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE").execute(&mut conn)?;
+    } else {
+        info!("Tables already exist, will run incremental migrations");
+    }
+
+    info!("Running migrations");
     match conn.run_pending_migrations(MIGRATIONS) {
         Ok(applied) => {
             info!("Successfully applied {} migrations", applied.len());
@@ -30,16 +35,22 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
     Ok(())
 }
 
-fn reset_database(conn: &mut PgConnection) -> Result<()> {
-    diesel::sql_query("DROP VIEW IF EXISTS explorer_recent_blocks CASCADE").execute(conn)?;
-    diesel::sql_query("DROP VIEW IF EXISTS explorer_transaction_summary CASCADE").execute(conn)?;
+#[derive(QueryableByName)]
+struct CountResult {
+    #[sql_type = "BigInt"]
+    count: i64,
+}
 
-    diesel::sql_query("DROP TABLE IF EXISTS explorer_transactions CASCADE").execute(conn)?;
-    diesel::sql_query("DROP TABLE IF EXISTS explorer_block_details CASCADE").execute(conn)?;
+fn check_tables_exist(conn: &mut PgConnection) -> Result<bool> {
+    let results = diesel::sql_query("
+        SELECT COUNT(*) as count FROM information_schema.tables
+        WHERE table_name IN ('explorer_block_details', 'explorer_transactions')
+        AND table_schema = 'public'")
+        .load::<CountResult>(conn)?;
 
-    diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE").execute(conn)?;
-
-
-    info!("Database reset complete");
-    Ok(())
+    if let Some(result) = results.first() {
+        Ok(result.count == 2)
+    } else {
+        Ok(false)
+    }
 }
