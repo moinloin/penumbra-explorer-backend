@@ -29,6 +29,8 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
 
     ensure_cometindex_tables(&mut conn)?;
 
+    reset_index_versions(&mut conn)?;
+
     Ok(())
 }
 
@@ -40,6 +42,8 @@ fn reset_database(conn: &mut PgConnection) -> Result<()> {
     diesel::sql_query("DROP TABLE IF EXISTS explorer_block_details CASCADE").execute(conn)?;
 
     diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE").execute(conn)?;
+
+
     info!("Database reset complete");
     Ok(())
 }
@@ -94,5 +98,20 @@ fn ensure_cometindex_tables(conn: &mut PgConnection) -> Result<()> {
     ").execute(conn)?;
 
     info!("CometIndex tables verified");
+    Ok(())
+}
+
+fn reset_index_versions(conn: &mut PgConnection) -> Result<()> {
+    diesel::sql_query("
+        DELETE FROM index_watermarks
+        WHERE app_name IN ('explorer/block_details', 'explorer/transactions')
+    ").execute(conn)?;
+
+    diesel::sql_query("
+        DELETE FROM cometindex_tracking
+        WHERE app_name IN ('explorer/block_details', 'explorer/transactions')
+    ").execute(conn)?;
+
+    info!("Index versions reset");
     Ok(())
 }
