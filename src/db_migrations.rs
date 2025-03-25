@@ -14,14 +14,15 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
 
     let tables_exist = check_tables_exist(&mut conn)?;
 
-    if !tables_exist {
-        info!("Tables don't exist, dropping existing migrations to ensure fresh start");
-        diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE").execute(&mut conn)?;
-    } else {
-        info!("Tables already exist, will run incremental migrations");
+    if tables_exist {
+        info!("Tables already exist, skipping migrations");
+        return Ok(());
     }
 
-    info!("Running migrations");
+    info!("Tables don't exist, running migrations");
+
+    diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE").execute(&mut conn)?;
+
     match conn.run_pending_migrations(MIGRATIONS) {
         Ok(applied) => {
             info!("Successfully applied {} migrations", applied.len());
