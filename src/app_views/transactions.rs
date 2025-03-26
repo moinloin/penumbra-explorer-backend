@@ -8,10 +8,13 @@ use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use prost::Message;
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Mutex;
 
 use crate::coordination::TransactionQueue;
 use crate::parsing::{encode_to_hex, parse_attribute_string};
+
+const MAX_BATCH_SIZE: usize = 50;
 
 #[derive(Debug)]
 pub struct Transactions {
@@ -24,53 +27,43 @@ impl Transactions {
     }
 
     async fn block_exists(dbtx: &mut PgTransaction<'_>, height: u64) -> Result<bool, sqlx::Error> {
-        let height_i64 = i64::try_from(height).map_err(|_| {
-            sqlx::Error::Decode(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Height value too large",
-            )))
-        })?;
+        let height_i64 = match i64::try_from(height) {
+            Ok(h) => h,
+            Err(_) => {
+                return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Height value too large: {}", height),
+                ))))
+            }
+        };
 
-        let result = sqlx::query("SELECT 1 FROM explorer_block_details WHERE height = $1")
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)"
+        )
             .bind(height_i64)
-            .fetch_optional(dbtx.as_mut())
+            .fetch_one(dbtx.as_mut())
             .await?;
 
-        Ok(result.is_some())
+        Ok(exists)
     }
 
     fn extract_fee_amount(&self, tx_result: &Value) -> u64 {
-        if let Some(body) = tx_result.get("body") {
-            if let Some(params) = body.get("transactionParameters") {
-                if let Some(fee) = params.get("fee") {
-                    if let Some(amount) = fee.get("amount") {
-                        if let Some(lo) = amount.get("lo") {
-                            if let Some(lo_str) = lo.as_str() {
-                                if let Ok(fee_amount) = lo_str.parse::<u64>() {
-                                    return fee_amount;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        0
+        tx_result.get("body")
+            .and_then(|body| body.get("transactionParameters"))
+            .and_then(|params| params.get("fee"))
+            .and_then(|fee| fee.get("amount"))
+            .and_then(|amount| amount.get("lo"))
+            .and_then(|lo| lo.as_str())
+            .and_then(|lo_str| lo_str.parse::<u64>().ok())
+            .unwrap_or(0)
     }
 
     fn extract_chain_id(&self, tx_result: &Value) -> Option<String> {
-        if let Some(body) = tx_result.get("body") {
-            if let Some(params) = body.get("transactionParameters") {
-                if let Some(chain_id) = params.get("chainId") {
-                    if let Some(chain_id_str) = chain_id.as_str() {
-                        return Some(chain_id_str.to_string());
-                    }
-                }
-            }
-        }
-
-        None
+        tx_result.get("body")
+            .and_then(|body| body.get("transactionParameters"))
+            .and_then(|params| params.get("chainId"))
+            .and_then(|chain_id| chain_id.as_str())
+            .map(|s| s.to_string())
     }
 
     fn create_transaction_json(
@@ -82,7 +75,7 @@ impl Transactions {
         tx_index: u64,
         tx_events: &[cometindex::ContextualizedEvent<'_>],
     ) -> Value {
-        let mut processed_events = Vec::new();
+        let mut processed_events = Vec::with_capacity(tx_events.len() + 1);
 
         processed_events.push(json!({
             "type": "tx",
@@ -93,7 +86,8 @@ impl Transactions {
         }));
 
         for event in tx_events {
-            let mut attributes = Vec::new();
+            let attr_capacity = event.event.attributes.len();
+            let mut attributes = Vec::with_capacity(attr_capacity);
 
             for attr in &event.event.attributes {
                 let attr_str = format!("{:?}", attr);
@@ -117,46 +111,138 @@ impl Transactions {
             }));
         }
 
-        let tx_result_decoded = match TransactionView::decode(tx_bytes) {
-            Ok(tx_view) => serde_json::to_value(&tx_view).unwrap_or(json!({})),
-            Err(e) => {
-                tracing::debug!(
-                    "Error decoding transaction with hash {} using TransactionView: {:?}",
-                    encode_to_hex(tx_hash),
-                    e
-                );
+        let tx_result_decoded = self.decode_transaction(tx_hash, tx_bytes);
 
-                match Transaction::decode(tx_bytes) {
-                    Ok(tx) => {
-                        tracing::debug!(
-                            "Successfully decoded transaction with hash {} using Transaction",
-                            encode_to_hex(tx_hash)
-                        );
-                        serde_json::to_value(&tx).unwrap_or(json!({}))
-                    }
-                    Err(e2) => {
-                        tracing::warn!(
-                            "Error decoding transaction with hash {} using Transaction: {:?}",
-                            encode_to_hex(tx_hash),
-                            e2
-                        );
-                        json!({})
-                    }
-                }
-            }
-        };
-
-        let mut ordered_map = Map::new();
+        let mut ordered_map = Map::with_capacity(7);
         ordered_map.insert("hash".to_string(), json!(encode_to_hex(tx_hash)));
         ordered_map.insert("height".to_string(), json!(height.to_string()));
         ordered_map.insert("index".to_string(), json!(tx_index.to_string()));
         ordered_map.insert("timestamp".to_string(), json!(timestamp));
         ordered_map.insert("tx_result".to_string(), json!(encode_to_hex(tx_bytes)));
-        ordered_map.insert("tx_result_decoded".to_string(), tx_result_decoded.clone());
-
+        ordered_map.insert("tx_result_decoded".to_string(), tx_result_decoded);
         ordered_map.insert("events".to_string(), json!(processed_events));
 
         Value::Object(ordered_map)
+    }
+
+    fn decode_transaction(&self, tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
+        let start = Instant::now();
+        let hash_hex = encode_to_hex(tx_hash);
+
+        match TransactionView::decode(tx_bytes) {
+            Ok(tx_view) => {
+                tracing::debug!(
+                    "Decoded tx {} with TransactionView in {:?}",
+                    hash_hex,
+                    start.elapsed()
+                );
+                serde_json::to_value(&tx_view).unwrap_or(json!({}))
+            },
+            Err(e) => {
+                tracing::debug!(
+                    "Error decoding tx {} with TransactionView: {:?}, trying Transaction",
+                    hash_hex, e
+                );
+
+                match Transaction::decode(tx_bytes) {
+                    Ok(tx) => {
+                        tracing::debug!(
+                            "Decoded tx {} with Transaction in {:?}",
+                            hash_hex,
+                            start.elapsed()
+                        );
+                        serde_json::to_value(&tx).unwrap_or(json!({}))
+                    }
+                    Err(e2) => {
+                        tracing::warn!(
+                            "Failed to decode tx {} with both methods: {:?}",
+                            hash_hex, e2
+                        );
+                        json!({})
+                    }
+                }
+            }
+        }
+    }
+
+    async fn insert_transaction(
+        &self,
+        dbtx: &mut PgTransaction<'_>,
+        tx_hash: [u8; 32],
+        height: u64,
+        timestamp: sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
+        fee_amount: u64,
+        chain_id: &str,
+        tx_bytes: &[u8],
+        decoded_tx_json: Value,
+    ) -> Result<(), sqlx::Error> {
+        let height_i64 = match i64::try_from(height) {
+            Ok(h) => h,
+            Err(_) => {
+                return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Height value too large: {}", height),
+                ))))
+            }
+        };
+
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)"
+        )
+            .bind(tx_hash.as_ref())
+            .fetch_one(dbtx.as_mut())
+            .await?;
+
+        let json_str = serde_json::to_string(&decoded_tx_json).map_err(|e| {
+            sqlx::Error::Decode(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("JSON serialization error: {}", e),
+            )))
+        })?;
+
+        if exists {
+            sqlx::query(
+                r#"
+                UPDATE explorer_transactions
+                SET
+                    block_height = $2,
+                    timestamp = $3,
+                    fee_amount = $4,
+                    chain_id = $5,
+                    raw_data = $6,
+                    raw_json = $7::jsonb
+                WHERE tx_hash = $1
+                "#
+            )
+                .bind(tx_hash.as_ref())
+                .bind(height_i64)
+                .bind(timestamp)
+                .bind(fee_amount as i64)
+                .bind(chain_id)
+                .bind(tx_bytes)
+                .bind(&json_str)
+                .execute(dbtx.as_mut())
+                .await?;
+        } else {
+            sqlx::query(
+                r#"
+                INSERT INTO explorer_transactions
+                (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
+                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+                "#
+            )
+                .bind(tx_hash.as_ref())
+                .bind(height_i64)
+                .bind(timestamp)
+                .bind(fee_amount as i64)
+                .bind(chain_id)
+                .bind(tx_bytes)
+                .bind(&json_str)
+                .execute(dbtx.as_mut())
+                .await?;
+        }
+
+        Ok(())
     }
 }
 
@@ -185,7 +271,15 @@ impl AppView for Transactions {
             if queue.is_empty() {
                 return Ok(());
             }
-            queue.take_ready_batches() // Use the ready_batches implementation
+
+            let total_batches = queue.len();
+            let batches_to_take = std::cmp::min(total_batches, 5);
+
+            if batches_to_take > 0 {
+                queue.take_ready_batches()
+            } else {
+                vec![]
+            }
         };
 
         let tx_count: usize = batches.iter().map(|b| b.transactions.len()).sum();
@@ -202,8 +296,8 @@ impl AppView for Transactions {
         for batch in batches {
             let height = batch.block_height;
             let timestamp = batch.timestamp;
+            let start_time = Instant::now();
 
-            // Check if this block exists before processing its transactions
             if !Self::block_exists(dbtx, height)
                 .await
                 .context("Failed to check block existence")?
@@ -214,12 +308,11 @@ impl AppView for Transactions {
                     batch.transactions.len()
                 );
 
-                // Re-queue the batch for later processing
                 {
                     let mut queue = self.tx_queue.lock().await;
                     queue.mark_block_failed(height);
-                    // Clone the batch to avoid ownership issues
                     queue.enqueue_batch(batch.clone());
+                    drop(queue);
                 }
                 continue;
             }
@@ -230,7 +323,6 @@ impl AppView for Transactions {
                 batch.transactions.len()
             );
 
-            // Use manual savepoint for transaction safety
             sqlx::query("SAVEPOINT batch_tx")
                 .execute(dbtx.as_mut())
                 .await?;
@@ -239,9 +331,10 @@ impl AppView for Transactions {
             let mut failed_tx_hashes = Vec::new();
 
             for tx in &batch.transactions {
+                let tx_hash_hex = encode_to_hex(tx.tx_hash);
                 tracing::debug!(
-                    "Transactions: Processing transaction {} in block {}",
-                    encode_to_hex(tx.tx_hash),
+                    "Processing transaction {} in block {}",
+                    tx_hash_hex,
                     height
                 );
 
@@ -255,49 +348,24 @@ impl AppView for Transactions {
                 );
 
                 let fee_amount = self.extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
+
                 let chain_id = self
                     .extract_chain_id(&decoded_tx_json["tx_result_decoded"])
-                    .unwrap_or_else(|| "penumbra-1".to_string());
+                    .unwrap_or_else(|| "unknown".to_string());
 
-                let height_i64 = match i64::try_from(height) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        tracing::error!("Height conversion error: {:?}", e);
-                        has_error = true;
-                        failed_tx_hashes
-                            .push((tx.tx_hash, format!("Height conversion error: {:?}", e)));
-                        continue;
-                    }
-                };
-
-                let result = sqlx::query(
-                    "
-                    INSERT INTO explorer_transactions
-                    (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    ON CONFLICT (tx_hash) DO UPDATE SET
-                    block_height = EXCLUDED.block_height,
-                    timestamp = EXCLUDED.timestamp,
-                    fee_amount = EXCLUDED.fee_amount,
-                    chain_id = EXCLUDED.chain_id,
-                    raw_data = EXCLUDED.raw_data,
-                    raw_json = EXCLUDED.raw_json
-                    ",
-                )
-                .bind(tx.tx_hash.as_ref())
-                .bind(height_i64)
-                .bind(timestamp)
-                .bind(fee_amount as i64)
-                .bind(chain_id)
-                .bind(&tx.tx_bytes)
-                .bind(decoded_tx_json)
-                .execute(dbtx.as_mut())
-                .await;
-
-                match result {
+                match self.insert_transaction(
+                    dbtx,
+                    tx.tx_hash,
+                    height,
+                    timestamp,
+                    fee_amount,
+                    &chain_id,
+                    &tx.tx_bytes,
+                    decoded_tx_json,
+                ).await {
                     Ok(_) => tracing::debug!(
-                        "Successfully inserted transaction {} with fee {}",
-                        encode_to_hex(tx.tx_hash),
+                        "Successfully processed transaction {} with fee {}",
+                        tx_hash_hex,
                         fee_amount
                     ),
                     Err(e) => {
@@ -306,7 +374,7 @@ impl AppView for Transactions {
                                 if let Some(pg_err) =
                                     dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
                                 {
-                                    pg_err.code() == "23503" // Foreign key constraint code
+                                    pg_err.code() == "23503"
                                 } else {
                                     false
                                 }
@@ -318,12 +386,12 @@ impl AppView for Transactions {
                             tracing::warn!(
                                 "Block {} not found for transaction {}. Will retry later.",
                                 height,
-                                encode_to_hex(tx.tx_hash)
+                                tx_hash_hex
                             );
                         } else {
                             tracing::error!(
                                 "Error inserting transaction {}: {:?}",
-                                encode_to_hex(tx.tx_hash),
+                                tx_hash_hex,
                                 e
                             );
                         }
@@ -347,11 +415,22 @@ impl AppView for Transactions {
                     } else {
                         queue.requeue_batch_with_retries(batch.clone(), &failed_tx_hashes);
                     }
+                    drop(queue);
                 }
             } else {
                 sqlx::query("RELEASE SAVEPOINT batch_tx")
                     .execute(dbtx.as_mut())
                     .await?;
+
+                let elapsed = start_time.elapsed();
+                let tx_per_sec = batch.transactions.len() as f64 / elapsed.as_secs_f64();
+                tracing::info!(
+                    "Completed batch for block {} with {} transactions in {:?} ({:.2} tx/sec)",
+                    height,
+                    batch.transactions.len(),
+                    elapsed,
+                    tx_per_sec
+                );
             }
         }
 
