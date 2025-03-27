@@ -20,6 +20,15 @@ pub struct BlockDetails {
     tx_queue: Arc<Mutex<TransactionQueue>>,
 }
 
+struct BlockMetadata<'a> {
+    height: u64,
+    root: Vec<u8>,
+    timestamp: DateTime<sqlx::types::chrono::Utc>,
+    tx_count: usize,
+    chain_id: &'a str,
+    raw_json: Value,
+}
+
 impl BlockDetails {
     pub fn new(tx_queue: Arc<Mutex<TransactionQueue>>) -> Self {
         Self { tx_queue }
@@ -28,14 +37,9 @@ impl BlockDetails {
     async fn insert_block(
         &self,
         dbtx: &mut PgTransaction<'_>,
-        height: u64,
-        root: Vec<u8>,
-        timestamp: DateTime<sqlx::types::chrono::Utc>,
-        tx_count: usize,
-        chain_id: &str,
-        raw_json: Value,
+        meta: BlockMetadata<'_>,
     ) -> Result<(), anyhow::Error> {
-        let height_i64 = match i64::try_from(height) {
+        let height_i64 = match i64::try_from(meta.height) {
             Ok(h) => h,
             Err(e) => return Err(anyhow::anyhow!("Height conversion error: {}", e)),
         };
@@ -43,61 +47,61 @@ impl BlockDetails {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
         )
-        .bind(height_i64)
-        .fetch_one(dbtx.as_mut())
-        .await?;
+            .bind(height_i64)
+            .fetch_one(dbtx.as_mut())
+            .await?;
 
         let validator_key = None::<String>;
         let previous_hash = None::<Vec<u8>>;
         let block_hash = None::<Vec<u8>>;
 
-        let raw_json_str = serde_json::to_string(&raw_json)?;
+        let raw_json_str = serde_json::to_string(&meta.raw_json)?;
 
         if exists {
             sqlx::query(
                 r#"
-                UPDATE explorer_block_details
-                SET
-                    root = $2,
-                    timestamp = $3,
-                    num_transactions = $4,
-                    chain_id = $5,
-                    raw_json = $6::jsonb
-                WHERE height = $1
-                "#,
+            UPDATE explorer_block_details
+            SET
+                root = $2,
+                timestamp = $3,
+                num_transactions = $4,
+                chain_id = $5,
+                raw_json = $6::jsonb
+            WHERE height = $1
+            "#,
             )
-            .bind(height_i64)
-            .bind(&root)
-            .bind(timestamp)
-            .bind(i32::try_from(tx_count).unwrap_or(0))
-            .bind(chain_id)
-            .bind(&raw_json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(height_i64)
+                .bind(&meta.root)
+                .bind(meta.timestamp)
+                .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(&raw_json_str)
+                .execute(dbtx.as_mut())
+                .await?;
 
-            tracing::debug!("Updated block {}", height);
+            tracing::debug!("Updated block {}", meta.height);
         } else {
             sqlx::query(
                 r#"
-                INSERT INTO explorer_block_details
-                (height, root, timestamp, num_transactions, chain_id,
-                 validator_identity_key, previous_block_hash, block_hash, raw_json)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-                "#,
+            INSERT INTO explorer_block_details
+            (height, root, timestamp, num_transactions, chain_id,
+             validator_identity_key, previous_block_hash, block_hash, raw_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+            "#,
             )
-            .bind(height_i64)
-            .bind(&root)
-            .bind(timestamp)
-            .bind(i32::try_from(tx_count).unwrap_or(0))
-            .bind(chain_id)
-            .bind(validator_key)
-            .bind(previous_hash)
-            .bind(block_hash)
-            .bind(&raw_json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(height_i64)
+                .bind(&meta.root)
+                .bind(meta.timestamp)
+                .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(validator_key)
+                .bind(previous_hash)
+                .bind(block_hash)
+                .bind(&raw_json_str)
+                .execute(dbtx.as_mut())
+                .await?;
 
-            tracing::debug!("Inserted block {}", height);
+            tracing::debug!("Inserted block {}", meta.height);
         }
 
         Ok(())
@@ -227,16 +231,16 @@ impl AppView for BlockDetails {
         }
 
         for (height, root, ts, tx_count, chain_id, raw_json, tx_data) in block_data_to_process {
-            self.insert_block(
-                dbtx,
+            let meta = BlockMetadata {
                 height,
                 root,
-                ts,
+                timestamp: ts,
                 tx_count,
-                chain_id.as_deref().unwrap_or("unknown"),
+                chain_id: chain_id.as_deref().unwrap_or("unknown"),
                 raw_json,
-            )
-            .await?;
+            };
+
+            self.insert_block(dbtx, meta).await?;
 
             if !tx_data.is_empty() {
                 let mut pending_transactions = Vec::with_capacity(tx_data.len());
