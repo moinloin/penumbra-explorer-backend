@@ -14,10 +14,19 @@ use tokio::sync::Mutex;
 use crate::coordination::TransactionQueue;
 use crate::parsing::{encode_to_hex, parse_attribute_string};
 
-
 #[derive(Debug)]
 pub struct Transactions {
     tx_queue: Arc<Mutex<TransactionQueue>>,
+}
+
+struct TransactionMetadata<'a> {
+    tx_hash: [u8; 32],
+    height: u64,
+    timestamp: sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
+    fee_amount: u64,
+    chain_id: &'a str,
+    tx_bytes: &'a [u8],
+    decoded_tx_json: Value,
 }
 
 impl Transactions {
@@ -171,20 +180,14 @@ impl Transactions {
     async fn insert_transaction(
         &self,
         dbtx: &mut PgTransaction<'_>,
-        tx_hash: [u8; 32],
-        height: u64,
-        timestamp: sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
-        fee_amount: u64,
-        chain_id: &str,
-        tx_bytes: &[u8],
-        decoded_tx_json: Value,
+        meta: TransactionMetadata<'_>,
     ) -> Result<(), sqlx::Error> {
-        let height_i64 = match i64::try_from(height) {
+        let height_i64 = match i64::try_from(meta.height) {
             Ok(h) => h,
             Err(_) => {
                 return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Height value too large: {}", height),
+                    format!("Height value too large: {}", meta.height),
                 ))))
             }
         };
@@ -192,11 +195,11 @@ impl Transactions {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
         )
-        .bind(tx_hash.as_ref())
+        .bind(meta.tx_hash.as_ref())
         .fetch_one(dbtx.as_mut())
         .await?;
 
-        let json_str = serde_json::to_string(&decoded_tx_json).map_err(|e| {
+        let json_str = serde_json::to_string(&meta.decoded_tx_json).map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("JSON serialization error: {}", e),
@@ -206,40 +209,40 @@ impl Transactions {
         if exists {
             sqlx::query(
                 r#"
-                UPDATE explorer_transactions
-                SET
-                    block_height = $2,
-                    timestamp = $3,
-                    fee_amount = $4,
-                    chain_id = $5,
-                    raw_data = $6,
-                    raw_json = $7::jsonb
-                WHERE tx_hash = $1
-                "#,
+            UPDATE explorer_transactions
+            SET
+                block_height = $2,
+                timestamp = $3,
+                fee_amount = $4,
+                chain_id = $5,
+                raw_data = $6,
+                raw_json = $7::jsonb
+            WHERE tx_hash = $1
+            "#,
             )
-            .bind(tx_hash.as_ref())
+            .bind(meta.tx_hash.as_ref())
             .bind(height_i64)
-            .bind(timestamp)
-            .bind(fee_amount as i64)
-            .bind(chain_id)
-            .bind(tx_bytes)
+            .bind(meta.timestamp)
+            .bind(meta.fee_amount as i64)
+            .bind(meta.chain_id)
+            .bind(meta.tx_bytes)
             .bind(&json_str)
             .execute(dbtx.as_mut())
             .await?;
         } else {
             sqlx::query(
                 r#"
-                INSERT INTO explorer_transactions
-                (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-                "#,
+            INSERT INTO explorer_transactions
+            (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+            "#,
             )
-            .bind(tx_hash.as_ref())
+            .bind(meta.tx_hash.as_ref())
             .bind(height_i64)
-            .bind(timestamp)
-            .bind(fee_amount as i64)
-            .bind(chain_id)
-            .bind(tx_bytes)
+            .bind(meta.timestamp)
+            .bind(meta.fee_amount as i64)
+            .bind(meta.chain_id)
+            .bind(meta.tx_bytes)
             .bind(&json_str)
             .execute(dbtx.as_mut())
             .await?;
@@ -352,19 +355,17 @@ impl AppView for Transactions {
                     .extract_chain_id(&decoded_tx_json["tx_result_decoded"])
                     .unwrap_or_else(|| "unknown".to_string());
 
-                match self
-                    .insert_transaction(
-                        dbtx,
-                        tx.tx_hash,
-                        height,
-                        timestamp,
-                        fee_amount,
-                        &chain_id,
-                        &tx.tx_bytes,
-                        decoded_tx_json,
-                    )
-                    .await
-                {
+                let meta = TransactionMetadata {
+                    tx_hash: tx.tx_hash,
+                    height,
+                    timestamp,
+                    fee_amount,
+                    chain_id: &chain_id,
+                    tx_bytes: &tx.tx_bytes,
+                    decoded_tx_json,
+                };
+
+                match self.insert_transaction(dbtx, meta).await {
                     Ok(_) => tracing::debug!(
                         "Successfully processed transaction {} with fee {}",
                         tx_hash_hex,
