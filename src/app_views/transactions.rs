@@ -38,17 +38,18 @@ impl Transactions {
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)"
+            "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
         )
-            .bind(height_i64)
-            .fetch_one(dbtx.as_mut())
-            .await?;
+        .bind(height_i64)
+        .fetch_one(dbtx.as_mut())
+        .await?;
 
         Ok(exists)
     }
 
     fn extract_fee_amount(&self, tx_result: &Value) -> u64 {
-        tx_result.get("body")
+        tx_result
+            .get("body")
             .and_then(|body| body.get("transactionParameters"))
             .and_then(|params| params.get("fee"))
             .and_then(|fee| fee.get("amount"))
@@ -59,7 +60,8 @@ impl Transactions {
     }
 
     fn extract_chain_id(&self, tx_result: &Value) -> Option<String> {
-        tx_result.get("body")
+        tx_result
+            .get("body")
             .and_then(|body| body.get("transactionParameters"))
             .and_then(|params| params.get("chainId"))
             .and_then(|chain_id| chain_id.as_str())
@@ -137,11 +139,12 @@ impl Transactions {
                     start.elapsed()
                 );
                 serde_json::to_value(&tx_view).unwrap_or(json!({}))
-            },
+            }
             Err(e) => {
                 tracing::debug!(
                     "Error decoding tx {} with TransactionView: {:?}, trying Transaction",
-                    hash_hex, e
+                    hash_hex,
+                    e
                 );
 
                 match Transaction::decode(tx_bytes) {
@@ -156,7 +159,8 @@ impl Transactions {
                     Err(e2) => {
                         tracing::warn!(
                             "Failed to decode tx {} with both methods: {:?}",
-                            hash_hex, e2
+                            hash_hex,
+                            e2
                         );
                         json!({})
                     }
@@ -187,11 +191,11 @@ impl Transactions {
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)"
+            "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
         )
-            .bind(tx_hash.as_ref())
-            .fetch_one(dbtx.as_mut())
-            .await?;
+        .bind(tx_hash.as_ref())
+        .fetch_one(dbtx.as_mut())
+        .await?;
 
         let json_str = serde_json::to_string(&decoded_tx_json).map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
@@ -212,34 +216,34 @@ impl Transactions {
                     raw_data = $6,
                     raw_json = $7::jsonb
                 WHERE tx_hash = $1
-                "#
+                "#,
             )
-                .bind(tx_hash.as_ref())
-                .bind(height_i64)
-                .bind(timestamp)
-                .bind(fee_amount as i64)
-                .bind(chain_id)
-                .bind(tx_bytes)
-                .bind(&json_str)
-                .execute(dbtx.as_mut())
-                .await?;
+            .bind(tx_hash.as_ref())
+            .bind(height_i64)
+            .bind(timestamp)
+            .bind(fee_amount as i64)
+            .bind(chain_id)
+            .bind(tx_bytes)
+            .bind(&json_str)
+            .execute(dbtx.as_mut())
+            .await?;
         } else {
             sqlx::query(
                 r#"
                 INSERT INTO explorer_transactions
                 (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
                 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-                "#
+                "#,
             )
-                .bind(tx_hash.as_ref())
-                .bind(height_i64)
-                .bind(timestamp)
-                .bind(fee_amount as i64)
-                .bind(chain_id)
-                .bind(tx_bytes)
-                .bind(&json_str)
-                .execute(dbtx.as_mut())
-                .await?;
+            .bind(tx_hash.as_ref())
+            .bind(height_i64)
+            .bind(timestamp)
+            .bind(fee_amount as i64)
+            .bind(chain_id)
+            .bind(tx_bytes)
+            .bind(&json_str)
+            .execute(dbtx.as_mut())
+            .await?;
         }
 
         Ok(())
@@ -332,11 +336,7 @@ impl AppView for Transactions {
 
             for tx in &batch.transactions {
                 let tx_hash_hex = encode_to_hex(tx.tx_hash);
-                tracing::debug!(
-                    "Processing transaction {} in block {}",
-                    tx_hash_hex,
-                    height
-                );
+                tracing::debug!("Processing transaction {} in block {}", tx_hash_hex, height);
 
                 let decoded_tx_json = self.create_transaction_json(
                     tx.tx_hash,
@@ -353,16 +353,19 @@ impl AppView for Transactions {
                     .extract_chain_id(&decoded_tx_json["tx_result_decoded"])
                     .unwrap_or_else(|| "unknown".to_string());
 
-                match self.insert_transaction(
-                    dbtx,
-                    tx.tx_hash,
-                    height,
-                    timestamp,
-                    fee_amount,
-                    &chain_id,
-                    &tx.tx_bytes,
-                    decoded_tx_json,
-                ).await {
+                match self
+                    .insert_transaction(
+                        dbtx,
+                        tx.tx_hash,
+                        height,
+                        timestamp,
+                        fee_amount,
+                        &chain_id,
+                        &tx.tx_bytes,
+                        decoded_tx_json,
+                    )
+                    .await
+                {
                     Ok(_) => tracing::debug!(
                         "Successfully processed transaction {} with fee {}",
                         tx_hash_hex,
@@ -389,11 +392,7 @@ impl AppView for Transactions {
                                 tx_hash_hex
                             );
                         } else {
-                            tracing::error!(
-                                "Error inserting transaction {}: {:?}",
-                                tx_hash_hex,
-                                e
-                            );
+                            tracing::error!("Error inserting transaction {}: {:?}", tx_hash_hex, e);
                         }
 
                         failed_tx_hashes.push((tx.tx_hash, format!("Error: {:?}", e)));
