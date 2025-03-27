@@ -14,7 +14,6 @@ use tokio::sync::Mutex;
 use crate::coordination::TransactionQueue;
 use crate::parsing::{encode_to_hex, parse_attribute_string};
 
-const MAX_BATCH_SIZE: usize = 50;
 
 #[derive(Debug)]
 pub struct Transactions {
