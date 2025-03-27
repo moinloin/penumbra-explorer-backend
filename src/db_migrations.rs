@@ -21,7 +21,8 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
 
     info!("Tables don't exist, running migrations");
 
-    diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE").execute(&mut conn)?;
+    diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE")
+        .execute(&mut conn)?;
 
     match conn.run_pending_migrations(MIGRATIONS) {
         Ok(applied) => {
@@ -43,11 +44,13 @@ struct CountResult {
 }
 
 fn check_tables_exist(conn: &mut PgConnection) -> Result<bool> {
-    let results = diesel::sql_query("
+    let results = diesel::sql_query(
+        "
         SELECT COUNT(*) as count FROM information_schema.tables
         WHERE table_name IN ('explorer_block_details', 'explorer_transactions')
-        AND table_schema = 'public'")
-        .load::<CountResult>(conn)?;
+        AND table_schema = 'public'",
+    )
+    .load::<CountResult>(conn)?;
 
     if let Some(result) = results.first() {
         Ok(result.count == 2)
