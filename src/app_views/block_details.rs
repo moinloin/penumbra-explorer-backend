@@ -25,14 +25,15 @@ impl BlockDetails {
         Self { tx_queue }
     }
 
-    async fn insert_block(&self,
-                          dbtx: &mut PgTransaction<'_>,
-                          height: u64,
-                          root: Vec<u8>,
-                          timestamp: DateTime<sqlx::types::chrono::Utc>,
-                          tx_count: usize,
-                          chain_id: &str,
-                          raw_json: Value,
+    async fn insert_block(
+        &self,
+        dbtx: &mut PgTransaction<'_>,
+        height: u64,
+        root: Vec<u8>,
+        timestamp: DateTime<sqlx::types::chrono::Utc>,
+        tx_count: usize,
+        chain_id: &str,
+        raw_json: Value,
     ) -> Result<(), anyhow::Error> {
         let height_i64 = match i64::try_from(height) {
             Ok(h) => h,
@@ -40,11 +41,11 @@ impl BlockDetails {
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)"
+            "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
         )
-            .bind(height_i64)
-            .fetch_one(dbtx.as_mut())
-            .await?;
+        .bind(height_i64)
+        .fetch_one(dbtx.as_mut())
+        .await?;
 
         let validator_key = None::<String>;
         let previous_hash = None::<Vec<u8>>;
@@ -63,16 +64,16 @@ impl BlockDetails {
                     chain_id = $5,
                     raw_json = $6::jsonb
                 WHERE height = $1
-                "#
+                "#,
             )
-                .bind(height_i64)
-                .bind(&root)
-                .bind(timestamp)
-                .bind(i32::try_from(tx_count).unwrap_or(0))
-                .bind(chain_id)
-                .bind(&raw_json_str)
-                .execute(dbtx.as_mut())
-                .await?;
+            .bind(height_i64)
+            .bind(&root)
+            .bind(timestamp)
+            .bind(i32::try_from(tx_count).unwrap_or(0))
+            .bind(chain_id)
+            .bind(&raw_json_str)
+            .execute(dbtx.as_mut())
+            .await?;
 
             tracing::debug!("Updated block {}", height);
         } else {
@@ -82,19 +83,19 @@ impl BlockDetails {
                 (height, root, timestamp, num_transactions, chain_id,
                  validator_identity_key, previous_block_hash, block_hash, raw_json)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-                "#
+                "#,
             )
-                .bind(height_i64)
-                .bind(&root)
-                .bind(timestamp)
-                .bind(i32::try_from(tx_count).unwrap_or(0))
-                .bind(chain_id)
-                .bind(validator_key)
-                .bind(previous_hash)
-                .bind(block_hash)
-                .bind(&raw_json_str)
-                .execute(dbtx.as_mut())
-                .await?;
+            .bind(height_i64)
+            .bind(&root)
+            .bind(timestamp)
+            .bind(i32::try_from(tx_count).unwrap_or(0))
+            .bind(chain_id)
+            .bind(validator_key)
+            .bind(previous_hash)
+            .bind(block_hash)
+            .bind(&raw_json_str)
+            .execute(dbtx.as_mut())
+            .await?;
 
             tracing::debug!("Inserted block {}", height);
         }
@@ -141,8 +142,7 @@ impl AppView for BlockDetails {
             let mut block_events = Vec::new();
             let mut tx_events = Vec::new();
 
-            let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> =
-                HashMap::new();
+            let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
 
             for event in block_data.events() {
                 if let Ok(pe) = pb::EventBlockRoot::from_event(event.event) {
@@ -234,8 +234,9 @@ impl AppView for BlockDetails {
                 ts,
                 tx_count,
                 chain_id.as_deref().unwrap_or("unknown"),
-                raw_json
-            ).await?;
+                raw_json,
+            )
+            .await?;
 
             if !tx_data.is_empty() {
                 let mut pending_transactions = Vec::with_capacity(tx_data.len());
@@ -269,9 +270,7 @@ impl AppView for BlockDetails {
 fn clone_event(event: ContextualizedEvent<'_>) -> ContextualizedEvent<'static> {
     let event_clone = event.event.clone();
 
-    let tx_clone = event.tx.map(|(hash, bytes)| {
-        (hash, bytes.to_vec())
-    });
+    let tx_clone = event.tx.map(|(hash, bytes)| (hash, bytes.to_vec()));
 
     ContextualizedEvent {
         block_height: event.block_height,
