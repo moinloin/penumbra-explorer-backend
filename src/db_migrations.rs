@@ -39,7 +39,7 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
 
 #[derive(QueryableByName)]
 struct CountResult {
-    #[sql_type = "BigInt"]
+    #[diesel(sql_type = BigInt)]
     count: i64,
 }
 
