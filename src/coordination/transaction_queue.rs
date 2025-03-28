@@ -131,14 +131,13 @@ impl TransactionQueue {
         let mut ready_batches = Vec::new();
         let mut not_ready = VecDeque::new();
 
-        self.failed_blocks
-            .retain(|block_height, retry_info| {
-                let still_failed = retry_info.next_retry > now;
-                if !still_failed {
-                    tracing::debug!("Block {} retry period expired", block_height);
-                }
-                still_failed
-            });
+        self.failed_blocks.retain(|block_height, retry_info| {
+            let still_failed = retry_info.next_retry > now;
+            if !still_failed {
+                tracing::debug!("Block {} retry period expired", block_height);
+            }
+            still_failed
+        });
 
         while let Some(batch) = self.pending_batches.pop_front() {
             if let Some(retry_info) = self.failed_blocks.get(&batch.block_height) {
@@ -153,10 +152,7 @@ impl TransactionQueue {
                 }
             }
 
-            let all_ready = batch
-                .transactions
-                .iter()
-                .all(|tx| tx.is_ready(now));
+            let all_ready = batch.transactions.iter().all(|tx| tx.is_ready(now));
 
             if all_ready {
                 tracing::debug!(
@@ -226,7 +222,10 @@ impl TransactionQueue {
         let mut retry_count = 0;
 
         for tx in &mut batch.transactions {
-            if let Some(error) = tx_hash_set.contains(&tx.tx_hash).then(|| error_map[&tx.tx_hash].clone()) {
+            if let Some(error) = tx_hash_set
+                .contains(&tx.tx_hash)
+                .then(|| error_map[&tx.tx_hash].clone())
+            {
                 tx.mark_for_retry(&error);
                 retry_count += 1;
             }
@@ -257,10 +256,7 @@ impl TransactionQueue {
     }
 
     pub fn transaction_count(&self) -> usize {
-        self.pending_batches
-            .iter()
-            .map(|batch| batch.len())
-            .sum()
+        self.pending_batches.iter().map(|batch| batch.len()).sum()
     }
 
     pub fn stats(&self) -> QueueStats {
@@ -268,13 +264,9 @@ impl TransactionQueue {
         let total_transactions = self.transaction_count();
         let failed_blocks_count = self.failed_blocks.len();
 
-        let oldest_batch_height = self.pending_batches
-            .front()
-            .map(|batch| batch.block_height);
+        let oldest_batch_height = self.pending_batches.front().map(|batch| batch.block_height);
 
-        let newest_batch_height = self.pending_batches
-            .back()
-            .map(|batch| batch.block_height);
+        let newest_batch_height = self.pending_batches.back().map(|batch| batch.block_height);
 
         QueueStats {
             total_batches,
@@ -315,11 +307,7 @@ mod tests {
             .map(|i| create_test_transaction(i as u64))
             .collect();
 
-        TransactionBatch::new(
-            block_height,
-            chrono::Utc::now(),
-            transactions,
-        )
+        TransactionBatch::new(block_height, chrono::Utc::now(), transactions)
     }
 
     #[test]
@@ -351,10 +339,7 @@ mod tests {
     #[test]
     fn test_create_batch() {
         let mut queue = TransactionQueue::new();
-        let transactions = vec![
-            create_test_transaction(0),
-            create_test_transaction(1),
-        ];
+        let transactions = vec![create_test_transaction(0), create_test_transaction(1)];
 
         queue.create_batch(1, chrono::Utc::now(), transactions);
 
