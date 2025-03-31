@@ -23,25 +23,20 @@ impl Block {
         &self.created_at
     }
 
-    /// Get the number of transactions in this block
     #[graphql(name = "transactionsCount")]
     async fn transactions_count(&self, ctx: &Context<'_>) -> Result<i32> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
-
         let result = sqlx::query_as::<_, (i32,)>(
             "SELECT num_transactions FROM explorer_block_details WHERE height = $1",
         )
         .bind(self.height as i64)
         .fetch_one(db)
         .await?;
-
         Ok(result.0)
     }
 
-    /// Get transactions in this block
     async fn transactions(&self, ctx: &Context<'_>) -> Result<Vec<Transaction>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
-
         let rows = sqlx::query(
             r#"
             SELECT
@@ -63,9 +58,7 @@ impl Block {
         .bind(self.height as i64)
         .fetch_all(db)
         .await?;
-
         let mut transactions = Vec::with_capacity(rows.len());
-
         for row in rows {
             let tx_hash: Vec<u8> = row.get("tx_hash");
             let _block_height: i64 = row.get("block_height");
@@ -73,10 +66,8 @@ impl Block {
             let _fee_amount_str: String = row.get("fee_amount_str");
             let raw_data: Vec<u8> = row.get("raw_data");
             let raw_json: Option<serde_json::Value> = row.get("raw_json");
-
             if let Some(json) = raw_json {
                 let hash = hex::encode_upper(&tx_hash);
-
                 transactions.push(Transaction {
                     hash: hash.clone(),
                     anchor: String::new(),
@@ -90,20 +81,16 @@ impl Block {
                 });
             }
         }
-
         Ok(transactions)
     }
 
-    /// Get raw events for this block
     #[graphql(name = "rawEvents")]
     async fn raw_events(&self) -> Result<Vec<Event>> {
-        // Extract events from the raw_json
         let events = if let Some(json) = &self.raw_json {
             extract_events_from_block_json(json)
         } else {
             Vec::new()
         };
-
         Ok(events)
     }
 }
@@ -126,7 +113,6 @@ pub struct DbBlock {
 impl DbBlock {
     pub async fn get_by_height(ctx: &Context<'_>, height: i64) -> Result<Option<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
-
         let row_result = sqlx::query(
             r#"
             SELECT
@@ -148,12 +134,10 @@ impl DbBlock {
         .bind(height)
         .fetch_optional(db)
         .await?;
-
         if let Some(row) = row_result {
             let root: Vec<u8> = row.get("root");
             let previous_block_hash: Option<Vec<u8>> = row.get("previous_block_hash");
             let block_hash: Option<Vec<u8>> = row.get("block_hash");
-
             Ok(Some(Self {
                 height: row.get("height"),
                 root_hex: hex::encode_upper(&root),
@@ -176,10 +160,8 @@ impl DbBlock {
         offset: Option<i64>,
     ) -> Result<Vec<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
-
         let limit = limit.unwrap_or(10);
         let offset = offset.unwrap_or(0);
-
         let rows = sqlx::query(
             r#"
             SELECT
@@ -203,14 +185,11 @@ impl DbBlock {
         .bind(offset)
         .fetch_all(db)
         .await?;
-
         let mut blocks = Vec::with_capacity(rows.len());
-
         for row in rows {
             let root: Vec<u8> = row.get("root");
             let previous_block_hash: Option<Vec<u8>> = row.get("previous_block_hash");
             let block_hash: Option<Vec<u8>> = row.get("block_hash");
-
             blocks.push(Self {
                 height: row.get("height"),
                 root_hex: hex::encode_upper(&root),
@@ -223,13 +202,11 @@ impl DbBlock {
                 chain_id: row.get("chain_id"),
             });
         }
-
         Ok(blocks)
     }
 
     pub async fn get_latest(ctx: &Context<'_>) -> Result<Option<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
-
         let row_result = sqlx::query(
             r#"
             SELECT
@@ -251,12 +228,10 @@ impl DbBlock {
         )
         .fetch_optional(db)
         .await?;
-
         if let Some(row) = row_result {
             let root: Vec<u8> = row.get("root");
             let previous_block_hash: Option<Vec<u8>> = row.get("previous_block_hash");
             let block_hash: Option<Vec<u8>> = row.get("block_hash");
-
             Ok(Some(Self {
                 height: row.get("height"),
                 root_hex: hex::encode_upper(&root),
@@ -306,12 +281,10 @@ fn extract_index_from_json(json: &serde_json::Value) -> Option<i32> {
 
 fn extract_events_from_json(json: &serde_json::Value) -> Vec<Event> {
     let mut events = Vec::new();
-
     if let Some(events_array) = json.get("events").and_then(|e| e.as_array()) {
         for event_json in events_array {
             if let Some(event_type) = event_json.get("type").and_then(|t| t.as_str()) {
                 let event_value = serde_json::to_string(event_json).unwrap_or_default();
-
                 events.push(Event {
                     type_: event_type.to_string(),
                     value: event_value,
@@ -319,19 +292,16 @@ fn extract_events_from_json(json: &serde_json::Value) -> Vec<Event> {
             }
         }
     }
-
     events
 }
 
 fn extract_events_from_block_json(json: &serde_json::Value) -> Vec<Event> {
     let mut events = Vec::new();
-
     if let Some(block) = json.get("block") {
         if let Some(events_array) = block.get("events").and_then(|e| e.as_array()) {
             for event_json in events_array {
                 if let Some(event_type) = event_json.get("type").and_then(|t| t.as_str()) {
                     let event_value = serde_json::to_string(event_json).unwrap_or_default();
-
                     events.push(Event {
                         type_: event_type.to_string(),
                         value: event_value,
@@ -340,6 +310,5 @@ fn extract_events_from_block_json(json: &serde_json::Value) -> Vec<Event> {
             }
         }
     }
-
     events
 }
