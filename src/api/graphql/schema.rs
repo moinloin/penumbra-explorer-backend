@@ -4,9 +4,7 @@ use sqlx::PgPool;
 use crate::api::graphql::{
     context::ApiContext,
     resolvers::QueryRoot,
-    types::{
-        Action, Block, Event, Fee, Transaction, TransactionBody, TransactionParameters,
-    },
+    types::{Action, Block, Event, Fee, Transaction, TransactionBody, TransactionParameters},
 };
 
 /// Type alias for the complete GraphQL schema
