@@ -29,9 +29,9 @@ impl Block {
         let result = sqlx::query_as::<_, (i32,)>(
             "SELECT num_transactions FROM explorer_block_details WHERE height = $1",
         )
-        .bind(self.height as i64)
-        .fetch_one(db)
-        .await?;
+            .bind(self.height as i64)
+            .fetch_one(db)
+            .await?;
         Ok(result.0)
     }
 
@@ -55,9 +55,9 @@ impl Block {
                 timestamp ASC
             "#,
         )
-        .bind(self.height as i64)
-        .fetch_all(db)
-        .await?;
+            .bind(self.height as i64)
+            .fetch_all(db)
+            .await?;
         let mut transactions = Vec::with_capacity(rows.len());
         for row in rows {
             let tx_hash: Vec<u8> = row.get("tx_hash");
@@ -77,7 +77,7 @@ impl Block {
                     block: self.clone(),
                     body: crate::api::graphql::types::extract_transaction_body(&json),
                     raw_events: extract_events_from_json(&json),
-                    result: Default::default(),
+                    raw_json: json,
                 });
             }
         }
@@ -92,6 +92,11 @@ impl Block {
             Vec::new()
         };
         Ok(events)
+    }
+
+    #[graphql(name = "rawJson")]
+    async fn raw_json(&self) -> Option<&serde_json::Value> {
+        self.raw_json.as_ref()
     }
 }
 
@@ -131,9 +136,9 @@ impl DbBlock {
                 height = $1
             "#,
         )
-        .bind(height)
-        .fetch_optional(db)
-        .await?;
+            .bind(height)
+            .fetch_optional(db)
+            .await?;
         if let Some(row) = row_result {
             let root: Vec<u8> = row.get("root");
             let previous_block_hash: Option<Vec<u8>> = row.get("previous_block_hash");
@@ -181,10 +186,10 @@ impl DbBlock {
             LIMIT $1 OFFSET $2
             "#,
         )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(db)
-        .await?;
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(db)
+            .await?;
         let mut blocks = Vec::with_capacity(rows.len());
         for row in rows {
             let root: Vec<u8> = row.get("root");
@@ -226,8 +231,8 @@ impl DbBlock {
             LIMIT 1
             "#,
         )
-        .fetch_optional(db)
-        .await?;
+            .fetch_optional(db)
+            .await?;
         if let Some(row) = row_result {
             let root: Vec<u8> = row.get("root");
             let previous_block_hash: Option<Vec<u8>> = row.get("previous_block_hash");
