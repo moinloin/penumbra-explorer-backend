@@ -6,7 +6,6 @@ use crate::api::graphql::{
     resolvers::QueryRoot,
     types::{
         Action, Block, Event, Fee, Transaction, TransactionBody, TransactionParameters,
-        TransactionResult,
     },
 };
 
@@ -24,7 +23,6 @@ pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
         .register_output_type::<TransactionBody>()
         .register_output_type::<TransactionParameters>()
         .register_output_type::<Fee>()
-        .register_output_type::<TransactionResult>()
         .register_output_type::<Event>()
         .register_output_type::<Action>();
 
