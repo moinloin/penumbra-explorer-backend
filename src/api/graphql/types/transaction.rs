@@ -2,7 +2,7 @@ use crate::api::graphql::{
     context::ApiContext,
     types::{Action, Block, Event, NotYetSupportedAction},
 };
-use async_graphql::{Context, Object, Result, SimpleObject};
+use async_graphql::{Context, Object, Result};
 use sqlx::Row;
 
 pub struct Transaction {
@@ -14,7 +14,6 @@ pub struct Transaction {
     pub block: Block,
     pub body: TransactionBody,
     pub raw_events: Vec<Event>,
-    pub result: TransactionResult,
 }
 
 #[Object]
@@ -51,10 +50,6 @@ impl Transaction {
     #[graphql(name = "rawEvents")]
     async fn raw_events(&self) -> &[Event] {
         &self.raw_events
-    }
-
-    async fn result(&self) -> &TransactionResult {
-        &self.result
     }
 }
 
@@ -137,21 +132,7 @@ impl Fee {
     }
 }
 
-#[derive(SimpleObject, Default)]
-pub struct TransactionResult {
-    pub code: i32,
-    pub codespace: String,
-    pub data: String,
-    pub events: Vec<String>,
-    pub gas_used: i32,
-    pub gas_wanted: i32,
-    pub info: String,
-    pub log: String,
-}
-
-// Removed duplicate #[Object] implementation for TransactionResult
-
-#[derive(SimpleObject)]
+#[derive(async_graphql::SimpleObject)]
 pub struct DbRawTransaction {
     pub tx_hash_hex: String,
     pub block_height: i64,
