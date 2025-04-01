@@ -208,7 +208,7 @@ impl Transactions {
 
         if exists {
             sqlx::query(
-                r#"
+                r"
             UPDATE explorer_transactions
             SET
                 block_height = $2,
@@ -218,7 +218,7 @@ impl Transactions {
                 raw_data = $6,
                 raw_json = $7::jsonb
             WHERE tx_hash = $1
-            "#,
+            ",
             )
             .bind(meta.tx_hash.as_ref())
             .bind(height_i64)
@@ -231,11 +231,11 @@ impl Transactions {
             .await?;
         } else {
             sqlx::query(
-                r#"
+                r"
             INSERT INTO explorer_transactions
             (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
             VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-            "#,
+            ",
             )
             .bind(meta.tx_hash.as_ref())
             .bind(height_i64)
