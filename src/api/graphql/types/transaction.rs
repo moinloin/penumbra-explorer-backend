@@ -2,8 +2,23 @@ use crate::api::graphql::{
     context::ApiContext,
     types::{Action, Block, Event, NotYetSupportedAction},
 };
-use async_graphql::{Context, Object, Result};
+use async_graphql::{Context, Enum, Object, Result};
 use sqlx::Row;
+
+#[derive(Enum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RangeDirection {
+    #[graphql(name = "NEXT")]
+    Next,
+
+    #[graphql(name = "PREVIOUS")]
+    Previous,
+}
+
+impl Default for RangeDirection {
+    fn default() -> Self {
+        Self::Next
+    }
+}
 
 pub struct Transaction {
     pub hash: String,
@@ -174,9 +189,9 @@ impl DbRawTransaction {
                 tx_hash = $1
             "#,
         )
-        .bind(&tx_hash_bytes)
-        .fetch_optional(db)
-        .await?;
+            .bind(&tx_hash_bytes)
+            .fetch_optional(db)
+            .await?;
 
         if let Some(row) = row_result {
             let tx_hash: Vec<u8> = row.get("tx_hash");
@@ -223,10 +238,10 @@ impl DbRawTransaction {
             LIMIT $1 OFFSET $2
             "#,
         )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(db)
-        .await?;
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(db)
+            .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
