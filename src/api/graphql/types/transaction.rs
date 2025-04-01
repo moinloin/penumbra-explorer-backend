@@ -74,6 +74,7 @@ impl Transaction {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct TransactionBody {
     pub actions: Vec<Action>,
     pub actions_count: i32,
@@ -113,6 +114,7 @@ impl TransactionBody {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct TransactionParameters {
     pub chain_id: String,
     pub expiry_height: i32,
@@ -154,6 +156,7 @@ impl Fee {
 }
 
 #[derive(async_graphql::SimpleObject)]
+#[allow(clippy::module_name_repetitions)]
 pub struct DbRawTransaction {
     pub tx_hash_hex: String,
     pub block_height: i64,
@@ -165,16 +168,19 @@ pub struct DbRawTransaction {
 }
 
 impl DbRawTransaction {
+    /// Gets a transaction by its hash
+    /// 
+    /// # Errors
+    /// Returns an error if the database query fails
     pub async fn get_by_hash(ctx: &Context<'_>, tx_hash_hex: String) -> Result<Option<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
 
-        let tx_hash_bytes = match hex::decode(tx_hash_hex.trim_start_matches("0x")) {
-            Ok(bytes) => bytes,
-            Err(_) => return Ok(None),
+        let Ok(tx_hash_bytes) = hex::decode(tx_hash_hex.trim_start_matches("0x")) else {
+            return Ok(None);
         };
 
         let row_result = sqlx::query(
-            r#"
+            r"
             SELECT
                 tx_hash,
                 block_height,
@@ -187,7 +193,7 @@ impl DbRawTransaction {
                 explorer_transactions
             WHERE
                 tx_hash = $1
-            "#,
+            ",
         )
         .bind(&tx_hash_bytes)
         .fetch_optional(db)
@@ -211,6 +217,10 @@ impl DbRawTransaction {
         }
     }
 
+    /// Gets all transactions with pagination
+    /// 
+    /// # Errors
+    /// Returns an error if the database query fails
     pub async fn get_all(
         ctx: &Context<'_>,
         limit: Option<i64>,
@@ -222,7 +232,7 @@ impl DbRawTransaction {
         let offset = offset.unwrap_or(0);
 
         let rows = sqlx::query(
-            r#"
+            r"
             SELECT
                 tx_hash,
                 block_height,
@@ -236,7 +246,7 @@ impl DbRawTransaction {
             ORDER BY
                 timestamp DESC
             LIMIT $1 OFFSET $2
-            "#,
+            ",
         )
         .bind(limit)
         .bind(offset)
@@ -264,13 +274,14 @@ impl DbRawTransaction {
     }
 }
 
+#[must_use]
 pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
     let memo = json
         .get("tx_result_decoded")
         .and_then(|tx| tx.get("body"))
         .and_then(|body| body.get("memo"))
         .and_then(|memo| memo.as_str())
-        .map(|s| s.to_string());
+        .map(ToString::to_string);
 
     let chain_id = json
         .get("tx_result_decoded")
