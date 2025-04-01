@@ -9,10 +9,22 @@ mod unions;
 pub use asset::*;
 pub use block::*;
 pub use event::*;
-pub use inputs::*;
+pub use inputs::{
+    BlockHeightRange,
+    BlocksSelector,
+    LatestBlock,
+    TransactionRange,
+    TransactionsSelector,
+    LatestTransactions
+};
 pub use stats::*;
-pub use transaction::*;
+pub use transaction::{
+    DbRawTransaction,
+    Fee,
+    RangeDirection,
+    Transaction,
+    TransactionBody,
+    TransactionParameters,
+    extract_transaction_body
+};
 pub use unions::*;
-
-pub use transaction::extract_transaction_body;
-pub use transaction::DbRawTransaction;
