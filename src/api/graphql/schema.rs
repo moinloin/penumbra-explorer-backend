@@ -8,9 +8,12 @@ use crate::api::graphql::{
 };
 
 /// Type alias for the complete GraphQL schema
+#[allow(clippy::module_name_repetitions)]
 pub type PenumbraSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 
 /// Create a new GraphQL schema with the given database pool
+#[must_use]
+#[allow(clippy::module_name_repetitions)]
 pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
     let builder =
         Schema::build(QueryRoot, EmptyMutation, EmptySubscription).data(ApiContext::new(db_pool));
