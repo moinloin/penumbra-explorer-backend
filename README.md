@@ -21,9 +21,6 @@
   <a href="https://github.com/rust-lang/rust-clippy">
     <img src="https://img.shields.io/badge/linted%20with-clippy-ffc832?style=flat" alt="Linted with Clippy" />
   </a>
-  <a href="https://github.com/rustsec/rustsec">
-    <img src="https://img.shields.io/badge/security-audited-success?style=flat" alt="Security Audited" />
-  </a>
   <br />
   <br />
 </p>
@@ -87,15 +84,6 @@ A high-performance backend indexer for exploring the Penumbra blockchain built w
 - **GraphQL API**: `/graphql`
 - **GraphQL Playground**: `/graphql/playground`
 - **Health Check**: `/health`
-
-## Deployment
-
-1. Build the Docker image:
-   ```sh
-   docker build -t penumbra-explorer .
-   ```
-
-2. Deploy to your container platform of choice, providing the required environment variables
 
 ## Configuration
 
