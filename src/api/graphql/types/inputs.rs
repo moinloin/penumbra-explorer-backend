@@ -1,5 +1,5 @@
-use async_graphql::InputObject;
 use crate::api::graphql::types::RangeDirection;
+use async_graphql::InputObject;
 
 #[derive(InputObject)]
 pub struct BlockHeightRange {
