@@ -2,6 +2,7 @@ use clap::Parser;
 
 #[derive(Parser, Clone, Debug)]
 #[command(version, about = "Penumbra Explorer Backend")]
+#[allow(clippy::module_name_repetitions)]
 pub struct ExplorerOptions {
     /// The database URL for the source raw events
     #[arg(short = 's', long, default_value = "")]
