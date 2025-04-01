@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use crate::api::graphql::{
     context::ApiContext,
     scalars::DateTime,
@@ -6,6 +7,7 @@ use crate::api::graphql::{
 use async_graphql::{Context, Object, Result};
 use sqlx::Row;
 
+#[derive(Debug, Clone)]
 pub struct Block {
     pub height: i32,
     pub created_at: DateTime,
@@ -29,7 +31,7 @@ impl Block {
         let result = sqlx::query_as::<_, (i32,)>(
             "SELECT num_transactions FROM explorer_block_details WHERE height = $1",
         )
-        .bind(self.height as i64)
+        .bind(i64::from(self.height))
         .fetch_one(db)
         .await?;
         Ok(result.0)
@@ -38,7 +40,7 @@ impl Block {
     async fn transactions(&self, ctx: &Context<'_>) -> Result<Vec<Transaction>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
         let rows = sqlx::query(
-            r#"
+            r"
             SELECT
                 tx_hash,
                 block_height,
@@ -53,9 +55,9 @@ impl Block {
                 block_height = $1
             ORDER BY
                 timestamp ASC
-            "#,
+            ",
         )
-        .bind(self.height as i64)
+        .bind(i64::from(self.height))
         .fetch_all(db)
         .await?;
         let mut transactions = Vec::with_capacity(rows.len());
@@ -85,6 +87,7 @@ impl Block {
     }
 
     #[graphql(name = "rawEvents")]
+    #[allow(clippy::unused_async)]
     async fn raw_events(&self) -> Result<Vec<Event>> {
         let events = if let Some(json) = &self.raw_json {
             extract_events_from_block_json(json)
@@ -103,6 +106,7 @@ impl Block {
 use async_graphql::SimpleObject;
 
 #[derive(SimpleObject)]
+#[allow(clippy::module_name_repetitions)]
 pub struct DbBlock {
     pub height: i64,
     pub root_hex: String,
@@ -116,10 +120,14 @@ pub struct DbBlock {
 }
 
 impl DbBlock {
+    /// Gets a block by its height
+    /// 
+    /// # Errors
+    /// Returns an error if the database query fails
     pub async fn get_by_height(ctx: &Context<'_>, height: i64) -> Result<Option<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
         let row_result = sqlx::query(
-            r#"
+            r"
             SELECT
                 height,
                 root,
@@ -134,7 +142,7 @@ impl DbBlock {
                 explorer_block_details
             WHERE
                 height = $1
-            "#,
+            ",
         )
         .bind(height)
         .fetch_optional(db)
@@ -159,6 +167,10 @@ impl DbBlock {
         }
     }
 
+    /// Gets all blocks with pagination
+    /// 
+    /// # Errors
+    /// Returns an error if the database query fails
     pub async fn get_all(
         ctx: &Context<'_>,
         limit: Option<i64>,
@@ -168,7 +180,7 @@ impl DbBlock {
         let limit = limit.unwrap_or(10);
         let offset = offset.unwrap_or(0);
         let rows = sqlx::query(
-            r#"
+            r"
             SELECT
                 height,
                 root,
@@ -184,7 +196,7 @@ impl DbBlock {
             ORDER BY
                 height DESC
             LIMIT $1 OFFSET $2
-            "#,
+            ",
         )
         .bind(limit)
         .bind(offset)
@@ -210,10 +222,14 @@ impl DbBlock {
         Ok(blocks)
     }
 
+    /// Gets the latest block
+    /// 
+    /// # Errors
+    /// Returns an error if the database query fails
     pub async fn get_latest(ctx: &Context<'_>) -> Result<Option<Self>> {
         let db = &ctx.data_unchecked::<ApiContext>().db;
         let row_result = sqlx::query(
-            r#"
+            r"
             SELECT
                 height,
                 root,
@@ -229,7 +245,7 @@ impl DbBlock {
             ORDER BY
                 height DESC
             LIMIT 1
-            "#,
+            ",
         )
         .fetch_optional(db)
         .await?;
@@ -255,6 +271,7 @@ impl DbBlock {
 }
 
 impl Block {
+    #[must_use]
     pub fn new(
         height: i32,
         created_at: chrono::DateTime<chrono::Utc>,
@@ -268,15 +285,7 @@ impl Block {
     }
 }
 
-impl Clone for Block {
-    fn clone(&self) -> Self {
-        Self {
-            height: self.height,
-            created_at: self.created_at.clone(),
-            raw_json: None,
-        }
-    }
-}
+// Custom clone implementation removed since we now derive Clone
 
 fn extract_index_from_json(json: &serde_json::Value) -> Option<i32> {
     json.get("index")
