@@ -4,6 +4,11 @@ use crate::api::graphql::{
 };
 use async_graphql::{Context, Result};
 
+/// Resolves a search request by slug
+/// 
+/// # Errors
+/// Returns an error if database queries fail
+#[allow(clippy::module_name_repetitions)]
 pub async fn resolve_search(ctx: &Context<'_>, slug: String) -> Result<Option<SearchResult>> {
     if let Ok(height) = slug.parse::<i32>() {
         if let Some(block) = resolve_block(ctx, height).await? {
