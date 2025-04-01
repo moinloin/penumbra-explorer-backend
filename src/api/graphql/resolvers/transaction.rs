@@ -6,7 +6,7 @@ use async_graphql::Result;
 use sqlx::Row;
 
 /// Resolves a transaction by its hash
-/// 
+///
 /// # Errors
 /// Returns an error if database queries fail
 #[allow(clippy::module_name_repetitions)]
@@ -61,7 +61,11 @@ pub async fn resolve_transaction(
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
                 raw: hex::encode_upper(&raw_data),
-                block: Block::new(i32::try_from(block_height).unwrap_or_default(), timestamp, None),
+                block: Block::new(
+                    i32::try_from(block_height).unwrap_or_default(),
+                    timestamp,
+                    None,
+                ),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
                 raw_json: json,
@@ -75,7 +79,7 @@ pub async fn resolve_transaction(
 }
 
 /// Resolves transactions based on the provided selector
-/// 
+///
 /// # Errors
 /// Returns an error if database queries fail
 #[allow(clippy::module_name_repetitions)]
@@ -153,7 +157,11 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
                 raw: hex::encode_upper(&raw_data),
-                block: Block::new(i32::try_from(block_height).unwrap_or_default(), timestamp, None),
+                block: Block::new(
+                    i32::try_from(block_height).unwrap_or_default(),
+                    timestamp,
+                    None,
+                ),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
                 raw_json: json,
@@ -199,12 +207,16 @@ fn build_transactions_query(selector: &TransactionsSelector, base: &str) -> (Str
         match range.direction {
             RangeDirection::Next => {
                 query.push_str(&format!(" WHERE (t.timestamp < {ref_query})"));
-                query.push_str(&format!(" OR (t.timestamp = {ref_query} AND t.tx_hash > $1)"));
+                query.push_str(&format!(
+                    " OR (t.timestamp = {ref_query} AND t.tx_hash > $1)"
+                ));
                 query.push_str(" ORDER BY t.timestamp DESC, t.tx_hash ASC LIMIT $2");
             }
             RangeDirection::Previous => {
                 query.push_str(&format!(" WHERE (t.timestamp > {ref_query})"));
-                query.push_str(&format!(" OR (t.timestamp = {ref_query} AND t.tx_hash < $1)"));
+                query.push_str(&format!(
+                    " OR (t.timestamp = {ref_query} AND t.tx_hash < $1)"
+                ));
                 query.push_str(" ORDER BY t.timestamp ASC, t.tx_hash DESC LIMIT $2");
             }
         }
