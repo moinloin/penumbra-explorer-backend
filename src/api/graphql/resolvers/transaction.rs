@@ -5,19 +5,23 @@ use crate::api::graphql::{
 use async_graphql::Result;
 use sqlx::Row;
 
+/// Resolves a transaction by its hash
+/// 
+/// # Errors
+/// Returns an error if database queries fail
+#[allow(clippy::module_name_repetitions)]
 pub async fn resolve_transaction(
     ctx: &async_graphql::Context<'_>,
     hash: String,
 ) -> Result<Option<Transaction>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
-    let hash_bytes = match hex::decode(hash.trim_start_matches("0x")) {
-        Ok(bytes) => bytes,
-        Err(_) => return Ok(None),
+    let Ok(hash_bytes) = hex::decode(hash.trim_start_matches("0x")) else {
+        return Ok(None);
     };
 
     let row = sqlx::query(
-        r#"
+        r"
         SELECT
             t.tx_hash,
             t.block_height,
@@ -33,7 +37,7 @@ pub async fn resolve_transaction(
             explorer_block_details b ON t.block_height = b.height
         WHERE
             t.tx_hash = $1
-        "#,
+        ",
     )
     .bind(hash_bytes.as_slice())
     .fetch_optional(db)
@@ -57,7 +61,7 @@ pub async fn resolve_transaction(
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
                 raw: hex::encode_upper(&raw_data),
-                block: Block::new(block_height as i32, timestamp, None),
+                block: Block::new(i32::try_from(block_height).unwrap_or_default(), timestamp, None),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
                 raw_json: json,
@@ -70,13 +74,18 @@ pub async fn resolve_transaction(
     }
 }
 
+/// Resolves transactions based on the provided selector
+/// 
+/// # Errors
+/// Returns an error if database queries fail
+#[allow(clippy::module_name_repetitions)]
 pub async fn resolve_transactions(
     ctx: &async_graphql::Context<'_>,
     selector: TransactionsSelector,
 ) -> Result<Vec<Transaction>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
-    let base_query = r#"
+    let base_query = r"
         SELECT
             t.tx_hash,
             t.block_height,
@@ -90,24 +99,23 @@ pub async fn resolve_transactions(
             explorer_transactions t
         JOIN
             explorer_block_details b ON t.block_height = b.height
-    "#;
+    ";
 
     let (query, _param_count) = build_transactions_query(&selector, base_query);
 
     let rows = if let Some(range) = &selector.range {
-        let hash_bytes = match hex::decode(range.from_tx_hash.trim_start_matches("0x")) {
-            Ok(b) => b,
-            Err(_) => return Ok(vec![]),
+        let Ok(hash_bytes) = hex::decode(range.from_tx_hash.trim_start_matches("0x")) else {
+            return Ok(vec![]);
         };
 
         sqlx::query(&query)
             .bind(&hash_bytes)
-            .bind(range.limit as i64)
+            .bind(i64::from(range.limit))
             .fetch_all(db)
             .await?
     } else if let Some(latest) = &selector.latest {
         sqlx::query(&query)
-            .bind(latest.limit as i64)
+            .bind(i64::from(latest.limit))
             .fetch_all(db)
             .await?
     } else {
@@ -125,6 +133,7 @@ pub async fn resolve_transactions(
     Ok(transactions)
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Transaction>> {
     let mut transactions = Vec::with_capacity(rows.len());
 
@@ -144,7 +153,7 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
                 raw: hex::encode_upper(&raw_data),
-                block: Block::new(block_height as i32, timestamp, None),
+                block: Block::new(i32::try_from(block_height).unwrap_or_default(), timestamp, None),
                 body: crate::api::graphql::types::extract_transaction_body(&json),
                 raw_events: extract_events_from_json(&json),
                 raw_json: json,
@@ -189,25 +198,13 @@ fn build_transactions_query(selector: &TransactionsSelector, base: &str) -> (Str
 
         match range.direction {
             RangeDirection::Next => {
-                query.push_str(&format!(
-                    " WHERE (t.timestamp < {ref_query})",
-                    ref_query = ref_query
-                ));
-                query.push_str(&format!(
-                    " OR (t.timestamp = {ref_query} AND t.tx_hash > $1)",
-                    ref_query = ref_query
-                ));
+                query.push_str(&format!(" WHERE (t.timestamp < {ref_query})"));
+                query.push_str(&format!(" OR (t.timestamp = {ref_query} AND t.tx_hash > $1)"));
                 query.push_str(" ORDER BY t.timestamp DESC, t.tx_hash ASC LIMIT $2");
             }
             RangeDirection::Previous => {
-                query.push_str(&format!(
-                    " WHERE (t.timestamp > {ref_query})",
-                    ref_query = ref_query
-                ));
-                query.push_str(&format!(
-                    " OR (t.timestamp = {ref_query} AND t.tx_hash < $1)",
-                    ref_query = ref_query
-                ));
+                query.push_str(&format!(" WHERE (t.timestamp > {ref_query})"));
+                query.push_str(&format!(" OR (t.timestamp = {ref_query} AND t.tx_hash < $1)"));
                 query.push_str(" ORDER BY t.timestamp ASC, t.tx_hash DESC LIMIT $2");
             }
         }
