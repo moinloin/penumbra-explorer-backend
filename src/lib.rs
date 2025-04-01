@@ -30,10 +30,19 @@ pub struct Explorer {
 }
 
 impl Explorer {
+    #[must_use]
     pub fn new(options: ExplorerOptions) -> Self {
         Self { options }
     }
 
+    /// Runs the explorer service, starting both the indexer and API server
+    ///
+    /// # Errors
+    /// Returns an error if database migrations fail, database connection fails,
+    /// or if the API server or indexer encounters an error
+    ///
+    /// # Panics
+    /// Panics if the API socket address is invalid
     pub async fn run(&self) -> Result<()> {
         db_migrations::run_migrations(&self.options.dest_db_url)
             .context("Failed to run database migrations")?;
@@ -58,7 +67,7 @@ impl Explorer {
         let api_host = "0.0.0.0";
         let api_port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
 
-        let addr = format!("{}:{}", api_host, api_port)
+        let addr = format!("{api_host}:{api_port}")
             .parse::<SocketAddr>()
             .expect("Invalid socket address");
         info!("Starting API server on {}", addr);
