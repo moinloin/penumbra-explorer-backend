@@ -1,6 +1,6 @@
 use crate::api::graphql::{
     context::ApiContext,
-    types::{Block, Event, Transaction, TransactionsSelector},
+    types::{Block, Event, RangeDirection, Transaction, TransactionsSelector},
 };
 use async_graphql::Result;
 use sqlx::Row;
@@ -35,9 +35,9 @@ pub async fn resolve_transaction(
             t.tx_hash = $1
         "#,
     )
-    .bind(hash_bytes.as_slice())
-    .fetch_optional(db)
-    .await?;
+        .bind(hash_bytes.as_slice())
+        .fetch_optional(db)
+        .await?;
 
     if let Some(r) = row {
         let tx_hash: Vec<u8> = r.get("tx_hash");
@@ -114,7 +114,15 @@ pub async fn resolve_transactions(
         sqlx::query(&query).fetch_all(db).await?
     };
 
-    process_transaction_rows(rows)
+    let mut transactions = process_transaction_rows(rows)?;
+
+    if let Some(range) = &selector.range {
+        if range.direction == RangeDirection::Previous {
+            transactions.reverse();
+        }
+    }
+
+    Ok(transactions)
 }
 
 fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Transaction>> {
@@ -172,18 +180,31 @@ fn extract_events_from_json(json: &serde_json::Value) -> Vec<Event> {
 
 fn build_transactions_query(selector: &TransactionsSelector, base: &str) -> (String, usize) {
     let mut query = String::from(base);
-    let count;
+    let mut param_count: usize = 0;
 
-    if selector.range.is_some() {
-        query.push_str(" WHERE t.timestamp <= (SELECT timestamp FROM explorer_transactions WHERE tx_hash = $1) ORDER BY t.timestamp DESC LIMIT $2");
-        count = 2;
+    if let Some(range) = &selector.range {
+        param_count = 2;
+
+        let ref_query = "(SELECT timestamp FROM explorer_transactions WHERE tx_hash = $1)";
+
+        match range.direction {
+            RangeDirection::Next => {
+                query.push_str(&format!(" WHERE (t.timestamp < {ref_query})", ref_query = ref_query));
+                query.push_str(&format!(" OR (t.timestamp = {ref_query} AND t.tx_hash > $1)", ref_query = ref_query));
+                query.push_str(" ORDER BY t.timestamp DESC, t.tx_hash ASC LIMIT $2");
+            },
+            RangeDirection::Previous => {
+                query.push_str(&format!(" WHERE (t.timestamp > {ref_query})", ref_query = ref_query));
+                query.push_str(&format!(" OR (t.timestamp = {ref_query} AND t.tx_hash < $1)", ref_query = ref_query));
+                query.push_str(" ORDER BY t.timestamp ASC, t.tx_hash DESC LIMIT $2");
+            }
+        }
     } else if selector.latest.is_some() {
-        query.push_str(" ORDER BY t.timestamp DESC LIMIT $1");
-        count = 1;
+        param_count = 1;
+        query.push_str(" ORDER BY t.timestamp DESC, t.tx_hash ASC LIMIT $1");
     } else {
-        query.push_str(" ORDER BY t.timestamp DESC LIMIT 10");
-        count = 0;
+        query.push_str(" ORDER BY t.timestamp DESC, t.tx_hash ASC LIMIT 10");
     }
 
-    (query, count)
+    (query, param_count)
 }
