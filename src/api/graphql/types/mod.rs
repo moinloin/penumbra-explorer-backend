@@ -10,21 +10,12 @@ pub use asset::*;
 pub use block::*;
 pub use event::*;
 pub use inputs::{
-    BlockHeightRange,
-    BlocksSelector,
-    LatestBlock,
-    TransactionRange,
+    BlockHeightRange, BlocksSelector, LatestBlock, LatestTransactions, TransactionRange,
     TransactionsSelector,
-    LatestTransactions
 };
 pub use stats::*;
 pub use transaction::{
-    DbRawTransaction,
-    Fee,
-    RangeDirection,
-    Transaction,
-    TransactionBody,
+    extract_transaction_body, DbRawTransaction, Fee, RangeDirection, Transaction, TransactionBody,
     TransactionParameters,
-    extract_transaction_body
 };
 pub use unions::*;
