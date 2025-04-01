@@ -1,4 +1,5 @@
 use async_graphql::InputObject;
+use crate::api::graphql::types::RangeDirection;
 
 #[derive(InputObject)]
 pub struct BlockHeightRange {
@@ -25,6 +26,7 @@ pub struct LatestTransactions {
 #[derive(InputObject)]
 pub struct TransactionRange {
     pub from_tx_hash: String,
+    pub direction: RangeDirection,
     pub limit: i32,
 }
 
