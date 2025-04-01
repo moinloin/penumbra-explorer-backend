@@ -59,7 +59,7 @@ impl BlockDetails {
 
         if exists {
             sqlx::query(
-                r#"
+                r"
             UPDATE explorer_block_details
             SET
                 root = $2,
@@ -68,7 +68,7 @@ impl BlockDetails {
                 chain_id = $5,
                 raw_json = $6::jsonb
             WHERE height = $1
-            "#,
+            ",
             )
             .bind(height_i64)
             .bind(&meta.root)
@@ -82,12 +82,12 @@ impl BlockDetails {
             tracing::debug!("Updated block {}", meta.height);
         } else {
             sqlx::query(
-                r#"
+                r"
             INSERT INTO explorer_block_details
             (height, root, timestamp, num_transactions, chain_id,
              validator_identity_key, previous_block_hash, block_hash, raw_json)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-            "#,
+            ",
             )
             .bind(height_i64)
             .bind(&meta.root)
@@ -122,6 +122,7 @@ impl AppView for BlockDetails {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn index_batch(
         &self,
         dbtx: &mut PgTransaction,
