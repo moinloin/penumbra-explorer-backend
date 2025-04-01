@@ -27,7 +27,7 @@
 
 # Penumbra Explorer Backend
 
-A high-performance backend indexer for exploring the Penumbra blockchain built with Rust
+Backend indexer for exploring the Penumbra blockchain built with Rust
 
 ## Features
 
@@ -46,7 +46,7 @@ A high-performance backend indexer for exploring the Penumbra blockchain built w
 
 2. Update the `.env` file with your configuration:
     - Set `SOURCE_DB_URL` to your Penumbra node's database
-    - Configure other settings as needed
+    - Set `DEST_DB_URL` to your parsed database
 
 3. Place your Genesis JSON file in the project root as `genesis.json`
 
