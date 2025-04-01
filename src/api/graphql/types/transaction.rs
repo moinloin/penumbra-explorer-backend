@@ -169,7 +169,7 @@ pub struct DbRawTransaction {
 
 impl DbRawTransaction {
     /// Gets a transaction by its hash
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the database query fails
     pub async fn get_by_hash(ctx: &Context<'_>, tx_hash_hex: String) -> Result<Option<Self>> {
@@ -218,7 +218,7 @@ impl DbRawTransaction {
     }
 
     /// Gets all transactions with pagination
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the database query fails
     pub async fn get_all(
