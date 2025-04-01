@@ -48,7 +48,9 @@ pub async fn resolve_blocks(
     let (query, _params) = build_blocks_query(&selector);
     let mut query_builder = sqlx::query(&query);
     if let Some(range) = &selector.range {
-        query_builder = query_builder.bind(i64::from(range.from)).bind(i64::from(range.to));
+        query_builder = query_builder
+            .bind(i64::from(range.from))
+            .bind(i64::from(range.to));
     } else if let Some(latest) = &selector.latest {
         query_builder = query_builder.bind(i64::from(latest.limit));
     }
