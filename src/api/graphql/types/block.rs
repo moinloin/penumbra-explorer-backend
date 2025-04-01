@@ -121,7 +121,7 @@ pub struct DbBlock {
 
 impl DbBlock {
     /// Gets a block by its height
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the database query fails
     pub async fn get_by_height(ctx: &Context<'_>, height: i64) -> Result<Option<Self>> {
@@ -168,7 +168,7 @@ impl DbBlock {
     }
 
     /// Gets all blocks with pagination
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the database query fails
     pub async fn get_all(
@@ -223,7 +223,7 @@ impl DbBlock {
     }
 
     /// Gets the latest block
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the database query fails
     pub async fn get_latest(ctx: &Context<'_>) -> Result<Option<Self>> {
