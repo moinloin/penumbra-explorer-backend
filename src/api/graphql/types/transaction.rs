@@ -189,9 +189,9 @@ impl DbRawTransaction {
                 tx_hash = $1
             "#,
         )
-            .bind(&tx_hash_bytes)
-            .fetch_optional(db)
-            .await?;
+        .bind(&tx_hash_bytes)
+        .fetch_optional(db)
+        .await?;
 
         if let Some(row) = row_result {
             let tx_hash: Vec<u8> = row.get("tx_hash");
@@ -238,10 +238,10 @@ impl DbRawTransaction {
             LIMIT $1 OFFSET $2
             "#,
         )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(db)
-            .await?;
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(db)
+        .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
