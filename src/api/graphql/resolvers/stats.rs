@@ -2,7 +2,7 @@ use crate::api::graphql::{context::ApiContext, types::Stats};
 use async_graphql::{Context, Result};
 
 /// Resolves statistics information
-/// 
+///
 /// # Errors
 /// Returns an error if database queries fail
 #[allow(clippy::module_name_repetitions)]
