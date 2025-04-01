@@ -29,10 +29,12 @@ impl TransactionBatch {
         }
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.transactions.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.transactions.is_empty()
     }
@@ -247,18 +249,22 @@ impl TransactionQueue {
         batches
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pending_batches.is_empty()
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.pending_batches.len()
     }
 
+    #[must_use]
     pub fn transaction_count(&self) -> usize {
-        self.pending_batches.iter().map(|batch| batch.len()).sum()
+        self.pending_batches.iter().map(TransactionBatch::len).sum()
     }
 
+    #[must_use]
     pub fn stats(&self) -> QueueStats {
         let total_batches = self.len();
         let total_transactions = self.transaction_count();
@@ -294,7 +300,7 @@ mod tests {
 
     fn create_test_transaction(tx_index: u64) -> PendingTransaction {
         PendingTransaction {
-            tx_hash: [tx_index as u8; 32],
+            tx_hash: [(tx_index % 256) as u8; 32],
             tx_bytes: vec![1, 2, 3],
             tx_index,
             events: vec![],
