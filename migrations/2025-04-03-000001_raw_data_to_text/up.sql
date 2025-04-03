@@ -1,3 +1,9 @@
+DROP VIEW IF EXISTS explorer_transaction_summary;
+DROP VIEW IF EXISTS explorer_recent_blocks;
+DROP TABLE IF EXISTS explorer_transactions CASCADE;
+DROP TABLE IF EXISTS explorer_block_details CASCADE;
+DROP TABLE IF EXISTS index_watermarks CASCADE;
+
 CREATE TABLE explorer_block_details (
                                         height BIGINT PRIMARY KEY,
                                         root BYTEA NOT NULL,
@@ -20,7 +26,7 @@ CREATE TABLE explorer_transactions (
                                        timestamp TIMESTAMPTZ NOT NULL,
                                        fee_amount NUMERIC(39, 0) DEFAULT 0,
                                        chain_id TEXT,
-                                       raw_data BYTEA,
+                                       raw_data TEXT,
                                        raw_json JSONB,
                                        FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
                                            DEFERRABLE INITIALLY DEFERRED
