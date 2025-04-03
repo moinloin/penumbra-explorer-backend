@@ -24,28 +24,35 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
         #[diesel(sql_type = diesel::sql_types::Bool)]
         exists: bool,
     }
-    
-    let table_exists = diesel::sql_query("
+
+    let table_exists = diesel::sql_query(
+        "
         SELECT EXISTS (
             SELECT FROM information_schema.tables 
             WHERE table_schema = 'public' 
             AND table_name = '__diesel_schema_migrations'
         ) as exists
-    ")
-    .get_result::<Exists>(&mut conn)?.exists;
+    ",
+    )
+    .get_result::<Exists>(&mut conn)?
+    .exists;
 
     if !table_exists {
         info!("Migration tracking table doesn't exist, creating it");
 
-        diesel::sql_query("
+        diesel::sql_query(
+            "
             CREATE TABLE __diesel_schema_migrations (
                 version VARCHAR(50) PRIMARY KEY,
                 run_on TIMESTAMP NOT NULL DEFAULT NOW()
-            )")
-            .execute(&mut conn)?;
-        
-        diesel::sql_query("INSERT INTO __diesel_schema_migrations (version) VALUES ('20250324000001')")
-            .execute(&mut conn)?;
+            )",
+        )
+        .execute(&mut conn)?;
+
+        diesel::sql_query(
+            "INSERT INTO __diesel_schema_migrations (version) VALUES ('20250324000001')",
+        )
+        .execute(&mut conn)?;
 
         info!("Set up migration tracking table, marked initial schema as applied");
     } else {
