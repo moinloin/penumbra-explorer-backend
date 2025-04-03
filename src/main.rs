@@ -80,7 +80,7 @@ fn sensitive_url(url: &str) -> String {
         if let Some(auth_end) = url[auth_start + 3..].find('@') {
             let prefix = &url[0..auth_start + 3];
             let suffix = &url[auth_start + 3 + auth_end..];
-            return format!("{}***REDACTED***{}", prefix, suffix);
+            return format!("{prefix}***REDACTED***{suffix}");
         }
     }
     url.to_string()
