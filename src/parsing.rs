@@ -62,10 +62,6 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
     None
 }
 
-/// Convert event to JSON format
-///
-/// # Errors
-/// Returns an error if the JSON serialization fails or if there's an issue with formatting the event data
 pub fn event_to_json(
     event: ContextualizedEvent<'_>,
     tx_hash: Option<[u8; 32]>,
@@ -90,4 +86,24 @@ pub fn event_to_json(
     });
 
     Ok(json_event)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode_to_hex() {
+        assert_eq!(encode_to_hex([]), "");
+        assert_eq!(encode_to_hex([0]), "00");
+        assert_eq!(encode_to_hex([255]), "FF");
+        assert_eq!(encode_to_hex([0, 1, 2, 3]), "00010203");
+        assert_eq!(encode_to_hex([255, 254, 253, 252]), "FFFEFDFC");
+        
+        let vec_bytes = vec![10, 20, 30, 40, 50];
+        assert_eq!(encode_to_hex(vec_bytes), "0A141E2832");
+        
+        let array = [171, 205, 239];
+        assert_eq!(encode_to_hex(&array[..]), "ABCDEF");
+    }
 }
