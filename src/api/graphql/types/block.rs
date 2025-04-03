@@ -66,7 +66,7 @@ impl Block {
             let _block_height: i64 = row.get("block_height");
             let _timestamp: chrono::DateTime<chrono::Utc> = row.get("timestamp");
             let _fee_amount_str: String = row.get("fee_amount_str");
-            let raw_data: Vec<u8> = row.get("raw_data");
+            let raw_data: String = row.get("raw_data");
             let raw_json: Option<serde_json::Value> = row.get("raw_json");
             if let Some(json) = raw_json {
                 let hash = hex::encode_upper(&tx_hash);
@@ -75,7 +75,7 @@ impl Block {
                     anchor: String::new(),
                     binding_sig: String::new(),
                     index: extract_index_from_json(&json).unwrap_or(0),
-                    raw: hex::encode_upper(&raw_data),
+                    raw: raw_data.clone(),
                     block: self.clone(),
                     body: crate::api::graphql::types::extract_transaction_body(&json),
                     raw_events: extract_events_from_json(&json),
@@ -285,7 +285,6 @@ impl Block {
     }
 }
 
-// Custom clone implementation removed since we now derive Clone
 
 fn extract_index_from_json(json: &serde_json::Value) -> Option<i32> {
     json.get("index")
