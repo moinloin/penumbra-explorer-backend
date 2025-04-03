@@ -469,4 +469,31 @@ mod tests {
         let empty_json = json!({});
         assert_eq!(Transactions::extract_fee_amount(&empty_json), 0);
     }
+    
+    #[test]
+    fn test_extract_chain_id() {
+        let tx_result = json!({
+            "body": {
+                "transactionParameters": {
+                    "chainId": "penumbra-testnet"
+                }
+            }
+        });
+        
+        assert_eq!(
+            Transactions::extract_chain_id(&tx_result), 
+            Some("penumbra-testnet".to_string())
+        );
+        
+        let tx_result_missing_chain_id = json!({
+            "body": {
+                "transactionParameters": {}
+            }
+        });
+        
+        assert_eq!(Transactions::extract_chain_id(&tx_result_missing_chain_id), None);
+        
+        let empty_json = json!({});
+        assert_eq!(Transactions::extract_chain_id(&empty_json), None);
+    }
 }
