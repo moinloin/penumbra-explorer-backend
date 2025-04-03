@@ -17,17 +17,40 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
     let mut conn =
         PgConnection::establish(database_url).context("Failed to connect to database")?;
 
-    let tables_exist = check_tables_exist(&mut conn)?;
+    info!("Running database migrations");
 
-    if tables_exist {
-        info!("Tables already exist, skipping migrations");
-        return Ok(());
+    #[derive(QueryableByName)]
+    struct Exists {
+        #[diesel(sql_type = diesel::sql_types::Bool)]
+        exists: bool,
     }
+    
+    let table_exists = diesel::sql_query("
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = '__diesel_schema_migrations'
+        ) as exists
+    ")
+    .get_result::<Exists>(&mut conn)?.exists;
 
-    info!("Tables don't exist, running migrations");
+    if !table_exists {
+        info!("Migration tracking table doesn't exist, creating it");
 
-    diesel::sql_query("DROP TABLE IF EXISTS __diesel_schema_migrations CASCADE")
-        .execute(&mut conn)?;
+        diesel::sql_query("
+            CREATE TABLE __diesel_schema_migrations (
+                version VARCHAR(50) PRIMARY KEY,
+                run_on TIMESTAMP NOT NULL DEFAULT NOW()
+            )")
+            .execute(&mut conn)?;
+        
+        diesel::sql_query("INSERT INTO __diesel_schema_migrations (version) VALUES ('20250324000001')")
+            .execute(&mut conn)?;
+
+        info!("Set up migration tracking table, marked initial schema as applied");
+    } else {
+        info!("Migration tracking table exists, using existing migration state");
+    }
 
     match conn.run_pending_migrations(MIGRATIONS) {
         Ok(applied) => {
@@ -40,26 +63,4 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[derive(QueryableByName)]
-struct CountResult {
-    #[diesel(sql_type = BigInt)]
-    count: i64,
-}
-
-fn check_tables_exist(conn: &mut PgConnection) -> Result<bool> {
-    let results = diesel::sql_query(
-        "
-        SELECT COUNT(*) as count FROM information_schema.tables
-        WHERE table_name IN ('explorer_block_details', 'explorer_transactions')
-        AND table_schema = 'public'",
-    )
-    .load::<CountResult>(conn)?;
-
-    if let Some(result) = results.first() {
-        Ok(result.count == 2)
-    } else {
-        Ok(false)
-    }
 }
