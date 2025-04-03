@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
-use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tracing::{info, warn};
 
