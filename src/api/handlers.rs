@@ -22,3 +22,36 @@ pub async fn graphql_playground() -> impl IntoResponse {
 pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_health_check() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let response = rt.block_on(async {
+            health_check().await.into_response()
+        });
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    
+    #[test]
+    fn test_graphql_playground() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let response = rt.block_on(async {
+            graphql_playground().await.into_response()
+        });
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let content_type = response.headers().get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        
+        assert!(content_type.contains("text/html"));
+    }
+}
