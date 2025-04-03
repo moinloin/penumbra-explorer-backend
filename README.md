@@ -29,61 +29,58 @@
 
 Backend indexer for exploring the Penumbra blockchain built with Rust
 
-## Features
+## Getting Started
 
-- Indexes Penumbra blockchain data from a source database
-- Stores processed data in a destination database
-- Exposes a GraphQL API for querying blockchain data
-- Supports block details, transactions, and search functionality
-
-
-## Environment Setup
-
-1. Copy the example environment file:
+1. Set up Rust (1.81.0 or later)
+2. Install dependencies with `cargo build`
+3. Run the application with:
    ```sh
-   cp .env.example .env
+   cargo run -- \
+     -s "postgresql://user:password@source-host:5432/source-db?sslmode=require" \
+     -d "postgresql://user:password@dest-host:5432/dest-db" \
+     --genesis-json genesis.json
    ```
 
-2. Update the `.env` file with your configuration:
-    - Set `SOURCE_DB_URL` to your Penumbra node's database
-    - Set `DEST_DB_URL` to your parsed database
+### Cargo Scripts
 
-3. Place your Genesis JSON file in the project root as `genesis.json`
+| Script                                                                  | Description                                     |
+|-------------------------------------------------------------------------|-------------------------------------------------|
+| `cargo build --release`                                                 | Build app in release mode                       |
+| `cargo run -- -s "SOURCE_DB" -d "DEST_DB" --genesis-json genesis.json`  | Run application with required parameters        |
+| `cargo test`                                                            | Run tests                                       |
+| `cargo test <test_name>`                                                | Run a specific test                             |
+| `cargo clippy --all-targets --all-features --workspace -- -W clippy::pedantic -D warnings` | Lint using strictest clippy rules |
+| `cargo fmt`                                                             | Format code using rustfmt                       |
 
-## Local Development
+### Project Structure
 
-### Running with Docker Compose
+| Directory         | Description                                                   |
+|-------------------|---------------------------------------------------------------|
+| `migrations/`     | Database migration scripts                                    |
+| `src/api/`        | API implementation (GraphQL resolvers, handlers)              |
+| `src/api/graphql/`| GraphQL schema, resolvers, and types                          |
+| `src/app_views/`  | Application views for blocks and transactions                 |
+| `src/coordination/`| Coordination between components (transaction queue)          |
+| `src/`            | Core application code                                         |
 
-1. Start the application with databases:
-   ```sh
-   docker-compose up -d
-   ```
+## Docker
 
-2. Follow the logs:
-   ```sh
-   docker-compose logs -f app
-   ```
+You can also run the application using Docker:
 
-3. Access the GraphQL API at http://localhost:8080/graphql
+```sh
+docker-compose up -d
+```
 
-### Running without Docker
+View logs:
+```sh
+docker-compose logs -f app
+```
 
-1. Set up a PostgreSQL database for the destination
+## API
 
-2. Build and run the application:
-   ```sh
-   cargo build --release
-   RUST_LOG=info ./target/release/penumbra-explorer \
-       -s "postgresql://user:password@source-host:5432/source-db?sslmode=require" \
-       -d "postgresql://user:password@dest-host:5432/dest-db" \
-       --genesis-json "/path/to/genesis.json"
-   ```
-
-## API Endpoints
-
-- **GraphQL API**: `/graphql`
-- **GraphQL Playground**: `/graphql/playground`
-- **Health Check**: `/health`
+The GraphQL API is accessible at:
+- GraphQL API: `/graphql`
+- GraphQL Playground: `/graphql/playground`
 
 ## Configuration
 
@@ -96,6 +93,27 @@ Backend indexer for exploring the Penumbra blockchain built with Rust
 - `--to-height`: Ending block height (optional)
 - `--batch-size`: Batch size for processing blocks (default: 100)
 - `--polling-interval-ms`: Polling interval in milliseconds (default: 1000)
+
+## Testing
+
+Tests are organized by module and can be run using `cargo test`. Critical components have unit tests covering core functionality.
+
+### Test Coverage
+
+Key components with test coverage:
+- Transaction queue management
+- Parsing utilities
+- Block and transaction processing
+
+## Linting and Code Style
+
+The project uses:
+- rustfmt for formatting: `cargo fmt`
+- Clippy for linting with strict rules: `cargo clippy --all-targets --all-features --workspace -- -W clippy::pedantic -D warnings`
+
+The codebase follows Rust's naming conventions:
+- snake_case for variables/functions
+- CamelCase for types/traits
 
 ## License
 
