@@ -106,4 +106,20 @@ mod tests {
         let array = [171, 205, 239];
         assert_eq!(encode_to_hex(&array[..]), "ABCDEF");
     }
+    
+    #[test]
+    fn test_encode_to_base64() {
+        assert_eq!(encode_to_base64([]), "");
+        assert_eq!(encode_to_base64([0]), "AA==");
+        assert_eq!(encode_to_base64([255]), "/w==");
+        
+        assert_eq!(encode_to_base64([0, 1, 2, 3]), "AAECAw==");
+        assert_eq!(encode_to_base64([255, 254, 253, 252]), "//79/A==");
+        
+        let vec_bytes = vec![72, 101, 108, 108, 111];
+        assert_eq!(encode_to_base64(vec_bytes), "SGVsbG8=");
+        
+        let array = [84, 101, 115, 116, 105, 110, 103];
+        assert_eq!(encode_to_base64(&array[..]), "VGVzdGluZw==");
+    }
 }
