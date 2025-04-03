@@ -35,14 +35,11 @@ impl Transactions {
     }
 
     async fn block_exists(dbtx: &mut PgTransaction<'_>, height: u64) -> Result<bool, sqlx::Error> {
-        let height_i64 = match i64::try_from(height) {
-            Ok(h) => h,
-            Err(_) => {
-                return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Height value too large: {}", height),
-                ))))
-            }
+        let Ok(height_i64) = i64::try_from(height) else {
+            return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Height value too large: {height}"),
+            ))))
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
@@ -55,7 +52,7 @@ impl Transactions {
         Ok(exists)
     }
 
-    fn extract_fee_amount(&self, tx_result: &Value) -> u64 {
+    fn extract_fee_amount(tx_result: &Value) -> u64 {
         tx_result
             .get("body")
             .and_then(|body| body.get("transactionParameters"))
@@ -67,17 +64,16 @@ impl Transactions {
             .unwrap_or(0)
     }
 
-    fn extract_chain_id(&self, tx_result: &Value) -> Option<String> {
+    fn extract_chain_id(tx_result: &Value) -> Option<String> {
         tx_result
             .get("body")
             .and_then(|body| body.get("transactionParameters"))
             .and_then(|params| params.get("chainId"))
             .and_then(|chain_id| chain_id.as_str())
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
     }
 
     fn create_transaction_json(
-        &self,
         tx_hash: [u8; 32],
         tx_bytes: &[u8],
         height: u64,
@@ -100,7 +96,7 @@ impl Transactions {
             let mut attributes = Vec::with_capacity(attr_capacity);
 
             for attr in &event.event.attributes {
-                let attr_str = format!("{:?}", attr);
+                let attr_str = format!("{attr:?}");
 
                 if let Some((key, value)) = parse_attribute_string(&attr_str) {
                     attributes.push(json!({
@@ -121,7 +117,7 @@ impl Transactions {
             }));
         }
 
-        let tx_result_decoded = self.decode_transaction(tx_hash, tx_bytes);
+        let tx_result_decoded = Self::decode_transaction(tx_hash, tx_bytes);
 
         let mut ordered_map = Map::with_capacity(7);
         ordered_map.insert("hash".to_string(), json!(encode_to_hex(tx_hash)));
@@ -135,7 +131,7 @@ impl Transactions {
         Value::Object(ordered_map)
     }
 
-    fn decode_transaction(&self, tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
+    fn decode_transaction(tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
         let start = Instant::now();
         let hash_hex = encode_to_hex(tx_hash);
 
@@ -182,14 +178,11 @@ impl Transactions {
         dbtx: &mut PgTransaction<'_>,
         meta: TransactionMetadata<'_>,
     ) -> Result<(), sqlx::Error> {
-        let height_i64 = match i64::try_from(meta.height) {
-            Ok(h) => h,
-            Err(_) => {
-                return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Height value too large: {}", meta.height),
-                ))))
-            }
+        let Ok(height_i64) = i64::try_from(meta.height) else {
+            return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Height value too large: {}", meta.height),
+            ))))
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
@@ -202,7 +195,7 @@ impl Transactions {
         let json_str = serde_json::to_string(&meta.decoded_tx_json).map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("JSON serialization error: {}", e),
+                format!("JSON serialization error: {e}"),
             )))
         })?;
 
@@ -223,7 +216,7 @@ impl Transactions {
             .bind(meta.tx_hash.as_ref())
             .bind(height_i64)
             .bind(meta.timestamp)
-            .bind(meta.fee_amount as i64)
+            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
             .bind(meta.chain_id)
             .bind(meta.tx_bytes)
             .bind(&json_str)
@@ -240,7 +233,7 @@ impl Transactions {
             .bind(meta.tx_hash.as_ref())
             .bind(height_i64)
             .bind(meta.timestamp)
-            .bind(meta.fee_amount as i64)
+            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
             .bind(meta.chain_id)
             .bind(meta.tx_bytes)
             .bind(&json_str)
@@ -266,6 +259,7 @@ impl AppView for Transactions {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn index_batch(
         &self,
         dbtx: &mut PgTransaction,
@@ -340,7 +334,7 @@ impl AppView for Transactions {
                 let tx_hash_hex = encode_to_hex(tx.tx_hash);
                 tracing::debug!("Processing transaction {} in block {}", tx_hash_hex, height);
 
-                let decoded_tx_json = self.create_transaction_json(
+                let decoded_tx_json = Self::create_transaction_json(
                     tx.tx_hash,
                     &tx.tx_bytes,
                     height,
@@ -349,10 +343,9 @@ impl AppView for Transactions {
                     &tx.events,
                 );
 
-                let fee_amount = self.extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
+                let fee_amount = Self::extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
 
-                let chain_id = self
-                    .extract_chain_id(&decoded_tx_json["tx_result_decoded"])
+                let chain_id = Self::extract_chain_id(&decoded_tx_json["tx_result_decoded"])
                     .unwrap_or_else(|| "unknown".to_string());
 
                 let meta = TransactionMetadata {
@@ -366,7 +359,7 @@ impl AppView for Transactions {
                 };
 
                 match self.insert_transaction(dbtx, meta).await {
-                    Ok(_) => tracing::debug!(
+                    Ok(()) => tracing::debug!(
                         "Successfully processed transaction {} with fee {}",
                         tx_hash_hex,
                         fee_amount
@@ -395,7 +388,7 @@ impl AppView for Transactions {
                             tracing::error!("Error inserting transaction {}: {:?}", tx_hash_hex, e);
                         }
 
-                        failed_tx_hashes.push((tx.tx_hash, format!("Error: {:?}", e)));
+                        failed_tx_hashes.push((tx.tx_hash, format!("Error: {e:?}")));
                         has_error = true;
                     }
                 }
@@ -422,7 +415,7 @@ impl AppView for Transactions {
                     .await?;
 
                 let elapsed = start_time.elapsed();
-                let tx_per_sec = batch.transactions.len() as f64 / elapsed.as_secs_f64();
+                let tx_per_sec = f64::from(u32::try_from(batch.transactions.len()).unwrap_or(u32::MAX)) / elapsed.as_secs_f64();
                 tracing::info!(
                     "Completed batch for block {} with {} transactions in {:?} ({:.2} tx/sec)",
                     height,
