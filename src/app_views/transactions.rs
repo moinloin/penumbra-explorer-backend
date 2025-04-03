@@ -39,7 +39,7 @@ impl Transactions {
             return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Height value too large: {height}"),
-            ))))
+            ))));
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
@@ -182,7 +182,7 @@ impl Transactions {
             return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Height value too large: {}", meta.height),
-            ))))
+            ))));
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
@@ -415,7 +415,9 @@ impl AppView for Transactions {
                     .await?;
 
                 let elapsed = start_time.elapsed();
-                let tx_per_sec = f64::from(u32::try_from(batch.transactions.len()).unwrap_or(u32::MAX)) / elapsed.as_secs_f64();
+                let tx_per_sec =
+                    f64::from(u32::try_from(batch.transactions.len()).unwrap_or(u32::MAX))
+                        / elapsed.as_secs_f64();
                 tracing::info!(
                     "Completed batch for block {} with {} transactions in {:?} ({:.2} tx/sec)",
                     height,
