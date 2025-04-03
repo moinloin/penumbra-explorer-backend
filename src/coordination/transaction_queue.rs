@@ -17,6 +17,7 @@ pub struct TransactionBatch {
 }
 
 impl TransactionBatch {
+    #[must_use]
     pub fn new(
         block_height: u64,
         timestamp: DateTime<sqlx::types::chrono::Utc>,
@@ -50,6 +51,7 @@ pub struct PendingTransaction {
 }
 
 impl PendingTransaction {
+    #[must_use]
     pub fn new(
         tx_hash: [u8; 32],
         tx_bytes: Vec<u8>,
@@ -65,6 +67,7 @@ impl PendingTransaction {
         }
     }
 
+    #[must_use]
     pub fn is_ready(&self, now: Instant) -> bool {
         match &self.retry_info {
             None => true,
@@ -98,6 +101,7 @@ pub struct TransactionQueue {
 }
 
 impl TransactionQueue {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             pending_batches: VecDeque::new(),
@@ -300,7 +304,7 @@ mod tests {
 
     fn create_test_transaction(tx_index: u64) -> PendingTransaction {
         PendingTransaction {
-            tx_hash: [(tx_index % 256) as u8; 32],
+            tx_hash: [u8::try_from(tx_index % 256).unwrap_or(0); 32],
             tx_bytes: vec![1, 2, 3],
             tx_index,
             events: vec![],
