@@ -99,30 +99,30 @@ mod tests {
         assert_eq!(encode_to_hex([255]), "FF");
         assert_eq!(encode_to_hex([0, 1, 2, 3]), "00010203");
         assert_eq!(encode_to_hex([255, 254, 253, 252]), "FFFEFDFC");
-        
+
         let vec_bytes = vec![10, 20, 30, 40, 50];
         assert_eq!(encode_to_hex(vec_bytes), "0A141E2832");
-        
+
         let array = [171, 205, 239];
         assert_eq!(encode_to_hex(&array[..]), "ABCDEF");
     }
-    
+
     #[test]
     fn test_encode_to_base64() {
         assert_eq!(encode_to_base64([]), "");
         assert_eq!(encode_to_base64([0]), "AA==");
         assert_eq!(encode_to_base64([255]), "/w==");
-        
+
         assert_eq!(encode_to_base64([0, 1, 2, 3]), "AAECAw==");
         assert_eq!(encode_to_base64([255, 254, 253, 252]), "//79/A==");
-        
+
         let vec_bytes = vec![72, 101, 108, 108, 111];
         assert_eq!(encode_to_base64(vec_bytes), "SGVsbG8=");
-        
+
         let array = [84, 101, 115, 116, 105, 110, 103];
         assert_eq!(encode_to_base64(&array[..]), "VGVzdGluZw==");
     }
-    
+
     #[test]
     fn test_parse_attribute_string() {
         let attr_with_key_value = "Attribute { key: \"action\", value: \"swap\" }";
@@ -131,18 +131,18 @@ mod tests {
         let (key, value) = result.unwrap();
         assert_eq!(key, "action");
         assert!(value.contains("swap"));
-        
+
         let attr_with_json = "event_type {\"timestamp\": 12345, \"block\": 100}";
         let result = parse_attribute_string(attr_with_json);
         assert!(result.is_some());
         let (key, value) = result.unwrap();
         assert_eq!(key, "event_type");
         assert_eq!(value, "{\"timestamp\": 12345, \"block\": 100}");
-        
+
         let invalid_attr = "Something without key or value";
         let result = parse_attribute_string(invalid_attr);
         assert!(result.is_none());
-        
+
         let empty_attr = "";
         let result = parse_attribute_string(empty_attr);
         assert!(result.is_none());
