@@ -26,7 +26,7 @@ struct TransactionMetadata<'a> {
     fee_amount: u64,
     chain_id: &'a str,
     #[allow(dead_code)]
-    tx_bytes: &'a [u8], 
+    tx_bytes: &'a [u8],
     tx_bytes_base64: String,
     decoded_tx_json: Value,
 }
@@ -41,15 +41,15 @@ impl Transactions {
             return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Height value too large: {height}"),
-            ))))
+            ))));
         };
 
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
         )
-            .bind(height_i64)
-            .fetch_one(dbtx.as_mut())
-            .await?;
+        .bind(height_i64)
+        .fetch_one(dbtx.as_mut())
+        .await?;
 
         Ok(exists)
     }
@@ -190,9 +190,9 @@ impl Transactions {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
         )
-            .bind(meta.tx_hash.as_ref())
-            .fetch_one(dbtx.as_mut())
-            .await?;
+        .bind(meta.tx_hash.as_ref())
+        .fetch_one(dbtx.as_mut())
+        .await?;
 
         let json_str = serde_json::to_string(&meta.decoded_tx_json).map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
@@ -215,15 +215,15 @@ impl Transactions {
             WHERE tx_hash = $1
             ",
             )
-                .bind(meta.tx_hash.as_ref())
-                .bind(height_i64)
-                .bind(meta.timestamp)
-                .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-                .bind(meta.chain_id)
-                .bind(&meta.tx_bytes_base64)
-                .bind(&json_str)
-                .execute(dbtx.as_mut())
-                .await?;
+            .bind(meta.tx_hash.as_ref())
+            .bind(height_i64)
+            .bind(meta.timestamp)
+            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+            .bind(meta.chain_id)
+            .bind(&meta.tx_bytes_base64)
+            .bind(&json_str)
+            .execute(dbtx.as_mut())
+            .await?;
         } else {
             sqlx::query(
                 r"
@@ -232,15 +232,15 @@ impl Transactions {
             VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
             ",
             )
-                .bind(meta.tx_hash.as_ref())
-                .bind(height_i64)
-                .bind(meta.timestamp)
-                .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-                .bind(meta.chain_id)
-                .bind(&meta.tx_bytes_base64)
-                .bind(&json_str)
-                .execute(dbtx.as_mut())
-                .await?;
+            .bind(meta.tx_hash.as_ref())
+            .bind(height_i64)
+            .bind(meta.timestamp)
+            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+            .bind(meta.chain_id)
+            .bind(&meta.tx_bytes_base64)
+            .bind(&json_str)
+            .execute(dbtx.as_mut())
+            .await?;
         }
 
         Ok(())
@@ -420,7 +420,9 @@ impl AppView for Transactions {
                     .await?;
 
                 let elapsed = start_time.elapsed();
-                let tx_per_sec = f64::from(u32::try_from(batch.transactions.len()).unwrap_or(u32::MAX)) / elapsed.as_secs_f64();
+                let tx_per_sec =
+                    f64::from(u32::try_from(batch.transactions.len()).unwrap_or(u32::MAX))
+                        / elapsed.as_secs_f64();
                 tracing::info!(
                     "Completed batch for block {} with {} transactions in {:?} ({:.2} tx/sec)",
                     height,
