@@ -456,21 +456,21 @@ mod tests {
                 }
             }
         });
-        
+
         assert_eq!(Transactions::extract_fee_amount(&tx_result), 1000);
-        
+
         let tx_result_missing_fee = json!({
             "body": {
                 "transactionParameters": {}
             }
         });
-        
+
         assert_eq!(Transactions::extract_fee_amount(&tx_result_missing_fee), 0);
-        
+
         let empty_json = json!({});
         assert_eq!(Transactions::extract_fee_amount(&empty_json), 0);
     }
-    
+
     #[test]
     fn test_extract_chain_id() {
         let tx_result = json!({
@@ -480,35 +480,38 @@ mod tests {
                 }
             }
         });
-        
+
         assert_eq!(
-            Transactions::extract_chain_id(&tx_result), 
+            Transactions::extract_chain_id(&tx_result),
             Some("penumbra-testnet".to_string())
         );
-        
+
         let tx_result_missing_chain_id = json!({
             "body": {
                 "transactionParameters": {}
             }
         });
-        
-        assert_eq!(Transactions::extract_chain_id(&tx_result_missing_chain_id), None);
-        
+
+        assert_eq!(
+            Transactions::extract_chain_id(&tx_result_missing_chain_id),
+            None
+        );
+
         let empty_json = json!({});
         assert_eq!(Transactions::extract_chain_id(&empty_json), None);
     }
-    
+
     #[test]
     fn test_decode_transaction_with_invalid_data() {
         let tx_hash = [0u8; 32];
         let invalid_tx_bytes = vec![1, 2, 3, 4];
-        
+
         let result = Transactions::decode_transaction(tx_hash, &invalid_tx_bytes);
-        
+
         assert!(result.is_object());
         assert!(result.as_object().unwrap().is_empty());
     }
-    
+
     #[test]
     fn test_create_transaction_json() {
         let tx_hash = [1u8; 32];
@@ -517,40 +520,39 @@ mod tests {
         let timestamp = Utc::now();
         let tx_index = 2;
         let tx_events = vec![];
-        
+
         let result = Transactions::create_transaction_json(
-            tx_hash,
-            &tx_bytes,
-            height,
-            timestamp,
-            tx_index,
-            &tx_events
+            tx_hash, &tx_bytes, height, timestamp, tx_index, &tx_events,
         );
-        
+
         let obj = result.as_object().unwrap();
-        
-        assert_eq!(obj.get("hash").unwrap().as_str().unwrap(), 
-                   "0101010101010101010101010101010101010101010101010101010101010101");
+
+        assert_eq!(
+            obj.get("hash").unwrap().as_str().unwrap(),
+            "0101010101010101010101010101010101010101010101010101010101010101"
+        );
         assert_eq!(obj.get("height").unwrap().as_str().unwrap(), "100");
         assert_eq!(obj.get("index").unwrap().as_str().unwrap(), "2");
         assert!(obj.contains_key("timestamp"));
         assert_eq!(obj.get("tx_result").unwrap().as_str().unwrap(), "01020304");
         assert!(obj.contains_key("tx_result_decoded"));
         assert!(obj.contains_key("events"));
-        
+
         let events = obj.get("events").unwrap().as_array().unwrap();
         assert_eq!(events.len(), 1);
-        
+
         let tx_event = &events[0];
         assert_eq!(tx_event.get("type").unwrap(), "tx");
-        
+
         let attrs = tx_event.get("attributes").unwrap().as_array().unwrap();
         assert_eq!(attrs.len(), 2);
-        
+
         assert_eq!(attrs[0].get("key").unwrap(), "hash");
-        assert_eq!(attrs[0].get("value").unwrap(), 
-                  "0101010101010101010101010101010101010101010101010101010101010101");
-        
+        assert_eq!(
+            attrs[0].get("value").unwrap(),
+            "0101010101010101010101010101010101010101010101010101010101010101"
+        );
+
         assert_eq!(attrs[1].get("key").unwrap(), "height");
         assert_eq!(attrs[1].get("value").unwrap(), "100");
     }
