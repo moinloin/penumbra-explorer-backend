@@ -285,7 +285,6 @@ impl Block {
     }
 }
 
-
 fn extract_index_from_json(json: &serde_json::Value) -> Option<i32> {
     json.get("index")
         .and_then(|i| i.as_str())
