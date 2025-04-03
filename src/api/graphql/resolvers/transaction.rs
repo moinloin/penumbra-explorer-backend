@@ -49,7 +49,7 @@ pub async fn resolve_transaction(
         let timestamp: chrono::DateTime<chrono::Utc> = r.get("block_timestamp");
         let _fee_amount_str: String = r.get("fee_amount_str");
         let _chain_id: Option<String> = r.get("chain_id");
-        let raw_data: Vec<u8> = r.get("raw_data");
+        let raw_data: String = r.get("raw_data");
         let raw_json: Option<serde_json::Value> = r.get("raw_json");
 
         if let Some(json) = raw_json {
@@ -60,7 +60,7 @@ pub async fn resolve_transaction(
                 anchor: String::new(),
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
-                raw: hex::encode_upper(&raw_data),
+                raw: raw_data.clone(),
                 block: Block::new(
                     i32::try_from(block_height).unwrap_or_default(),
                     timestamp,
@@ -145,7 +145,7 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
         let tx_hash: Vec<u8> = row.get("tx_hash");
         let block_height: i64 = row.get("block_height");
         let timestamp: chrono::DateTime<chrono::Utc> = row.get("block_timestamp");
-        let raw_data: Vec<u8> = row.get("raw_data");
+        let raw_data: String = row.get("raw_data");
         let raw_json: Option<serde_json::Value> = row.get("raw_json");
 
         if let Some(json) = raw_json {
@@ -156,7 +156,7 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
                 anchor: String::new(),
                 binding_sig: String::new(),
                 index: extract_index_from_json(&json).unwrap_or(0),
-                raw: hex::encode_upper(&raw_data),
+                raw: raw_data.clone(),
                 block: Block::new(
                     i32::try_from(block_height).unwrap_or_default(),
                     timestamp,
