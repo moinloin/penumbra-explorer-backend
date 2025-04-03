@@ -313,3 +313,20 @@ fn extract_chain_id(tx_bytes: &[u8]) -> Option<String> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_extract_chain_id_returns_none_for_empty_bytes() {
+        let empty_bytes: &[u8] = &[];
+        assert_eq!(extract_chain_id(empty_bytes), None);
+    }
+    
+    #[test]
+    fn test_extract_chain_id_returns_none_for_invalid_bytes() {
+        let invalid_bytes: &[u8] = &[1, 2, 3, 4, 5];
+        assert_eq!(extract_chain_id(invalid_bytes), None);
+    }
+}
