@@ -201,7 +201,7 @@ impl DbRawTransaction {
 
         if let Some(row) = row_result {
             let tx_hash: Vec<u8> = row.get("tx_hash");
-            let raw_data: Option<Vec<u8>> = row.get("raw_data");
+            let raw_data: Option<String> = row.get("raw_data");
 
             Ok(Some(Self {
                 tx_hash_hex: hex::encode_upper(&tx_hash),
@@ -209,7 +209,7 @@ impl DbRawTransaction {
                 timestamp: row.get("timestamp"),
                 fee_amount: row.get("fee_amount"),
                 chain_id: row.get("chain_id"),
-                raw_data_hex: raw_data.map(|data| hex::encode_upper(&data)),
+                raw_data_hex: raw_data,
                 raw_json: row.get("raw_json"),
             }))
         } else {
@@ -257,7 +257,7 @@ impl DbRawTransaction {
 
         for row in rows {
             let tx_hash: Vec<u8> = row.get("tx_hash");
-            let raw_data: Option<Vec<u8>> = row.get("raw_data");
+            let raw_data: Option<String> = row.get("raw_data");
 
             transactions.push(Self {
                 tx_hash_hex: hex::encode_upper(&tx_hash),
@@ -265,7 +265,7 @@ impl DbRawTransaction {
                 timestamp: row.get("timestamp"),
                 fee_amount: row.get("fee_amount"),
                 chain_id: row.get("chain_id"),
-                raw_data_hex: raw_data.map(|data| hex::encode_upper(&data)),
+                raw_data_hex: raw_data,
                 raw_json: row.get("raw_json"),
             });
         }
