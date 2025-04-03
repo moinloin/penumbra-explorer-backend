@@ -1,8 +1,8 @@
 use anyhow::Result;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use cometindex::ContextualizedEvent;
 use serde_json::{json, Value};
 use std::fmt::Write;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 /// Helper function to convert bytes to a hexadecimal string
 #[must_use]
