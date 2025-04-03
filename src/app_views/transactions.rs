@@ -496,4 +496,15 @@ mod tests {
         let empty_json = json!({});
         assert_eq!(Transactions::extract_chain_id(&empty_json), None);
     }
+    
+    #[test]
+    fn test_decode_transaction_with_invalid_data() {
+        let tx_hash = [0u8; 32];
+        let invalid_tx_bytes = vec![1, 2, 3, 4];
+        
+        let result = Transactions::decode_transaction(tx_hash, &invalid_tx_bytes);
+        
+        assert!(result.is_object());
+        assert!(result.as_object().unwrap().is_empty());
+    }
 }
