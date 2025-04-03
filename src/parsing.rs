@@ -122,4 +122,29 @@ mod tests {
         let array = [84, 101, 115, 116, 105, 110, 103];
         assert_eq!(encode_to_base64(&array[..]), "VGVzdGluZw==");
     }
+    
+    #[test]
+    fn test_parse_attribute_string() {
+        let attr_with_key_value = "Attribute { key: \"action\", value: \"swap\" }";
+        let result = parse_attribute_string(attr_with_key_value);
+        assert!(result.is_some());
+        let (key, value) = result.unwrap();
+        assert_eq!(key, "action");
+        assert!(value.contains("swap"));
+        
+        let attr_with_json = "event_type {\"timestamp\": 12345, \"block\": 100}";
+        let result = parse_attribute_string(attr_with_json);
+        assert!(result.is_some());
+        let (key, value) = result.unwrap();
+        assert_eq!(key, "event_type");
+        assert_eq!(value, "{\"timestamp\": 12345, \"block\": 100}");
+        
+        let invalid_attr = "Something without key or value";
+        let result = parse_attribute_string(invalid_attr);
+        assert!(result.is_none());
+        
+        let empty_attr = "";
+        let result = parse_attribute_string(empty_attr);
+        assert!(result.is_none());
+    }
 }
