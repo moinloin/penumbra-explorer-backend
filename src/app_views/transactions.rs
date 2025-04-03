@@ -436,3 +436,37 @@ impl AppView for Transactions {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_extract_fee_amount() {
+        let tx_result = json!({
+            "body": {
+                "transactionParameters": {
+                    "fee": {
+                        "amount": {
+                            "lo": "1000"
+                        }
+                    }
+                }
+            }
+        });
+        
+        assert_eq!(Transactions::extract_fee_amount(&tx_result), 1000);
+        
+        let tx_result_missing_fee = json!({
+            "body": {
+                "transactionParameters": {}
+            }
+        });
+        
+        assert_eq!(Transactions::extract_fee_amount(&tx_result_missing_fee), 0);
+        
+        let empty_json = json!({});
+        assert_eq!(Transactions::extract_fee_amount(&empty_json), 0);
+    }
+}
