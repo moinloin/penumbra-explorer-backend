@@ -2,6 +2,7 @@ use anyhow::Result;
 use cometindex::ContextualizedEvent;
 use serde_json::{json, Value};
 use std::fmt::Write;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 /// Helper function to convert bytes to a hexadecimal string
 #[must_use]
@@ -14,6 +15,13 @@ pub fn encode_to_hex<T: AsRef<[u8]>>(data: T) -> String {
     }
 
     hex_string
+}
+
+/// Helper function to convert bytes to a base64 string
+#[must_use]
+pub fn encode_to_base64<T: AsRef<[u8]>>(data: T) -> String {
+    let bytes = data.as_ref();
+    BASE64.encode(bytes)
 }
 
 /// Parse attribute string from an event
