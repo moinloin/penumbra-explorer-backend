@@ -62,6 +62,10 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
     None
 }
 
+/// Converts a Penumbra event to JSON format
+///
+/// # Errors
+/// Returns an error if JSON serialization fails, or if attribute conversion fails
 pub fn event_to_json(
     event: ContextualizedEvent<'_>,
     tx_hash: Option<[u8; 32]>,
