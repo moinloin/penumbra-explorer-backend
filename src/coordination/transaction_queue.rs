@@ -228,12 +228,11 @@ impl TransactionQueue {
         let mut retry_count = 0;
 
         for tx in &mut batch.transactions {
-            if let Some(error) = tx_hash_set
-                .contains(&tx.tx_hash)
-                .then(|| error_map[&tx.tx_hash].clone())
-            {
-                tx.mark_for_retry(&error);
-                retry_count += 1;
+            if tx_hash_set.contains(&tx.tx_hash) {
+                if let Some(error) = error_map.get(&tx.tx_hash).cloned() {
+                    tx.mark_for_retry(&error);
+                    retry_count += 1;
+                }
             }
         }
 
