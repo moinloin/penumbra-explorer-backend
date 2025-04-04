@@ -14,7 +14,7 @@ use axum::{
     routing::{get, post},
     Router, Server,
 };
-use cometindex::{opt::Options as CometOptions, Indexer};
+use cometindex::Indexer;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use std::net::SocketAddr;
@@ -84,18 +84,18 @@ impl Explorer {
             .expect("Invalid socket address");
         info!("Starting API server on {}", addr);
 
-        let comet_options = CometOptions {
-            src_database_url: self.options.source_db_url.clone(),
+        let transaction_queue = Arc::new(Mutex::new(TransactionQueue::new()));
+
+        // Create IndexOptions for the new API
+        let index_options = cometindex::opt::IndexOptions {
             dst_database_url: self.options.dest_db_url.clone(),
-            genesis_json: self.options.genesis_json.clone().into(),
+            genesis_json: std::path::PathBuf::from(self.options.genesis_json.clone()),
             poll_ms: Duration::from_millis(self.options.polling_interval_ms),
             chain_id: Some("penumbra".to_string()),
             exit_on_catchup: false,
         };
 
-        let transaction_queue = Arc::new(Mutex::new(TransactionQueue::new()));
-
-        let indexer = Indexer::new(comet_options)
+        let indexer = Indexer::new(self.options.source_db_url.clone(), index_options)
             .with_index(Box::new(BlockDetails::new(transaction_queue.clone())))
             .with_index(Box::new(Transactions::new(transaction_queue)));
 
