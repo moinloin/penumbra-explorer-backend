@@ -156,7 +156,7 @@ impl AppView for BlockDetails {
                         timestamp_proto.seconds,
                         u32::try_from(timestamp_proto.nanos)?,
                     );
-                    block_root = Some(pe.root.unwrap().inner);
+                    block_root = pe.root.map(|r| r.inner);
                 }
 
                 let event_json = event_to_json(event, event.tx_hash())?;
