@@ -6,6 +6,13 @@ use tracing::{info, warn};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
+/// Define queryable struct for EXISTS query
+#[derive(QueryableByName)]
+struct Exists {
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    exists: bool,
+}
+
 /// Run database migrations to set up the schema
 ///
 /// # Errors
@@ -17,12 +24,6 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
         PgConnection::establish(database_url).context("Failed to connect to database")?;
 
     info!("Running database migrations");
-
-    #[derive(QueryableByName)]
-    struct Exists {
-        #[diesel(sql_type = diesel::sql_types::Bool)]
-        exists: bool,
-    }
 
     let table_exists = diesel::sql_query(
         "
@@ -36,7 +37,9 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
     .get_result::<Exists>(&mut conn)?
     .exists;
 
-    if !table_exists {
+    if table_exists {
+        info!("Migration tracking table exists, using existing migration state");
+    } else {
         info!("Migration tracking table doesn't exist, creating it");
 
         diesel::sql_query(
@@ -54,8 +57,6 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
         .execute(&mut conn)?;
 
         info!("Set up migration tracking table, marked initial schema as applied");
-    } else {
-        info!("Migration tracking table exists, using existing migration state");
     }
 
     match conn.run_pending_migrations(MIGRATIONS) {
