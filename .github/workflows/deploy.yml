@@ -35,8 +35,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run clippy with pedantic settings
+        run: cargo clippy --all-targets --all-features --workspace -- -W clippy::pedantic -D warnings
 
   test:
     name: Run Tests
