@@ -37,8 +37,8 @@ impl Explorer {
         Self { options }
     }
 
-    /// Starts the explorer service 
-    /// 
+    /// Starts the explorer service
+    ///
     /// # Errors
     /// Returns an error if database migrations fail, if database connections can't be established,
     /// or if the server fails to start
