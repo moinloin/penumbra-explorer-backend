@@ -10,6 +10,7 @@ pub use options::ExplorerOptions;
 use anyhow::{Context, Result};
 use axum::{
     extract::Extension,
+    http::Method,
     routing::{get, post},
     Router, Server,
 };
@@ -20,6 +21,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tower_http::cors::CorsLayer;
 use tracing::{error, info};
 
 use crate::app_views::{block_details::BlockDetails, transactions::Transactions};
@@ -35,14 +37,6 @@ impl Explorer {
         Self { options }
     }
 
-    /// Runs the explorer service, starting both the indexer and API server
-    ///
-    /// # Errors
-    /// Returns an error if database migrations fail, database connection fails,
-    /// or if the API server or indexer encounters an error
-    ///
-    /// # Panics
-    /// Panics if the API socket address is invalid
     pub async fn run(&self) -> Result<()> {
         db_migrations::run_migrations(&self.options.dest_db_url)
             .context("Failed to run database migrations")?;
@@ -55,6 +49,23 @@ impl Explorer {
 
         let schema = crate::api::graphql::schema::create_schema(pool.clone());
 
+        let cors = CorsLayer::new()
+            .allow_origin([
+                "http://localhost:3000".parse().unwrap(),
+                "https://dev.explorer.penumbra.pklabs.me".parse().unwrap(),
+                "https://explorer.penumbra.pklabs.me".parse().unwrap(),
+                "https://explorer.penumbra.zone".parse().unwrap(),
+            ])
+            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_headers([
+                "Content-Type".parse().unwrap(),
+                "Authorization".parse().unwrap(),
+                "Accept".parse().unwrap(),
+                "Origin".parse().unwrap(),
+                "X-Requested-With".parse().unwrap(),
+            ])
+            .allow_credentials(true);
+
         let api_router = Router::new()
             .route("/graphql", post(crate::api::handlers::graphql_handler))
             .route(
@@ -62,7 +73,8 @@ impl Explorer {
                 get(crate::api::handlers::graphql_playground),
             )
             .route("/health", get(crate::api::handlers::health_check))
-            .layer(Extension(schema));
+            .layer(Extension(schema))
+            .layer(cors);
 
         let api_host = "0.0.0.0";
         let api_port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
