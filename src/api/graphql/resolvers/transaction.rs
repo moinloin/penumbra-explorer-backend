@@ -206,17 +206,15 @@ fn build_transactions_query(selector: &TransactionsSelector, base: &str) -> (Str
 
         match range.direction {
             RangeDirection::Next => {
-                query.push_str(&format!(" WHERE (t.timestamp < {ref_query})"));
-                query.push_str(&format!(
-                    " OR (t.timestamp = {ref_query} AND t.tx_hash > $1)"
-                ));
+                use std::fmt::Write;
+                write!(query, " WHERE (t.timestamp < {ref_query})").unwrap();
+                write!(query, " OR (t.timestamp = {ref_query} AND t.tx_hash > $1)").unwrap();
                 query.push_str(" ORDER BY t.timestamp DESC, t.tx_hash ASC LIMIT $2");
             }
             RangeDirection::Previous => {
-                query.push_str(&format!(" WHERE (t.timestamp > {ref_query})"));
-                query.push_str(&format!(
-                    " OR (t.timestamp = {ref_query} AND t.tx_hash < $1)"
-                ));
+                use std::fmt::Write;
+                write!(query, " WHERE (t.timestamp > {ref_query})").unwrap();
+                write!(query, " OR (t.timestamp = {ref_query} AND t.tx_hash < $1)").unwrap();
                 query.push_str(" ORDER BY t.timestamp ASC, t.tx_hash DESC LIMIT $2");
             }
         }
