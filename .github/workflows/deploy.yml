@@ -1,4 +1,4 @@
-name: Deploy to Hetzner
+name: Blue-Green Deploy to Hetzner
 
 on:
   push:
@@ -10,8 +10,6 @@ env:
   APP_NAME: penumbra-explorer
   SERVER_USER: deploy
   SERVER_HOST: ${{ secrets.SERVER_HOST }}
-  DB_USER: penumbra
-  DB_NAME: explorer
 
 jobs:
   deploy:
@@ -44,28 +42,13 @@ jobs:
         run: |
           scp /tmp/${{ env.APP_NAME }}.tar ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:~/deployments/
 
-      - name: Deploy application
+      - name: Deploy with Blue-Green mechanism
         run: |
           ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} '
-          # Load the Docker image
-          docker load < ~/deployments/${{ env.APP_NAME }}.tar
-          
-          # Stop and remove existing container if it exists
-          docker stop ${{ env.APP_NAME }} || true
-          docker rm ${{ env.APP_NAME }} || true
-          
-          # Run the new container with command line arguments
-          docker run -d \
-            --name ${{ env.APP_NAME }} \
-            -p 8080:8080 \
-            --restart always \
-            --network=host \
-            ${{ env.APP_NAME }}:latest \
-            /app/penumbra-explorer \
-            -s "${{ secrets.SOURCE_DB_URL }}" \
-            -d "postgresql://${{ env.DB_USER }}:${{ secrets.DB_PASSWORD }}@localhost:5432/${{ env.DB_NAME }}?sslmode=disable" \
-            --genesis-json /app/genesis.json
-          
-          # Clean up
-          rm ~/deployments/${{ env.APP_NAME }}.tar
+          export SOURCE_DB_URL="${{ secrets.SOURCE_DB_URL }}"
+          sudo /opt/deployment/deploy.sh
           '
+
+      - name: Check deployment status
+        run: |
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} 'cat /opt/deployment/deploy.log | tail -20'
