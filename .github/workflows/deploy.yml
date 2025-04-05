@@ -44,10 +44,7 @@ jobs:
 
       - name: Deploy with Blue-Green mechanism
         run: |
-          ssh -tt ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} '
-            SOURCE_DB_URL="${{ secrets.SOURCE_DB_URL }}" \
-            sudo -E /opt/deployment/deploy.sh
-          '
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} 'sudo /opt/deployment/deploy.sh'
 
       - name: Check deployment status
         run: |
