@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Deploy to Hetzner
 
 on:
   push:
@@ -54,15 +54,17 @@ jobs:
           docker stop ${{ env.APP_NAME }} || true
           docker rm ${{ env.APP_NAME }} || true
           
-          # Run the new container
+          # Run the new container with command line arguments
           docker run -d \
             --name ${{ env.APP_NAME }} \
             -p 8080:8080 \
-            -e PORT=8080 \
-            -e DEST_DB_URL=postgres://${{ env.DB_USER }}:${{ secrets.DB_PASSWORD }}@localhost:5432/${{ env.DB_NAME }} \
             --restart always \
             --network=host \
-            ${{ env.APP_NAME }}:latest
+            ${{ env.APP_NAME }}:latest \
+            /app/penumbra-explorer \
+            -s "${{ secrets.SOURCE_DB_URL }}" \
+            -d "postgresql://${{ env.DB_USER }}:${{ secrets.DB_PASSWORD }}@localhost:5432/${{ env.DB_NAME }}?sslmode=disable" \
+            --genesis-json /app/genesis.json
           
           # Clean up
           rm ~/deployments/${{ env.APP_NAME }}.tar
