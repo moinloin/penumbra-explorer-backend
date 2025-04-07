@@ -80,7 +80,7 @@ impl Explorer {
                 "/graphql/playground",
                 get(crate::api::handlers::graphql_playground),
             )
-            .route("/health", get(crate::api::handlers::health_check))
+            .route("/healths", get(crate::api::handlers::health_check))
             .layer(Extension(schema))
             .layer(cors);
 
@@ -94,7 +94,6 @@ impl Explorer {
 
         let transaction_queue = Arc::new(Mutex::new(TransactionQueue::new()));
 
-        // Create IndexOptions for the new API
         let index_options = cometindex::opt::IndexOptions {
             dst_database_url: self.options.dest_db_url.clone(),
             genesis_json: std::path::PathBuf::from(self.options.genesis_json.clone()),
