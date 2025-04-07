@@ -80,7 +80,7 @@ impl Explorer {
                 "/graphql/playground",
                 get(crate::api::handlers::graphql_playground),
             )
-            .route("/health", get(crate::api::handlers::health_check))
+            .route("/healthyyy", get(crate::api::handlers::health_check))
             .layer(Extension(schema))
             .layer(cors);
 
