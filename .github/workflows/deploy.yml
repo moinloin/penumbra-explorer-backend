@@ -8,7 +8,7 @@ on:
 
 env:
   APP_NAME: penumbra-explorer
-  SERVER_USER: deploy
+  SERVER_USER: deploy-penumbra-explorer
   SERVER_HOST: ${{ secrets.SERVER_HOST }}
 
 jobs:
