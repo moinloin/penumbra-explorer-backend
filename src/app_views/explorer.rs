@@ -417,10 +417,10 @@ impl AppView for Explorer {
         .await?;
 
         sqlx::query(
-            r#"
+            r"
             CREATE INDEX IF NOT EXISTS idx_explorer_transactions_block_height 
             ON explorer_transactions(block_height)
-            "#,
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
