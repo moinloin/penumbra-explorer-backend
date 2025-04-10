@@ -494,7 +494,7 @@ impl AppView for Explorer {
 
     async fn process_block_events(
         &self,
-        block_data: &cometindex::BlockData<'_>,
+        block_data: &cometindex::index::BlockData<'_>,
     ) -> Result<Option<(u64, Vec<u8>, DateTime<sqlx::types::chrono::Utc>, usize, Option<String>, Value, Vec<(
         [u8; 32],
         Vec<u8>,
