@@ -1,6 +1,5 @@
 pub mod api;
 pub mod app_views;
-pub mod coordination;
 pub mod db_migrations;
 pub mod options;
 pub mod parsing;
@@ -18,14 +17,11 @@ use cometindex::Indexer;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info};
 
-use crate::app_views::{block_details::BlockDetails, transactions::Transactions};
-use crate::coordination::TransactionQueue;
+use crate::app_views::explorer::Explorer as ExplorerView;
 
 pub struct Explorer {
     options: ExplorerOptions,
@@ -92,8 +88,6 @@ impl Explorer {
             .expect("Invalid socket address");
         info!("Starting API server on {}", addr);
 
-        let transaction_queue = Arc::new(Mutex::new(TransactionQueue::new()));
-
         let index_options = cometindex::opt::IndexOptions {
             dst_database_url: self.options.dest_db_url.clone(),
             genesis_json: std::path::PathBuf::from(self.options.genesis_json.clone()),
@@ -103,8 +97,7 @@ impl Explorer {
         };
 
         let indexer = Indexer::new(self.options.source_db_url.clone(), index_options)
-            .with_index(Box::new(BlockDetails::new(transaction_queue.clone())))
-            .with_index(Box::new(Transactions::new(transaction_queue)));
+            .with_index(Box::new(ExplorerView::new()));
 
         tokio::select! {
             indexer_result = indexer.run() => {
