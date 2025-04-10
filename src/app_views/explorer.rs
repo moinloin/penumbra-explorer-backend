@@ -357,7 +357,6 @@ impl AppView for Explorer {
         "explorer".to_string()
     }
 
-
     async fn init_chain(
         &self,
         dbtx: &mut PgTransaction,
@@ -481,11 +480,82 @@ impl AppView for Explorer {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
+    async fn index_batch(
+        &self,
+        dbtx: &mut PgTransaction,
+        batch: EventBatch,
+        _ctx: EventBatchContext,
+    ) -> Result<(), anyhow::Error> {
+        let mut block_data_to_process = Vec::new();
+        let mut transactions_to_process = Vec::new();
+
+        // Process all blocks in the batch
+        for block_data in batch.events_by_block() {
+            if let Some((height, root, ts, tx_count, chain_id, raw_json, block_txs)) = 
+                process_block_events(&block_data).await? {
+                
+                // Store block data for processing
+                block_data_to_process.push((
+                    height,
+                    root,
+                    ts,
+                    tx_count,
+                    chain_id.clone(),
+                    raw_json,
+                ));
+                
+                // Store transaction data for processing
+                for (tx_hash, tx_bytes, tx_index, tx_events) in block_txs {
+                    transactions_to_process.push((
+                        tx_hash,
+                        tx_bytes,
+                        tx_index,
+                        height,
+                        ts,
+                        tx_events,
+                        chain_id.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Process all blocks
+        for (height, root, ts, tx_count, chain_id, raw_json) in block_data_to_process {
+            let meta = BlockMetadata {
+                height,
+                root,
+                timestamp: ts,
+                tx_count,
+                chain_id: chain_id.as_deref().unwrap_or("unknown"),
+                raw_json,
+            };
+
+            self.insert_block(dbtx, meta).await?;
+        }
+
+        // Process all transactions
+        for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events, chain_id_opt) in transactions_to_process {
+            process_transaction(
+                self,
+                tx_hash, 
+                &tx_bytes, 
+                tx_index, 
+                height, 
+                timestamp, 
+                &tx_events, 
+                chain_id_opt,
+                dbtx
+            ).await?;
+        }
+
+        Ok(())
+    }
 }
 
 // Helper functions
 async fn process_block_events(
-    block_data: &EventBatch,
+    block_data: &cometindex::index::BlockData<'_>,
 ) -> Result<Option<(u64, Vec<u8>, DateTime<sqlx::types::chrono::Utc>, usize, Option<String>, Value, Vec<(
     [u8; 32],
     Vec<u8>,
