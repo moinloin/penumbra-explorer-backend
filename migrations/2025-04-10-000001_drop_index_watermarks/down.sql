@@ -1,0 +1,2 @@
+-- Cannot restore dropped tables with specific data
+-- Tables will be recreated by the app view
