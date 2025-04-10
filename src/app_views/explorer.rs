@@ -481,15 +481,17 @@ impl AppView for Explorer {
         Ok(())
     }
 
-    async fn _process_block_events(
-        &self,
-        block_data: &cometindex::BlockData<'_>,
-    ) -> Result<Option<(u64, Vec<u8>, DateTime<sqlx::types::chrono::Utc>, usize, Option<String>, Value, Vec<(
-        [u8; 32],
-        Vec<u8>,
-        u64,
-        Vec<ContextualizedEvent<'static>>
-    )>)>, anyhow::Error> {
+}
+
+// Helper functions
+async fn process_block_events(
+    block_data: &EventBatch,
+) -> Result<Option<(u64, Vec<u8>, DateTime<sqlx::types::chrono::Utc>, usize, Option<String>, Value, Vec<(
+    [u8; 32],
+    Vec<u8>,
+    u64,
+    Vec<ContextualizedEvent<'static>>
+)>)>, anyhow::Error> {
         let height = block_data.height();
         let tx_count = block_data.transactions().count();
 
@@ -586,18 +588,18 @@ impl AppView for Explorer {
         Ok(None)
     }
     
-    async fn _process_transaction(
-        &self,
-        tx_hash: [u8; 32],
-        tx_bytes: &[u8],
-        tx_index: u64,
-        height: u64,
-        timestamp: DateTime<sqlx::types::chrono::Utc>,
-        tx_events: &[ContextualizedEvent<'_>],
-        chain_id_opt: Option<String>,
-        dbtx: &mut PgTransaction<'_>,
-    ) -> Result<(), anyhow::Error> {
-        let decoded_tx_json = Self::create_transaction_json(
+async fn process_transaction(
+    explorer: &Explorer,
+    tx_hash: [u8; 32],
+    tx_bytes: &[u8],
+    tx_index: u64,
+    height: u64,
+    timestamp: DateTime<sqlx::types::chrono::Utc>,
+    tx_events: &[ContextualizedEvent<'_>],
+    chain_id_opt: Option<String>,
+    dbtx: &mut PgTransaction<'_>,
+) -> Result<(), anyhow::Error> {
+        let decoded_tx_json = Explorer::create_transaction_json(
             tx_hash,
             tx_bytes,
             height,
@@ -606,8 +608,8 @@ impl AppView for Explorer {
             tx_events,
         );
 
-        let fee_amount = Self::extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
-        let chain_id = Self::extract_chain_id(&decoded_tx_json["tx_result_decoded"])
+        let fee_amount = Explorer::extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
+        let chain_id = Explorer::extract_chain_id(&decoded_tx_json["tx_result_decoded"])
             .or(chain_id_opt)
             .unwrap_or_else(|| "unknown".to_string());
 
@@ -623,7 +625,7 @@ impl AppView for Explorer {
             decoded_tx_json,
         };
 
-        if let Err(e) = self.insert_transaction(dbtx, meta).await {
+        if let Err(e) = explorer.insert_transaction(dbtx, meta).await {
             let tx_hash_hex = encode_to_hex(tx_hash);
             
             let is_fk_error = match e.as_database_error() {
@@ -663,9 +665,10 @@ impl AppView for Explorer {
         let mut transactions_to_process = Vec::new();
 
         // Process all blocks in the batch
-        for block_data in batch.events_by_block() {
+        // Iterate over each block in the batch
+        for block_data in &batch {
             if let Some((height, root, ts, tx_count, chain_id, raw_json, block_txs)) = 
-                self._process_block_events(&block_data).await? {
+                process_block_events(block_data).await? {
                 
                 // Store block data for processing
                 block_data_to_process.push((
@@ -708,7 +711,8 @@ impl AppView for Explorer {
 
         // Process all transactions
         for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events, chain_id_opt) in transactions_to_process {
-            self._process_transaction(
+            process_transaction(
+                self,
                 tx_hash, 
                 &tx_bytes, 
                 tx_index, 
