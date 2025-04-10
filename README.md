@@ -31,7 +31,7 @@ Backend indexer for exploring the Penumbra blockchain built with Rust
 
 ## Getting Started
 
-1. Set up Rust (1.81.0 or later)
+1. Set up Rust (1.83.0 or later)
 2. Install dependencies with `cargo build`
 3. Run the application with:
    ```sh
