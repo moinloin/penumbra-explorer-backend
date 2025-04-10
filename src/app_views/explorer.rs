@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cometindex::{
     async_trait,
-    index::{EventBatch, EventBatchContext},
+    index::{BlockData, EventBatch, EventBatchContext},
     sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
@@ -555,108 +555,108 @@ impl AppView for Explorer {
 
 // Helper functions
 async fn process_block_events(
-    block_data: &cometindex::index::BlockData<'_>,
+    block_data: &BlockData<'_>,
 ) -> Result<Option<(u64, Vec<u8>, DateTime<sqlx::types::chrono::Utc>, usize, Option<String>, Value, Vec<(
     [u8; 32],
     Vec<u8>,
     u64,
     Vec<ContextualizedEvent<'static>>
 )>)>, anyhow::Error> {
-        let height = block_data.height();
-        let tx_count = block_data.transactions().count();
+    let height = block_data.height();
+    let tx_count = block_data.transactions().count();
 
-        tracing::info!(
-            "Processing block height {} with {} transactions",
-            height,
-            tx_count
-        );
+    tracing::info!(
+        "Processing block height {} with {} transactions",
+        height,
+        tx_count
+    );
 
-        let mut block_root = None;
-        let mut timestamp = None;
-        let mut chain_id: Option<String> = None;
-        let mut block_events = Vec::new();
-        let mut tx_events = Vec::new();
+    let mut block_root = None;
+    let mut timestamp = None;
+    let mut chain_id: Option<String> = None;
+    let mut block_events = Vec::new();
+    let mut tx_events = Vec::new();
 
-        let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
+    let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
 
-        for event in block_data.events() {
-            if let Ok(pe) = pb::EventBlockRoot::from_event(event.event) {
-                let timestamp_proto = pe.timestamp.unwrap_or_default();
-                timestamp = DateTime::from_timestamp(
-                    timestamp_proto.seconds,
-                    u32::try_from(timestamp_proto.nanos)?,
-                );
-                block_root = pe.root.map(|r| r.inner);
-            }
-
-            let event_json = event_to_json(event, event.tx_hash())?;
-
-            if let Some(tx_hash) = event.tx_hash() {
-                let owned_event = clone_event(event);
-
-                events_by_tx_hash
-                    .entry(tx_hash)
-                    .or_default()
-                    .push(owned_event);
-                tx_events.push(event_json);
-            } else {
-                block_events.push(event_json);
-            }
+    for event in block_data.events() {
+        if let Ok(pe) = pb::EventBlockRoot::from_event(event.event) {
+            let timestamp_proto = pe.timestamp.unwrap_or_default();
+            timestamp = DateTime::from_timestamp(
+                timestamp_proto.seconds,
+                u32::try_from(timestamp_proto.nanos)?,
+            );
+            block_root = pe.root.map(|r| r.inner);
         }
 
-        if tx_count > 0 {
-            if let Some((_, tx_bytes)) = block_data.transactions().next() {
-                chain_id = extract_chain_id_from_bytes(tx_bytes);
-            }
+        let event_json = event_to_json(event, event.tx_hash())?;
+
+        if let Some(tx_hash) = event.tx_hash() {
+            let owned_event = clone_event(event);
+
+            events_by_tx_hash
+                .entry(tx_hash)
+                .or_default()
+                .push(owned_event);
+            tx_events.push(event_json);
+        } else {
+            block_events.push(event_json);
         }
-
-        let transactions: Vec<Value> = block_data
-            .transactions()
-            .enumerate()
-            .map(|(index, (tx_hash, _))| {
-                json!({
-                    "block_id": height,
-                    "index": index,
-                    "created_at": timestamp,
-                    "tx_hash": encode_to_hex(tx_hash)
-                })
-            })
-            .collect();
-
-        let mut all_events = Vec::new();
-        all_events.extend(block_events);
-        all_events.extend(tx_events);
-
-        let raw_json = json!({
-            "block": {
-                "height": height,
-                "chain_id": chain_id.as_deref().unwrap_or("unknown"),
-                "created_at": timestamp,
-                "transactions": transactions,
-                "events": all_events
-            }
-        });
-
-        if let (Some(root), Some(ts)) = (block_root, timestamp) {
-            let mut block_txs = Vec::new();
-
-            for (tx_index, (tx_hash, tx_bytes)) in block_data.transactions().enumerate() {
-                let tx_bytes_vec = tx_bytes.to_vec();
-                let tx_events = events_by_tx_hash.get(&tx_hash).cloned().unwrap_or_default();
-                
-                block_txs.push((
-                    tx_hash,
-                    tx_bytes_vec,
-                    tx_index as u64,
-                    tx_events,
-                ));
-            }
-
-            return Ok(Some((height, root, ts, tx_count, chain_id, raw_json, block_txs)));
-        }
-
-        Ok(None)
     }
+
+    if tx_count > 0 {
+        if let Some((_, tx_bytes)) = block_data.transactions().next() {
+            chain_id = extract_chain_id_from_bytes(tx_bytes);
+        }
+    }
+
+    let transactions: Vec<Value> = block_data
+        .transactions()
+        .enumerate()
+        .map(|(index, (tx_hash, _))| {
+            json!({
+                "block_id": height,
+                "index": index,
+                "created_at": timestamp,
+                "tx_hash": encode_to_hex(tx_hash)
+            })
+        })
+        .collect();
+
+    let mut all_events = Vec::new();
+    all_events.extend(block_events);
+    all_events.extend(tx_events);
+
+    let raw_json = json!({
+        "block": {
+            "height": height,
+            "chain_id": chain_id.as_deref().unwrap_or("unknown"),
+            "created_at": timestamp,
+            "transactions": transactions,
+            "events": all_events
+        }
+    });
+
+    if let (Some(root), Some(ts)) = (block_root, timestamp) {
+        let mut block_txs = Vec::new();
+
+        for (tx_index, (tx_hash, tx_bytes)) in block_data.transactions().enumerate() {
+            let tx_bytes_vec = tx_bytes.to_vec();
+            let tx_events = events_by_tx_hash.get(&tx_hash).cloned().unwrap_or_default();
+            
+            block_txs.push((
+                tx_hash,
+                tx_bytes_vec,
+                tx_index as u64,
+                tx_events,
+            ));
+        }
+
+        return Ok(Some((height, root, ts, tx_count, chain_id, raw_json, block_txs)));
+    }
+
+    Ok(None)
+}
     
 async fn process_transaction(
     explorer: &Explorer,
@@ -669,133 +669,59 @@ async fn process_transaction(
     chain_id_opt: Option<String>,
     dbtx: &mut PgTransaction<'_>,
 ) -> Result<(), anyhow::Error> {
-        let decoded_tx_json = Explorer::create_transaction_json(
-            tx_hash,
-            tx_bytes,
-            height,
-            timestamp,
-            tx_index,
-            tx_events,
-        );
+    let decoded_tx_json = Explorer::create_transaction_json(
+        tx_hash,
+        tx_bytes,
+        height,
+        timestamp,
+        tx_index,
+        tx_events,
+    );
 
-        let fee_amount = Explorer::extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
-        let chain_id = Explorer::extract_chain_id(&decoded_tx_json["tx_result_decoded"])
-            .or(chain_id_opt)
-            .unwrap_or_else(|| "unknown".to_string());
+    let fee_amount = Explorer::extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
+    let chain_id = Explorer::extract_chain_id(&decoded_tx_json["tx_result_decoded"])
+        .or(chain_id_opt)
+        .unwrap_or_else(|| "unknown".to_string());
 
-        let tx_bytes_base64 = encode_to_base64(tx_bytes);
+    let tx_bytes_base64 = encode_to_base64(tx_bytes);
 
-        let meta = TransactionMetadata {
-            tx_hash,
-            height,
-            timestamp,
-            fee_amount,
-            chain_id: &chain_id,
-            tx_bytes_base64,
-            decoded_tx_json,
+    let meta = TransactionMetadata {
+        tx_hash,
+        height,
+        timestamp,
+        fee_amount,
+        chain_id: &chain_id,
+        tx_bytes_base64,
+        decoded_tx_json,
+    };
+
+    if let Err(e) = explorer.insert_transaction(dbtx, meta).await {
+        let tx_hash_hex = encode_to_hex(tx_hash);
+        
+        let is_fk_error = match e.as_database_error() {
+            Some(dbe) => {
+                if let Some(pg_err) = dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
+                    pg_err.code() == "23503"
+                } else {
+                    false
+                }
+            }
+            None => false,
         };
 
-        if let Err(e) = explorer.insert_transaction(dbtx, meta).await {
-            let tx_hash_hex = encode_to_hex(tx_hash);
-            
-            let is_fk_error = match e.as_database_error() {
-                Some(dbe) => {
-                    if let Some(pg_err) = dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
-                        pg_err.code() == "23503"
-                    } else {
-                        false
-                    }
-                }
-                None => false,
-            };
-
-            if is_fk_error {
-                tracing::warn!(
-                    "Block {} not found for transaction {}. Foreign key constraint failed.",
-                    height,
-                    tx_hash_hex
-                );
-            } else {
-                // Log the error but don't fail the entire batch - this allows the indexer to continue
-                tracing::error!("Error inserting transaction {}: {:?}", tx_hash_hex, e);
-            }
-        }
-        
-        Ok(())
-    }
-
-    #[allow(clippy::too_many_lines)]
-    async fn index_batch(
-        &self,
-        dbtx: &mut PgTransaction,
-        batch: EventBatch,
-        _ctx: EventBatchContext,
-    ) -> Result<(), anyhow::Error> {
-        let mut block_data_to_process = Vec::new();
-        let mut transactions_to_process = Vec::new();
-
-        // Process all blocks in the batch
-        // Iterate over each block in the batch
-        for block_data in &batch {
-            if let Some((height, root, ts, tx_count, chain_id, raw_json, block_txs)) = 
-                process_block_events(block_data).await? {
-                
-                // Store block data for processing
-                block_data_to_process.push((
-                    height,
-                    root,
-                    ts,
-                    tx_count,
-                    chain_id.clone(),
-                    raw_json,
-                ));
-                
-                // Store transaction data for processing
-                for (tx_hash, tx_bytes, tx_index, tx_events) in block_txs {
-                    transactions_to_process.push((
-                        tx_hash,
-                        tx_bytes,
-                        tx_index,
-                        height,
-                        ts,
-                        tx_events,
-                        chain_id.clone(),
-                    ));
-                }
-            }
-        }
-
-        // Process all blocks
-        for (height, root, ts, tx_count, chain_id, raw_json) in block_data_to_process {
-            let meta = BlockMetadata {
+        if is_fk_error {
+            tracing::warn!(
+                "Block {} not found for transaction {}. Foreign key constraint failed.",
                 height,
-                root,
-                timestamp: ts,
-                tx_count,
-                chain_id: chain_id.as_deref().unwrap_or("unknown"),
-                raw_json,
-            };
-
-            self.insert_block(dbtx, meta).await?;
+                tx_hash_hex
+            );
+        } else {
+            // Log the error but don't fail the entire batch - this allows the indexer to continue
+            tracing::error!("Error inserting transaction {}: {:?}", tx_hash_hex, e);
         }
-
-        // Process all transactions
-        for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events, chain_id_opt) in transactions_to_process {
-            process_transaction(
-                self,
-                tx_hash, 
-                &tx_bytes, 
-                tx_index, 
-                height, 
-                timestamp, 
-                &tx_events, 
-                chain_id_opt,
-                dbtx
-            ).await?;
-        }
-
-        Ok(())
     }
+    
+    Ok(())
 }
 
 #[cfg(test)]
