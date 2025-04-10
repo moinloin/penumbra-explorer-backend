@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cometindex::{
     async_trait,
-    index::{EventBatch, EventBatchContext},
+    index::{BlockData, EventBatch, EventBatchContext},
     sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
@@ -483,7 +483,7 @@ impl AppView for Explorer {
 
     async fn process_block_events(
         &self,
-        block_data: &cometindex::index::BlockData<'_>,
+        block_data: &BlockData<'_>,
     ) -> Result<Option<(u64, Vec<u8>, DateTime<sqlx::types::chrono::Utc>, usize, Option<String>, Value, Vec<(
         [u8; 32],
         Vec<u8>,
