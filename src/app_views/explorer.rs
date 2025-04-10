@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cometindex::{
     async_trait,
-    index::{BlockData, EventBatch, EventBatchContext},
+    index::{EventBatch, EventBatchContext},
     sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
@@ -481,9 +481,9 @@ impl AppView for Explorer {
         Ok(())
     }
 
-    async fn process_block_events(
+    async fn _process_block_events(
         &self,
-        block_data: &BlockData<'_>,
+        block_data: &cometindex::BlockData<'_>,
     ) -> Result<Option<(u64, Vec<u8>, DateTime<sqlx::types::chrono::Utc>, usize, Option<String>, Value, Vec<(
         [u8; 32],
         Vec<u8>,
@@ -586,7 +586,7 @@ impl AppView for Explorer {
         Ok(None)
     }
     
-    async fn process_transaction(
+    async fn _process_transaction(
         &self,
         tx_hash: [u8; 32],
         tx_bytes: &[u8],
@@ -665,7 +665,7 @@ impl AppView for Explorer {
         // Process all blocks in the batch
         for block_data in batch.events_by_block() {
             if let Some((height, root, ts, tx_count, chain_id, raw_json, block_txs)) = 
-                self.process_block_events(&block_data).await? {
+                self._process_block_events(&block_data).await? {
                 
                 // Store block data for processing
                 block_data_to_process.push((
@@ -708,7 +708,7 @@ impl AppView for Explorer {
 
         // Process all transactions
         for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events, chain_id_opt) in transactions_to_process {
-            self.process_transaction(
+            self._process_transaction(
                 tx_hash, 
                 &tx_bytes, 
                 tx_index, 
