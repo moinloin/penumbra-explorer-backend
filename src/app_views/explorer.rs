@@ -357,11 +357,7 @@ impl AppView for Explorer {
         "explorer".to_string()
     }
 
-    async fn init_chain(
-        &self,
-        dbtx: &mut PgTransaction,
-        _: &serde_json::Value,
-    ) -> Result<(), anyhow::Error> {
+    async fn create_block_table(&self, dbtx: &mut PgTransaction<'_>) -> Result<(), anyhow::Error> {
         sqlx::query(
             r"
             CREATE TABLE IF NOT EXISTS explorer_block_details (
@@ -398,7 +394,11 @@ impl AppView for Explorer {
         )
         .execute(dbtx.as_mut())
         .await?;
-
+        
+        Ok(())
+    }
+    
+    async fn create_transaction_table(&self, dbtx: &mut PgTransaction<'_>) -> Result<(), anyhow::Error> {
         sqlx::query(
             r"
             CREATE TABLE IF NOT EXISTS explorer_transactions (
@@ -434,7 +434,11 @@ impl AppView for Explorer {
         )
         .execute(dbtx.as_mut())
         .await?;
-
+        
+        Ok(())
+    }
+    
+    async fn create_views(&self, dbtx: &mut PgTransaction<'_>) -> Result<(), anyhow::Error> {
         sqlx::query(
             r"
             CREATE OR REPLACE VIEW explorer_recent_blocks AS
@@ -473,7 +477,18 @@ impl AppView for Explorer {
         )
         .execute(dbtx.as_mut())
         .await?;
+        
+        Ok(())
+    }
 
+    async fn init_chain(
+        &self,
+        dbtx: &mut PgTransaction,
+        _: &serde_json::Value,
+    ) -> Result<(), anyhow::Error> {
+        self.create_block_table(dbtx).await?;
+        self.create_transaction_table(dbtx).await?;
+        self.create_views(dbtx).await?;
         Ok(())
     }
 
