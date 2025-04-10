@@ -1,4 +1,4 @@
-use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+use async_graphql::http::{GraphiQLSource};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
     extract::Extension,
@@ -16,8 +16,8 @@ pub async fn graphql_handler(
     schema.execute(request).await.into()
 }
 
-pub async fn graphql_playground() -> impl IntoResponse {
-    Html(playground_source(GraphQLPlaygroundConfig::new("/graphql")))
+pub async fn graphiql() -> impl IntoResponse {
+    Html(GraphiQLSource::build().endpoint("/graphql").finish())
 }
 
 pub async fn health_check() -> impl IntoResponse {
@@ -38,10 +38,10 @@ mod tests {
     }
 
     #[test]
-    fn test_graphql_playground() {
+    fn test_graphiql() {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
-        let response = rt.block_on(async { graphql_playground().await.into_response() });
+        let response = rt.block_on(async { graphiql().await.into_response() });
 
         assert_eq!(response.status(), StatusCode::OK);
 
