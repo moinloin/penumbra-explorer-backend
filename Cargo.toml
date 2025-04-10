@@ -21,8 +21,8 @@ axum = "0.6.20"
 dotenv = "0.15"
 tower = "0.4"
 tower-http = { version = "0.4", features = ["cors"] }
-async-graphql = { version = "6.0", features = ["chrono"] }
-async-graphql-axum = "6.0"
+async-graphql = { version = "7.0.16", features = ["chrono"] }
+async-graphql-axum = "7.0.16"
 hex = "0.4"
 diesel = { version = "2.1.0", features = ["postgres", "chrono"] }
 diesel_migrations = { version = "2.1.0", features = ["postgres"] }
