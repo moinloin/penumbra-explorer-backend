@@ -1,2 +1,1 @@
-pub mod block_details;
-pub mod transactions;
+pub mod explorer;
