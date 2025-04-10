@@ -399,7 +399,7 @@ impl AppView for Explorer {
         .await?;
 
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS explorer_transactions (
                 tx_hash BYTEA PRIMARY KEY,
                 block_height BIGINT NOT NULL,
@@ -411,7 +411,7 @@ impl AppView for Explorer {
                 FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
                     DEFERRABLE INITIALLY DEFERRED
             )
-            "#,
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
