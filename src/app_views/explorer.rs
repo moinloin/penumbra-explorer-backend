@@ -381,10 +381,10 @@ impl AppView for Explorer {
         .await?;
 
         sqlx::query(
-            r#"
+            r"
             CREATE INDEX IF NOT EXISTS idx_explorer_block_details_timestamp 
             ON explorer_block_details(timestamp DESC)
-            "#,
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
