@@ -455,7 +455,7 @@ impl AppView for Explorer {
         .await?;
 
         sqlx::query(
-            r#"
+            r"
             CREATE OR REPLACE VIEW explorer_transaction_summary AS
             SELECT
                 t.tx_hash,
@@ -468,7 +468,7 @@ impl AppView for Explorer {
                 explorer_transactions t
             ORDER BY
                 t.timestamp DESC
-            "#,
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
