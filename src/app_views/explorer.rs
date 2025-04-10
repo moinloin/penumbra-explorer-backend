@@ -362,7 +362,7 @@ impl AppView for Explorer {
         _: &serde_json::Value,
     ) -> Result<(), anyhow::Error> {
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS explorer_block_details (
                 height BIGINT PRIMARY KEY,
                 root BYTEA NOT NULL,
@@ -375,7 +375,7 @@ impl AppView for Explorer {
                 chain_id TEXT,
                 raw_json JSONB
             )
-            "#,
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
