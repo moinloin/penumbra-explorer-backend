@@ -74,7 +74,7 @@ impl Explorer {
             .route("/graphql", post(crate::api::handlers::graphql_handler))
             .route(
                 "/graphql/playground",
-                get(crate::api::handlers::graphql_playground),
+                get(crate::api::handlers::graphiql),
             )
             .route("/health", get(crate::api::handlers::health_check))
             .layer(Extension(schema))
