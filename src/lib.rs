@@ -7,12 +7,12 @@ pub mod parsing;
 pub use options::ExplorerOptions;
 
 use anyhow::{Context, Result};
+use axum::extract::Extension;
 use axum::{
     http::Method,
     routing::{get, post},
     Router,
 };
-use axum::extract::Extension;
 use cometindex::Indexer;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
@@ -72,10 +72,7 @@ impl Explorer {
 
         let api_router = Router::new()
             .route("/graphql", post(crate::api::handlers::graphql_handler))
-            .route(
-                "/graphql/playground",
-                get(crate::api::handlers::graphiql),
-            )
+            .route("/graphql/playground", get(crate::api::handlers::graphiql))
             .route("/health", get(crate::api::handlers::health_check))
             .layer(Extension(schema))
             .layer(cors);
