@@ -390,10 +390,10 @@ impl AppView for Explorer {
         .await?;
 
         sqlx::query(
-            r#"
+            r"
             CREATE INDEX IF NOT EXISTS idx_explorer_block_details_validator 
             ON explorer_block_details(validator_identity_key)
-            "#,
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
