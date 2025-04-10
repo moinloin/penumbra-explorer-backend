@@ -435,7 +435,7 @@ impl AppView for Explorer {
         .await?;
 
         sqlx::query(
-            r#"
+            r"
             CREATE OR REPLACE VIEW explorer_recent_blocks AS
             SELECT
                 height,
@@ -449,7 +449,7 @@ impl AppView for Explorer {
                 explorer_block_details
             ORDER BY
                 height DESC
-            "#,
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
