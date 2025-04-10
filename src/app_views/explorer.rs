@@ -15,7 +15,7 @@ use std::time::Instant;
 
 use crate::parsing::{encode_to_base64, encode_to_hex, event_to_json, parse_attribute_string};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Explorer {}
 
 struct BlockMetadata<'a> {
