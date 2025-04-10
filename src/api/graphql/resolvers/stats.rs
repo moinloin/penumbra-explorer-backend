@@ -14,6 +14,6 @@ pub async fn resolve_stats(ctx: &Context<'_>) -> Result<Stats> {
         .await?;
 
     Ok(Stats {
-        total_transactions_count: i32::try_from(result.0).unwrap_or_default(),
+        total_transactions_count: result.0,
     })
 }
