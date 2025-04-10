@@ -38,6 +38,7 @@ struct TransactionMetadata<'a> {
 }
 
 impl Explorer {
+    #[must_use]
     pub fn new() -> Self {
         Self {}
     }
