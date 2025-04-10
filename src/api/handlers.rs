@@ -12,7 +12,8 @@ pub async fn graphql_handler(
     Extension(schema): Extension<PenumbraSchema>,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
-    schema.execute(req.into_inner()).await.into()
+    let request = req.into_inner();
+    schema.execute(request).await.into()
 }
 
 pub async fn graphql_playground() -> impl IntoResponse {

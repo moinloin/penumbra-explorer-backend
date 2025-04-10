@@ -8,11 +8,11 @@ pub use options::ExplorerOptions;
 
 use anyhow::{Context, Result};
 use axum::{
-    extract::Extension,
     http::Method,
     routing::{get, post},
-    Router, Server,
+    Router,
 };
+use axum::extract::Extension;
 use cometindex::Indexer;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
@@ -104,7 +104,7 @@ impl Explorer {
                 error!("Indexer exited: {:?}", indexer_result);
                 indexer_result?;
             },
-            server_result = Server::bind(&addr).serve(api_router.into_make_service()) => {
+            server_result = axum::Server::bind(&addr).serve(api_router.into_make_service()) => {
                 error!("API server exited: {:?}", server_result);
                 server_result.map_err(|e| anyhow::anyhow!("API server error: {}", e))?;
             }
