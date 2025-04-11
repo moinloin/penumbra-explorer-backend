@@ -101,7 +101,7 @@ impl Explorer {
                 error!("Indexer exited: {:?}", indexer_result);
                 indexer_result?;
             },
-            server_result = tokio::net::TcpListener::bind(&addr).await.unwrap().accept_loop(api_router.into_make_service()) => {
+            server_result = axum::serve(tokio::net::TcpListener::bind(&addr).await.unwrap(), api_router).await => {
                 error!("API server exited: {:?}", server_result);
                 server_result.map_err(|e| anyhow::anyhow!("API server error: {}", e))?;
             }

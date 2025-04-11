@@ -29,9 +29,9 @@ pub async fn graphql_subscription(
     ws: axum::extract::WebSocketUpgrade,
 ) -> impl IntoResponse {
     ws.protocols(ALL_WEBSOCKET_PROTOCOLS)
-        .on_upgrade(move |socket| async move {
-            GraphQLSubscription::new(schema, socket);
-            Ok(())
+        .on_upgrade(move |socket| async {
+            let subscription = GraphQLSubscription::new(schema);
+            subscription.handle_ws(socket);
         })
 }
 
