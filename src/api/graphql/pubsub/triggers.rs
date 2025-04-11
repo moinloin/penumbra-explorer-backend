@@ -85,3 +85,13 @@ async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, s
     
     Ok(result.map(|r| r.height))
 }
+
+async fn get_latest_transaction_id(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
+    let result = sqlx::query!(
+        r"SELECT id FROM transactions ORDER BY id DESC LIMIT 1"
+    )
+    .fetch_optional(pool)
+    .await?;
+    
+    Ok(result.map(|r| r.id))
+}
