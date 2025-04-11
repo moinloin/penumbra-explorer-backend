@@ -61,11 +61,11 @@ impl Explorer {
             ])
             .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
             .allow_headers([
-                "Content-Type".parse().unwrap(),
-                "Authorization".parse().unwrap(),
-                "Accept".parse().unwrap(),
-                "Origin".parse().unwrap(),
-                "X-Requested-With".parse().unwrap(),
+                "content-type".parse().unwrap(),
+                "authorization".parse().unwrap(),
+                "accept".parse().unwrap(),
+                "origin".parse().unwrap(),
+                "x-requested-with".parse().unwrap(),
             ])
             .allow_credentials(true);
 
