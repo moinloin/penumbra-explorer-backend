@@ -5,7 +5,6 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse},
 };
-use futures_util::StreamExt;
 
 use crate::api::graphql::schema::PenumbraSchema;
 
@@ -28,7 +27,7 @@ pub async fn graphiql() -> impl IntoResponse {
 
 pub async fn graphql_subscription(
     Extension(schema): Extension<PenumbraSchema>,
-    protocol: GraphQLSubscription,
+    protocol: GraphQLSubscription<axum::body::BoxBody>,
 ) -> impl IntoResponse {
     protocol
         .on_connection_init(|value| async {
