@@ -1,12 +1,8 @@
 name: Rust CI/CD Pipeline
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -74,7 +70,7 @@ jobs:
     name: Deploy to Hetzner
     runs-on: ubuntu-latest
     needs: [code-quality, test]
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'release' && github.event.release.target_commitish == 'main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
