@@ -6,3 +6,5 @@ use crate::api::graphql::{
     pubsub::PubSub,
     types::subscription_types::{BlockUpdate, TransactionCountUpdate, TransactionUpdate},
 };
+
+pub struct SubscriptionRoot;
