@@ -95,3 +95,13 @@ async fn get_latest_transaction_id(pool: &Pool<Postgres>) -> Result<Option<i64>,
     
     Ok(result.map(|r| r.id))
 }
+
+async fn get_transaction_count(pool: &Pool<Postgres>) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query!(
+        r"SELECT COUNT(*) as count FROM transactions"
+    )
+    .fetch_one(pool)
+    .await?;
+    
+    Ok(result.count.unwrap_or(0))
+}
