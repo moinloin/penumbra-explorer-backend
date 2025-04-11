@@ -96,14 +96,27 @@ impl Explorer {
         let indexer = Indexer::new(self.options.source_db_url.clone(), index_options)
             .with_index(Box::new(ExplorerView::new()));
 
+        let indexer_task = tokio::spawn(async move {
+            if let Err(e) = indexer.run().await {
+                error!("Indexer exited with error: {:?}", e);
+            }
+        });
+        
+        let server = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        info!("API server listening on {}", addr);
+        
+        let server_task = tokio::spawn(async move {
+            if let Err(e) = axum::serve(server, api_router).await {
+                error!("API server exited with error: {:?}", e);
+            }
+        });
+        
         tokio::select! {
-            indexer_result = indexer.run() => {
-                error!("Indexer exited: {:?}", indexer_result);
-                indexer_result?;
+            _ = indexer_task => {
+                error!("Indexer task completed unexpectedly");
             },
-            server_result = axum::serve(tokio::net::TcpListener::bind(&addr).await.unwrap(), api_router).await => {
-                error!("API server exited: {:?}", server_result);
-                server_result.map_err(|e| anyhow::anyhow!("API server error: {}", e))?;
+            _ = server_task => {
+                error!("Server task completed unexpectedly");
             }
         }
 

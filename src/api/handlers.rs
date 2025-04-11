@@ -31,7 +31,7 @@ pub async fn graphql_subscription(
     ws.protocols(ALL_WEBSOCKET_PROTOCOLS)
         .on_upgrade(move |socket| async {
             let subscription = GraphQLSubscription::new(schema);
-            subscription.handle_ws(socket);
+            subscription.process_stream(socket);
         })
 }
 
