@@ -3,6 +3,7 @@ mod block;
 mod event;
 mod inputs;
 mod stats;
+mod subscription_types;
 mod transaction;
 mod unions;
 
