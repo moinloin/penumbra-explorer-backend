@@ -27,15 +27,11 @@ pub async fn graphiql() -> impl IntoResponse {
 
 pub async fn graphql_subscription(
     Extension(schema): Extension<PenumbraSchema>,
-    protocol: GraphQLSubscription<axum::body::BoxBody>,
+    ws: axum::extract::WebSocketUpgrade,
 ) -> impl IntoResponse {
-    protocol
-        .on_connection_init(|value| async {
-            tracing::debug!("GraphQL subscription connection initialized: {:?}", value);
-            Ok(value)
-        })
-        .start_with_schema(schema, ALL_WEBSOCKET_PROTOCOLS)
-        .await
+    ws.on_upgrade(move |socket| {
+        GraphQLSubscription::new(schema, socket).with_protocols(ALL_WEBSOCKET_PROTOCOLS)
+    })
 }
 
 pub async fn health_check() -> impl IntoResponse {
