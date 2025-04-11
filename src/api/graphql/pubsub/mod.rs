@@ -22,4 +22,16 @@ impl PubSub {
             transaction_count_tx,
         }
     }
+    
+    pub fn blocks_subscribe(&self) -> broadcast::Receiver<i64> {
+        self.blocks_tx.subscribe()
+    }
+
+    pub fn transactions_subscribe(&self) -> broadcast::Receiver<i64> {
+        self.transactions_tx.subscribe()
+    }
+
+    pub fn transaction_count_subscribe(&self) -> broadcast::Receiver<i64> {
+        self.transaction_count_tx.subscribe()
+    }
 }
