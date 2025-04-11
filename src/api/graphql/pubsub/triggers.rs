@@ -55,3 +55,23 @@ async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
         }
     }
 }
+
+async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
+    let mut interval = interval(Duration::from_secs(1));
+    let mut last_count: Option<i64> = None;
+
+    loop {
+        interval.tick().await;
+        
+        match get_transaction_count(&pool).await {
+            Ok(count) => {
+                if last_count.is_none() || last_count.unwrap() != count {
+                    debug!("Transaction count changed: {}", count);
+                    pubsub.publish_transaction_count(count);
+                    last_count = Some(count);
+                }
+            }
+            Err(e) => error!("Error fetching transaction count: {}", e),
+        }
+    }
+}
