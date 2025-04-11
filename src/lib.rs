@@ -73,6 +73,7 @@ impl Explorer {
         let api_router = Router::new()
             .route("/graphql", post(crate::api::handlers::graphql_handler))
             .route("/graphql/playground", get(crate::api::handlers::graphiql))
+            .route("/graphql/ws", get(crate::api::handlers::graphql_subscription))
             .route("/health", get(crate::api::handlers::health_check))
             .layer(Extension(schema))
             .layer(cors);
