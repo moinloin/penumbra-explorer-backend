@@ -1,6 +1,5 @@
 use async_graphql::Context;
 use sqlx::{Pool, Postgres};
-use std::sync::Arc;
 use tokio::sync::broadcast;
 
 pub mod triggers;
@@ -58,7 +57,7 @@ impl PubSub {
         let _ = self.transaction_count_tx.send(count);
     }
     
-    pub fn from_context(ctx: &Context<'_>) -> Option<&Self> {
+    pub fn from_context<'a>(ctx: &'a Context<'_>) -> Option<&'a Self> {
         ctx.data_opt::<Self>()
     }
     
