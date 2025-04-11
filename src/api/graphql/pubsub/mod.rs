@@ -34,4 +34,16 @@ impl PubSub {
     pub fn transaction_count_subscribe(&self) -> broadcast::Receiver<i64> {
         self.transaction_count_tx.subscribe()
     }
+    
+    pub fn publish_block(&self, height: i64) {
+        let _ = self.blocks_tx.send(height);
+    }
+
+    pub fn publish_transaction(&self, id: i64) {
+        let _ = self.transactions_tx.send(id);
+    }
+
+    pub fn publish_transaction_count(&self, count: i64) {
+        let _ = self.transaction_count_tx.send(count);
+    }
 }
