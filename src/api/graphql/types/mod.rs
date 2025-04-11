@@ -15,6 +15,7 @@ pub use inputs::{
     TransactionsSelector,
 };
 pub use stats::*;
+pub use subscription_types::*;
 pub use transaction::{
     extract_transaction_body, DbRawTransaction, Fee, RangeDirection, Transaction, TransactionBody,
     TransactionParameters,
