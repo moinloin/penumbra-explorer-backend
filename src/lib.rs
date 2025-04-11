@@ -7,7 +7,6 @@ pub mod parsing;
 pub use options::ExplorerOptions;
 
 use anyhow::{Context, Result};
-use axum::extract::Extension;
 use axum::{
     http::Method,
     routing::{get, post},
@@ -75,7 +74,7 @@ impl Explorer {
             .route("/graphql/playground", get(crate::api::handlers::graphiql))
             .route("/graphql/ws", get(crate::api::handlers::graphql_subscription))
             .route("/health", get(crate::api::handlers::health_check))
-            .layer(Extension(schema))
+            .with_state(schema)
             .layer(cors);
 
         let api_host = "0.0.0.0";
@@ -102,7 +101,7 @@ impl Explorer {
                 error!("Indexer exited: {:?}", indexer_result);
                 indexer_result?;
             },
-            server_result = axum::Server::bind(&addr).serve(api_router.into_make_service()) => {
+            server_result = axum::Server::bind(&addr).serve(api_router) => {
                 error!("API server exited: {:?}", server_result);
                 server_result.map_err(|e| anyhow::anyhow!("API server error: {}", e))?;
             }
