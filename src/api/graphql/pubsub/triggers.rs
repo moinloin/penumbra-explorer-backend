@@ -34,3 +34,24 @@ async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
         }
     }
 }
+
+async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
+    let mut interval = interval(Duration::from_secs(1));
+    let mut last_transaction_id: Option<i64> = None;
+
+    loop {
+        interval.tick().await;
+        
+        match get_latest_transaction_id(&pool).await {
+            Ok(Some(id)) => {
+                if last_transaction_id.is_none() || last_transaction_id.unwrap() < id {
+                    debug!("New transaction detected: {}", id);
+                    pubsub.publish_transaction(id);
+                    last_transaction_id = Some(id);
+                }
+            }
+            Ok(None) => {},
+            Err(e) => error!("Error fetching latest transaction: {}", e),
+        }
+    }
+}
