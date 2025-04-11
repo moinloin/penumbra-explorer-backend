@@ -50,4 +50,24 @@ impl SubscriptionRoot {
             
         Ok(stream)
     }
+    
+    async fn transaction_count(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionCountUpdate>, async_graphql::Error> {
+        let pubsub = PubSub::from_context(ctx)
+            .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
+            
+        let stream = pubsub
+            .transaction_count_subscribe()
+            .into_stream()
+            .filter_map(|count| async move {
+                match count {
+                    Ok(count) => Some(TransactionCountUpdate { count }),
+                    Err(e) => {
+                        tracing::error!("Error receiving transaction count: {}", e);
+                        None
+                    }
+                }
+            });
+            
+        Ok(stream)
+    }
 }
