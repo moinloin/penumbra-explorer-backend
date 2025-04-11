@@ -1,7 +1,7 @@
 use async_graphql::http::{GraphiQLSource, ALL_WEBSOCKET_PROTOCOLS};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::{
-    extract::Extension,
+    extract::State,
     http::StatusCode,
     response::{Html, IntoResponse},
 };
@@ -9,11 +9,10 @@ use axum::{
 use crate::api::graphql::schema::PenumbraSchema;
 
 pub async fn graphql_handler(
-    Extension(schema): Extension<PenumbraSchema>,
+    State(schema): State<PenumbraSchema>,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
-    let request = req.into_inner();
-    schema.execute(request).await.into()
+    schema.execute(req.0).await.into()
 }
 
 pub async fn graphiql() -> impl IntoResponse {
@@ -26,11 +25,13 @@ pub async fn graphiql() -> impl IntoResponse {
 }
 
 pub async fn graphql_subscription(
-    Extension(schema): Extension<PenumbraSchema>,
+    State(schema): State<PenumbraSchema>,
     ws: axum::extract::WebSocketUpgrade,
 ) -> impl IntoResponse {
     ws.protocols(ALL_WEBSOCKET_PROTOCOLS)
-        .on_upgrade(|socket| GraphQLSubscription::new(schema, socket))
+        .on_upgrade(move |socket| async move {
+            GraphQLSubscription::new(schema).serve(socket).await
+        })
 }
 
 pub async fn health_check() -> impl IntoResponse {
