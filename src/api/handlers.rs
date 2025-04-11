@@ -31,7 +31,8 @@ pub async fn graphql_subscription(
 ) -> impl IntoResponse {
     ws.protocols(ALL_WEBSOCKET_PROTOCOLS)
         .on_upgrade(|socket| async move {
-            GraphQLSubscription::new(schema).serve(socket).await
+            let subscription = GraphQLSubscription::new(schema);
+            subscription.serve(socket).await
         })
 }
 
