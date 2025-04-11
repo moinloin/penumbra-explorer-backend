@@ -46,4 +46,14 @@ impl PubSub {
     pub fn publish_transaction_count(&self, count: i64) {
         let _ = self.transaction_count_tx.send(count);
     }
+    
+    pub fn from_context(ctx: &Context<'_>) -> Option<&Self> {
+        ctx.data_opt::<Self>()
+    }
+    
+    pub async fn start_triggers(self, pool: Pool<Postgres>) {
+        tokio::spawn(async move {
+            triggers::start_triggers(self, pool).await;
+        });
+    }
 }
