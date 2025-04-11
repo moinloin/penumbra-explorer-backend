@@ -30,4 +30,24 @@ impl SubscriptionRoot {
             
         Ok(stream)
     }
+    
+    async fn transactions(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionUpdate>, async_graphql::Error> {
+        let pubsub = PubSub::from_context(ctx)
+            .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
+            
+        let stream = pubsub
+            .transactions_subscribe()
+            .into_stream()
+            .filter_map(|id| async move {
+                match id {
+                    Ok(id) => Some(TransactionUpdate { id }),
+                    Err(e) => {
+                        tracing::error!("Error receiving transaction id: {}", e);
+                        None
+                    }
+                }
+            });
+            
+        Ok(stream)
+    }
 }
