@@ -15,7 +15,7 @@ impl SubscriptionRoot {
         let pubsub = PubSub::from_context(ctx)
             .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
             
-        let receiver = pubsub.blocks_subscribe();
+        let mut receiver = pubsub.blocks_subscribe();
         
         let stream = async_stream::stream! {
             loop {
@@ -35,7 +35,7 @@ impl SubscriptionRoot {
         let pubsub = PubSub::from_context(ctx)
             .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
             
-        let receiver = pubsub.transactions_subscribe();
+        let mut receiver = pubsub.transactions_subscribe();
         
         let stream = async_stream::stream! {
             loop {
@@ -55,7 +55,7 @@ impl SubscriptionRoot {
         let pubsub = PubSub::from_context(ctx)
             .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
             
-        let receiver = pubsub.transaction_count_subscribe();
+        let mut receiver = pubsub.transaction_count_subscribe();
         
         let stream = async_stream::stream! {
             loop {
