@@ -9,3 +9,17 @@ pub struct PubSub {
     transactions_tx: broadcast::Sender<i64>,
     transaction_count_tx: broadcast::Sender<i64>,
 }
+
+impl PubSub {
+    pub fn new() -> Self {
+        let (blocks_tx, _) = broadcast::channel(100);
+        let (transactions_tx, _) = broadcast::channel(100);
+        let (transaction_count_tx, _) = broadcast::channel(100);
+
+        Self {
+            blocks_tx,
+            transactions_tx,
+            transaction_count_tx,
+        }
+    }
+}
