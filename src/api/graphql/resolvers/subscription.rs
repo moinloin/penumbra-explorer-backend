@@ -15,18 +15,18 @@ impl SubscriptionRoot {
         let pubsub = PubSub::from_context(ctx)
             .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
             
-        let stream = pubsub
-            .blocks_subscribe()
-            .into_stream()
-            .filter_map(|height| async move {
-                match height {
-                    Ok(height) => Some(BlockUpdate { height }),
+        let receiver = pubsub.blocks_subscribe();
+        
+        let stream = async_stream::stream! {
+            loop {
+                match receiver.recv().await {
+                    Ok(height) => yield BlockUpdate { height },
                     Err(e) => {
                         tracing::error!("Error receiving block height: {}", e);
-                        None
                     }
                 }
-            });
+            }
+        };
             
         Ok(stream)
     }
@@ -35,18 +35,18 @@ impl SubscriptionRoot {
         let pubsub = PubSub::from_context(ctx)
             .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
             
-        let stream = pubsub
-            .transactions_subscribe()
-            .into_stream()
-            .filter_map(|id| async move {
-                match id {
-                    Ok(id) => Some(TransactionUpdate { id }),
+        let receiver = pubsub.transactions_subscribe();
+        
+        let stream = async_stream::stream! {
+            loop {
+                match receiver.recv().await {
+                    Ok(id) => yield TransactionUpdate { id },
                     Err(e) => {
                         tracing::error!("Error receiving transaction id: {}", e);
-                        None
                     }
                 }
-            });
+            }
+        };
             
         Ok(stream)
     }
@@ -55,18 +55,18 @@ impl SubscriptionRoot {
         let pubsub = PubSub::from_context(ctx)
             .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
             
-        let stream = pubsub
-            .transaction_count_subscribe()
-            .into_stream()
-            .filter_map(|count| async move {
-                match count {
-                    Ok(count) => Some(TransactionCountUpdate { count }),
+        let receiver = pubsub.transaction_count_subscribe();
+        
+        let stream = async_stream::stream! {
+            loop {
+                match receiver.recv().await {
+                    Ok(count) => yield TransactionCountUpdate { count },
                     Err(e) => {
                         tracing::error!("Error receiving transaction count: {}", e);
-                        None
                     }
                 }
-            });
+            }
+        };
             
         Ok(stream)
     }

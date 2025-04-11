@@ -2667,6 +2667,7 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "async-graphql-axum",
+ "async-stream",
  "axum",
  "base64 0.22.1",
  "chrono",
