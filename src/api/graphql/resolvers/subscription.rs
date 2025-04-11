@@ -1,6 +1,6 @@
 use async_graphql::{Context, Subscription};
-use futures_util::stream::{Stream, StreamExt};
-use std::pin::Pin;
+use futures_util::stream::Stream;
+use tracing;
 
 use crate::api::graphql::{
     pubsub::PubSub,
