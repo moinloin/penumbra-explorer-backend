@@ -1,4 +1,5 @@
 pub mod context;
+pub mod pubsub;
 pub mod resolvers;
 pub mod scalars;
 pub mod schema;
