@@ -1,10 +1,11 @@
-use async_graphql::http::GraphiQLSource;
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use async_graphql::http::{GraphiQLSource, ALL_WEBSOCKET_PROTOCOLS};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::{
     extract::Extension,
     http::StatusCode,
     response::{Html, IntoResponse},
 };
+use futures_util::StreamExt;
 
 use crate::api::graphql::schema::PenumbraSchema;
 
@@ -17,7 +18,25 @@ pub async fn graphql_handler(
 }
 
 pub async fn graphiql() -> impl IntoResponse {
-    Html(GraphiQLSource::build().endpoint("/graphql").finish())
+    Html(
+        GraphiQLSource::build()
+            .endpoint("/graphql")
+            .subscription_endpoint("/graphql/ws")
+            .finish(),
+    )
+}
+
+pub async fn graphql_subscription(
+    Extension(schema): Extension<PenumbraSchema>,
+    protocol: GraphQLSubscription,
+) -> impl IntoResponse {
+    protocol
+        .on_connection_init(|value| async {
+            tracing::debug!("GraphQL subscription connection initialized: {:?}", value);
+            Ok(value)
+        })
+        .start_with_schema(schema, ALL_WEBSOCKET_PROTOCOLS)
+        .await
 }
 
 pub async fn health_check() -> impl IntoResponse {
