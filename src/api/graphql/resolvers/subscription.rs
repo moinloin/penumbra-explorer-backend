@@ -8,3 +8,26 @@ use crate::api::graphql::{
 };
 
 pub struct SubscriptionRoot;
+
+#[Subscription]
+impl SubscriptionRoot {
+    async fn blocks(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = BlockUpdate>, async_graphql::Error> {
+        let pubsub = PubSub::from_context(ctx)
+            .ok_or_else(|| async_graphql::Error::new("PubSub not found in context"))?;
+            
+        let stream = pubsub
+            .blocks_subscribe()
+            .into_stream()
+            .filter_map(|height| async move {
+                match height {
+                    Ok(height) => Some(BlockUpdate { height }),
+                    Err(e) => {
+                        tracing::error!("Error receiving block height: {}", e);
+                        None
+                    }
+                }
+            });
+            
+        Ok(stream)
+    }
+}
