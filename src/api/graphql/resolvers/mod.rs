@@ -1,6 +1,7 @@
 mod block;
 mod search;
 mod stats;
+mod subscription;
 mod transaction;
 
 use async_graphql::Object;
