@@ -30,12 +30,7 @@ pub async fn graphql_subscription(
     ws: axum::extract::WebSocketUpgrade,
 ) -> impl IntoResponse {
     ws.protocols(ALL_WEBSOCKET_PROTOCOLS)
-        .on_upgrade(move |socket| {
-            GraphQLSubscription::new(schema)
-                .on_connection_init(|_| async { Ok(()) })
-                .map_data(|data| data)
-                .pipe(socket)
-        })
+        .on_upgrade(|socket| GraphQLSubscription::new(schema, socket))
 }
 
 pub async fn health_check() -> impl IntoResponse {
