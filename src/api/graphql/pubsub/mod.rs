@@ -1,5 +1,6 @@
 use async_graphql::Context;
 use sqlx::{Pool, Postgres};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
 pub mod triggers;
@@ -8,6 +9,16 @@ pub struct PubSub {
     blocks_tx: broadcast::Sender<i64>,
     transactions_tx: broadcast::Sender<i64>,
     transaction_count_tx: broadcast::Sender<i64>,
+}
+
+impl Clone for PubSub {
+    fn clone(&self) -> Self {
+        Self {
+            blocks_tx: self.blocks_tx.clone(),
+            transactions_tx: self.transactions_tx.clone(),
+            transaction_count_tx: self.transaction_count_tx.clone(),
+        }
+    }
 }
 
 impl PubSub {
