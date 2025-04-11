@@ -9,3 +9,8 @@ pub struct BlockUpdate {
 pub struct TransactionUpdate {
     pub id: i64,
 }
+
+#[derive(SimpleObject)]
+pub struct TransactionCountUpdate {
+    pub count: i64,
+}
