@@ -77,31 +77,31 @@ async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
 }
 
 async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
-    let result = sqlx::query!(
-        r"SELECT height FROM blocks ORDER BY height DESC LIMIT 1"
+    let result = sqlx::query_as::<_, (i64,)>(
+        "SELECT height FROM blocks ORDER BY height DESC LIMIT 1"
     )
     .fetch_optional(pool)
     .await?;
     
-    Ok(result.map(|r| r.height))
+    Ok(result.map(|r| r.0))
 }
 
 async fn get_latest_transaction_id(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
-    let result = sqlx::query!(
-        r"SELECT id FROM transactions ORDER BY id DESC LIMIT 1"
+    let result = sqlx::query_as::<_, (i64,)>(
+        "SELECT id FROM transactions ORDER BY id DESC LIMIT 1"
     )
     .fetch_optional(pool)
     .await?;
     
-    Ok(result.map(|r| r.id))
+    Ok(result.map(|r| r.0))
 }
 
 async fn get_transaction_count(pool: &Pool<Postgres>) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query!(
-        r"SELECT COUNT(*) as count FROM transactions"
+    let result = sqlx::query_as::<_, (i64,)>(
+        "SELECT COUNT(*) FROM transactions"
     )
     .fetch_one(pool)
     .await?;
     
-    Ok(result.count.unwrap_or(0))
+    Ok(result.0)
 }
