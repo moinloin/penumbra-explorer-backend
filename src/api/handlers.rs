@@ -29,9 +29,10 @@ pub async fn graphql_subscription(
     Extension(schema): Extension<PenumbraSchema>,
     ws: axum::extract::WebSocketUpgrade,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| {
-        GraphQLSubscription::new(schema, socket).with_protocols(ALL_WEBSOCKET_PROTOCOLS)
-    })
+    ws.protocols(ALL_WEBSOCKET_PROTOCOLS)
+        .on_upgrade(move |socket| {
+            GraphQLSubscription::serve(schema, socket)
+        })
 }
 
 pub async fn health_check() -> impl IntoResponse {
