@@ -98,7 +98,7 @@ jobs:
 
       - name: Transfer Docker image
         run: |
-          scp /tmp/${{ env.APP_NAME_STAGE }}.tar ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }}:~/deployments/
+          scp /tmp/${{ env.APP_NAME_STAGE }}.tar ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }}:/opt/deployment/
 
       - name: Deploy with Blue-Green mechanism
         run: |
