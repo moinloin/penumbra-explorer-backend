@@ -98,12 +98,12 @@ jobs:
 
       - name: Transfer Docker image
         run: |
-          scp /tmp/${{ env.APP_NAME_STAGE }}.tar ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }}:~/deployments/
+          scp /tmp/${{ env.APP_NAME_STAGE }}.tar ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }}:/home/deploy-penumbra-explorer-stage/deployments/
 
       - name: Deploy with Blue-Green mechanism
         run: |
-          ssh ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }} '~/deployments/deploy.sh'
+          ssh ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }} '/home/deploy-penumbra-explorer-stage/deployments/deploy.sh'
 
       - name: Check deployment status
         run: |
-          ssh ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }} 'cat /opt/deployment/deploy.log | tail -20'
+          ssh ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }} 'tail -20 /home/deploy-penumbra-explorer-stage/deployments/deploy.log'
