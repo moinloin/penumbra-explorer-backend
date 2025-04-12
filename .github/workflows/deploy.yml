@@ -24,11 +24,6 @@ jobs:
       - name: Add server to known hosts
         run: ssh-keyscan -H ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Test SSH connection
-        run: ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "echo SSH connection successful"
-
       - name: Transfer test file
-        run: scp /tmp/test-file.txt ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:~/deployments/
-
-      - name: Verify file transfer
-        run: ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "cat ~/deployments/test-file.txt"
+        run: |
+          scp /tmp/test-file.txt ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:~/deployments/
