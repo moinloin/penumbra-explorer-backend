@@ -6,7 +6,7 @@ use super::PubSub;
 
 pub async fn start_triggers(pubsub: PubSub, pool: Pool<Postgres>) {
     info!("Starting subscription triggers");
-    
+
     tokio::join!(
         listen_for_blocks(pubsub.clone(), pool.clone()),
         listen_for_transactions(pubsub.clone(), pool.clone()),
@@ -20,7 +20,7 @@ async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
 
     loop {
         interval.tick().await;
-        
+
         match get_latest_block_height(&pool).await {
             Ok(Some(height)) => {
                 if last_height.is_none() || last_height.unwrap() < height {
@@ -37,17 +37,17 @@ async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
 
 async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
     let mut interval = interval(Duration::from_secs(1));
-    let mut last_transaction_id: Option<i64> = None;
+    let mut last_tx_height: Option<i64> = None;
 
     loop {
         interval.tick().await;
-        
-        match get_latest_transaction_id(&pool).await {
-            Ok(Some(id)) => {
-                if last_transaction_id.is_none() || last_transaction_id.unwrap() < id {
-                    debug!("New transaction detected: {}", id);
-                    pubsub.publish_transaction(id);
-                    last_transaction_id = Some(id);
+
+        match get_latest_transaction_height(&pool).await {
+            Ok(Some(height)) => {
+                if last_tx_height.is_none() || last_tx_height.unwrap() < height {
+                    debug!("New transaction detected at height: {}", height);
+                    pubsub.publish_transaction(height);
+                    last_tx_height = Some(height);
                 }
             }
             Ok(None) => {},
@@ -62,7 +62,7 @@ async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
 
     loop {
         interval.tick().await;
-        
+
         match get_transaction_count(&pool).await {
             Ok(count) => {
                 if last_count.is_none() || last_count.unwrap() != count {
@@ -78,30 +78,30 @@ async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
 
 async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT height FROM blocks ORDER BY height DESC LIMIT 1"
+        "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1"
     )
-    .fetch_optional(pool)
-    .await?;
-    
+        .fetch_optional(pool)
+        .await?;
+
     Ok(result.map(|r| r.0))
 }
 
-async fn get_latest_transaction_id(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
+async fn get_latest_transaction_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT id FROM transactions ORDER BY id DESC LIMIT 1"
+        "SELECT block_height FROM explorer_transactions ORDER BY timestamp DESC LIMIT 1"
     )
-    .fetch_optional(pool)
-    .await?;
-    
+        .fetch_optional(pool)
+        .await?;
+
     Ok(result.map(|r| r.0))
 }
 
 async fn get_transaction_count(pool: &Pool<Postgres>) -> Result<i64, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT COUNT(*) FROM transactions"
+        "SELECT COUNT(*) FROM explorer_transactions"
     )
-    .fetch_one(pool)
-    .await?;
-    
+        .fetch_one(pool)
+        .await?;
+
     Ok(result.0)
 }

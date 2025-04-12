@@ -32,7 +32,7 @@ impl PubSub {
             transaction_count_tx,
         }
     }
-    
+
     pub fn blocks_subscribe(&self) -> broadcast::Receiver<i64> {
         self.blocks_tx.subscribe()
     }
@@ -44,7 +44,7 @@ impl PubSub {
     pub fn transaction_count_subscribe(&self) -> broadcast::Receiver<i64> {
         self.transaction_count_tx.subscribe()
     }
-    
+
     pub fn publish_block(&self, height: i64) {
         let _ = self.blocks_tx.send(height);
     }
@@ -56,14 +56,13 @@ impl PubSub {
     pub fn publish_transaction_count(&self, count: i64) {
         let _ = self.transaction_count_tx.send(count);
     }
-    
+
     pub fn from_context<'a>(ctx: &'a Context<'_>) -> Option<&'a Self> {
         ctx.data_opt::<Self>()
     }
-    
+
     pub async fn start_triggers(self, pool: Pool<Postgres>) {
-        tokio::spawn(async move {
-            triggers::start_triggers(self, pool).await;
-        });
+        // Remove the unnecessary tokio::spawn here
+        triggers::start_triggers(self, pool).await;
     }
 }

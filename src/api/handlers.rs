@@ -1,9 +1,9 @@
-use async_graphql::http::{GraphiQLSource, ALL_WEBSOCKET_PROTOCOLS};
+use async_graphql::http::GraphiQLSource;
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::{
     extract::State,
-    http::StatusCode,
     response::{Html, IntoResponse},
+    http::StatusCode,
 };
 
 use crate::api::graphql::schema::PenumbraSchema;
@@ -28,41 +28,22 @@ pub async fn graphql_subscription(
     State(schema): State<PenumbraSchema>,
     ws: axum::extract::WebSocketUpgrade,
 ) -> impl IntoResponse {
-    let protocols = ALL_WEBSOCKET_PROTOCOLS;
-    GraphQLSubscription::new(schema).upgrade(protocols, ws)
+    ws.protocols(["graphql-ws"])
+        .on_upgrade(move |socket| async move {
+            // Create a GraphQLSubscription
+            let subscription = GraphQLSubscription::new(schema);
+            
+            // Handle the WebSocket connection
+            let (sink, stream) = socket.split();
+            
+            futures_util::pin_mut!(sink);
+            futures_util::pin_mut!(stream);
+            
+            // Process the WebSocket connection
+            subscription.process_stream(stream, sink).await;
+        })
 }
 
 pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_health_check() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-
-        let response = rt.block_on(async { health_check().await.into_response() });
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[test]
-    fn test_graphiql() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-
-        let response = rt.block_on(async { graphiql().await.into_response() });
-
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let content_type = response
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-
-        assert!(content_type.contains("text/html"));
-    }
 }

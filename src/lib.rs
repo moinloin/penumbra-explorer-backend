@@ -8,7 +8,7 @@ pub use options::ExplorerOptions;
 
 use anyhow::{Context, Result};
 use axum::{
-    http::Method,
+    http::HeaderName,
     routing::{get, post},
     Router,
 };
@@ -59,13 +59,19 @@ impl Explorer {
                 "https://explorer.penumbra.pklabs.me".parse().unwrap(),
                 "https://explorer.penumbra.zone".parse().unwrap(),
             ])
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::OPTIONS])
             .allow_headers([
-                "content-type".parse().unwrap(),
-                "authorization".parse().unwrap(),
-                "accept".parse().unwrap(),
-                "origin".parse().unwrap(),
-                "x-requested-with".parse().unwrap(),
+                HeaderName::from_static("content-type"),
+                HeaderName::from_static("authorization"),
+                HeaderName::from_static("accept"),
+                HeaderName::from_static("origin"),
+                HeaderName::from_static("x-requested-with"),
+                // WebSocket specific headers
+                HeaderName::from_static("sec-websocket-key"),
+                HeaderName::from_static("sec-websocket-protocol"),
+                HeaderName::from_static("sec-websocket-version"),
+                HeaderName::from_static("upgrade"),
+                HeaderName::from_static("connection"),
             ])
             .allow_credentials(true);
 
@@ -101,16 +107,18 @@ impl Explorer {
                 error!("Indexer exited with error: {:?}", e);
             }
         });
-        
-        let server = tokio::net::TcpListener::bind(&addr).await.unwrap();
+
         info!("API server listening on {}", addr);
-        
+
         let server_task = tokio::spawn(async move {
-            if let Err(e) = axum::serve(server, api_router).await {
+            if let Err(e) = axum::Server::bind(&addr)
+                .serve(api_router.into_make_service())
+                .await 
+            {
                 error!("API server exited with error: {:?}", e);
             }
         });
-        
+
         tokio::select! {
             _ = indexer_task => {
                 error!("Indexer task completed unexpectedly");
