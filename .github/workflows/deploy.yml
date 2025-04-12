@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
 
 env:
-  APP_NAME_STAGE: penumbra-explorer
-  SERVER_USER_STAGE: deploy-penumbra-explorer-stage
-  SERVER_HOST_STAGE: ${{ secrets.SERVER_HOST_STAGE }}
+  APP_NAME: penumbra-explorer
+  SERVER_USER: deploy-penumbra-explorer-stage
+  SERVER_HOST: ${{ secrets.SERVER_HOST_STAGE }}
 
 jobs:
   code-quality:
@@ -84,8 +84,8 @@ jobs:
         with:
           context: .
           push: false
-          tags: ${{ env.APP_NAME_STAGE }}:latest
-          outputs: type=docker,dest=/tmp/${{ env.APP_NAME_STAGE }}.tar
+          tags: ${{ env.APP_NAME }}:latest
+          outputs: type=docker,dest=/tmp/${{ env.APP_NAME }}.tar
 
       - name: Install SSH key
         uses: shimataro/ssh-key-action@v2
@@ -94,17 +94,16 @@ jobs:
           known_hosts: unnecessary
 
       - name: Add server to known hosts
-        run: ssh-keyscan -H ${{ env.SERVER_HOST_STAGE }} >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Transfer Docker image
         run: |
-          ssh ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }} 'mkdir -p ~/deployments'
-          scp /tmp/${{ env.APP_NAME_STAGE }}.tar ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }}:~/deployments/
+          scp /tmp/${{ env.APP_NAME }}.tar ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:~/deployments/
 
       - name: Deploy with Blue-Green mechanism
         run: |
-          ssh ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }} 'sudo /opt/deployment/deploy.sh'
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} 'sudo /opt/deployment/deploy.sh'
 
       - name: Check deployment status
         run: |
-          ssh ${{ env.SERVER_USER_STAGE }}@${{ env.SERVER_HOST_STAGE }} 'cat /opt/deployment/deploy.log | tail -20'
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} 'cat /opt/deployment/deploy.log | tail -20'
