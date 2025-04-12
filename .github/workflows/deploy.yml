@@ -8,7 +8,7 @@ on:
 
 env:
   APP_NAME_STAGE: penumbra-explorer
-  SERVER_USER_STAGE: deploy-penumbra-explorer
+  SERVER_USER_STAGE: deploy-penumbra-explorer-stage
   SERVER_HOST_STAGE: ${{ secrets.SERVER_HOST_STAGE }}
 
 jobs:
