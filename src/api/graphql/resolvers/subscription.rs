@@ -1,5 +1,6 @@
 use async_graphql::{Context, Result, Subscription};
-use futures_util::stream::{Stream, StreamExt};
+use futures_util::stream::Stream;
+use futures_util::StreamExt;
 use crate::api::graphql::{
     pubsub::PubSub,
     types::subscription_types::{BlockUpdate, TransactionCountUpdate, TransactionUpdate},
@@ -8,80 +9,83 @@ use crate::api::graphql::{
 use sqlx::PgPool;
 use std::sync::Arc;
 
-pub struct SubscriptionRoot;
+pub struct Root;
 
 #[Subscription]
-impl SubscriptionRoot {
-    async fn blocks(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = BlockUpdate>> {
+impl Root {
+    #[allow(clippy::unused_async)]
+    async fn blocks(&self, ctx: &async_graphql::Context<'_>) -> async_graphql::Result<impl Stream<Item = BlockUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
         let receiver = pubsub.blocks_subscribe();
-
-        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map(move |result| {
-                let pool_clone = Arc::clone(&pool);
-                async move {
-                    match result {
-                        Ok(height) => {
-                            match get_block_data(pool_clone, height).await {
-                                Ok((created_at, transactions_count)) => {
-                                    Some(BlockUpdate {
-                                        height,
-                                        created_at: DateTime(created_at),
-                                        transactions_count
-                                    })
-                                },
-                                Err(e) => {
-                                    tracing::error!("Failed to get block data: {}", e);
-                                    None
-                                }
+        let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
+        
+        Ok(StreamExt::filter_map(stream, move |result| {
+            let pool_clone = Arc::clone(&pool);
+            async move {
+                match result {
+                    Ok(height) => {
+                        match get_block_data(pool_clone, height).await {
+                            Ok((created_at, transactions_count)) => {
+                                Some(BlockUpdate {
+                                    height,
+                                    created_at: DateTime(created_at),
+                                    transactions_count
+                                })
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to get block data: {}", e);
+                                None
                             }
-                        },
-                        Err(_) => None
-                    }
+                        }
+                    },
+                    Err(_) => None
                 }
-            }))
+            }
+        }))
     }
 
-    async fn transactions(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionUpdate>> {
+    #[allow(clippy::unused_async)]
+    async fn transactions(&self, ctx: &async_graphql::Context<'_>) -> async_graphql::Result<impl Stream<Item = TransactionUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
         let receiver = pubsub.transactions_subscribe();
-
-        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map(move |result| {
-                let pool_clone = Arc::clone(&pool);
-                async move {
-                    match result {
-                        Ok(block_height) => {
-                            match get_transaction_data(pool_clone, block_height).await {
-                                Ok((hash, raw_data)) => {
-                                    Some(TransactionUpdate {
-                                        id: block_height,
-                                        hash,
-                                        raw: raw_data
-                                    })
-                                },
-                                Err(e) => {
-                                    tracing::error!("Failed to get transaction data: {}", e);
-                                    None
-                                }
+        let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
+        
+        Ok(StreamExt::filter_map(stream, move |result| {
+            let pool_clone = Arc::clone(&pool);
+            async move {
+                match result {
+                    Ok(block_height) => {
+                        match get_transaction_data(pool_clone, block_height).await {
+                            Ok((hash, raw_data)) => {
+                                Some(TransactionUpdate {
+                                    id: block_height,
+                                    hash,
+                                    raw: raw_data
+                                })
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to get transaction data: {}", e);
+                                None
                             }
-                        },
-                        Err(_) => None
-                    }
+                        }
+                    },
+                    Err(_) => None
                 }
-            }))
+            }
+        }))
     }
 
-    async fn transaction_count(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionCountUpdate>> {
+    #[allow(clippy::unused_async)]
+    async fn transaction_count(&self, ctx: &async_graphql::Context<'_>) -> async_graphql::Result<impl Stream<Item = TransactionCountUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let receiver = pubsub.transaction_count_subscribe();
 
-        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map(|result| async move {
+        let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
+        Ok(StreamExt::filter_map(stream, |result| async move {
                 match result {
                     Ok(count) => Some(TransactionCountUpdate { count }),
                     Err(_) => None
@@ -89,7 +93,7 @@ impl SubscriptionRoot {
             }))
     }
 
-    async fn latest_blocks(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = BlockUpdate>> {
+    async fn latest_blocks(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = BlockUpdate> + '_> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
@@ -100,8 +104,8 @@ impl SubscriptionRoot {
         let initial_stream = futures_util::stream::iter(initial_blocks);
 
         let receiver = pubsub.blocks_subscribe();
-        let real_time_stream = tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map(move |result| {
+        let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
+        let real_time_stream = StreamExt::filter_map(stream, move |result| {
                 let pool_clone = Arc::clone(&pool);
                 async move {
                     match result {
@@ -125,12 +129,12 @@ impl SubscriptionRoot {
                 }
             });
 
-        let combined_stream = initial_stream.chain(real_time_stream);
+        let combined_stream = StreamExt::chain(initial_stream, real_time_stream);
 
         Ok(combined_stream)
     }
 
-    async fn latest_transactions(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = TransactionUpdate>> {
+    async fn latest_transactions(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = TransactionUpdate> + '_> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
@@ -141,8 +145,8 @@ impl SubscriptionRoot {
         let initial_stream = futures_util::stream::iter(initial_transactions);
 
         let receiver = pubsub.transactions_subscribe();
-        let real_time_stream = tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map(move |result| {
+        let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
+        let real_time_stream = StreamExt::filter_map(stream, move |result| {
                 let pool_clone = Arc::clone(&pool);
                 async move {
                     match result {
@@ -166,7 +170,7 @@ impl SubscriptionRoot {
                 }
             });
 
-        let combined_stream = initial_stream.chain(real_time_stream);
+        let combined_stream = StreamExt::chain(initial_stream, real_time_stream);
 
         Ok(combined_stream)
     }
@@ -201,7 +205,7 @@ async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpd
         "SELECT height, timestamp, num_transactions FROM explorer_block_details
          ORDER BY height DESC LIMIT $1"
     )
-        .bind(limit as i64)
+        .bind(i64::from(limit))
         .fetch_all(pool.as_ref())
         .await?;
 
@@ -223,7 +227,7 @@ async fn get_latest_transactions(pool: Arc<PgPool>, limit: i32) -> Result<Vec<Tr
         "SELECT block_height, tx_hash, raw_data FROM explorer_transactions
          ORDER BY block_height DESC LIMIT $1"
     )
-        .bind(limit as i64)
+        .bind(i64::from(limit))
         .fetch_all(pool.as_ref())
         .await?;
 
