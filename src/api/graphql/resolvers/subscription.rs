@@ -1,6 +1,5 @@
 use async_graphql::{Context, Result, Subscription};
-use futures_util::{Stream, StreamExt};
-use tokio_stream::StreamExt as TokioStreamExt;
+use futures_util::Stream;
 use crate::api::graphql::{
     pubsub::PubSub,
     types::subscription_types::{BlockUpdate, TransactionCountUpdate, TransactionUpdate},
@@ -83,7 +82,7 @@ impl SubscriptionRoot {
         let receiver = pubsub.transaction_count_subscribe();
 
         Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map(|result| async move {
+            .filter_map_unpin(|result| async move {
                 match result {
                     Ok(count) => Some(TransactionCountUpdate { count }),
                     Err(_) => None
