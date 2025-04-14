@@ -99,14 +99,21 @@ jobs:
       - name: Add server to known hosts
         run: ssh-keyscan -H ${{ env.SERVER_HOST_DEV }} >> ~/.ssh/known_hosts
 
-      - name: Transfer Docker image
+      - name: Transfer Docker image and genesis file
         run: |
           scp /tmp/${{ env.APP_NAME_DEV }}.tar ${{ env.SERVER_USER_DEV }}@${{ env.SERVER_HOST_DEV }}:~/deployments/
+          scp genesis.json ${{ env.SERVER_USER_DEV }}@${{ env.SERVER_HOST_DEV }}:~/deployments/
 
-      - name: Deploy with Blue-Green mechanism
+      - name: Deploy using single container
         run: |
-          ssh ${{ env.SERVER_USER_DEV }}@${{ env.SERVER_HOST_DEV }} 'sudo /opt/deployment/deploy.sh'
-
-      - name: Check deployment status
-        run: |
-          ssh ${{ env.SERVER_USER_DEV }}@${{ env.SERVER_HOST_DEV }} 'cat /opt/deployment/deploy.log | tail -20'
+          ssh ${{ env.SERVER_USER_DEV }}@${{ env.SERVER_HOST_DEV }} 'cd ~/deployments && \
+          docker load -i ${{ env.APP_NAME_DEV }}.tar && \
+          docker stop ${{ env.APP_NAME_DEV }} || true && \
+          docker rm ${{ env.APP_NAME_DEV }} || true && \
+          docker run -d --name ${{ env.APP_NAME_DEV }} \
+            -p 8080:8080 \
+            -e SOURCE_DB_URL=${{ secrets.SOURCE_DB_URL }} \
+            -e DEST_DB_URL=${{ secrets.DEST_DB_URL }} \
+            -v $(pwd)/genesis.json:/app/genesis.json \
+            --restart unless-stopped \
+            ${{ env.APP_NAME_DEV }}:latest'
