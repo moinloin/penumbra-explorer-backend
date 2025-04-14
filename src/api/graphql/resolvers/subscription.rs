@@ -93,20 +93,12 @@ impl SubscriptionRoot {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
-        // Default to 10 blocks if not specified
         let limit = limit.unwrap_or(10);
 
-        // Create two streams:
-        // 1. Initial stream of the latest N blocks
-        // 2. Real-time stream of new blocks
-
-        // First, fetch the latest blocks
         let initial_blocks = get_latest_blocks(Arc::clone(&pool), limit).await?;
 
-        // Create a stream from the initial blocks
         let initial_stream = futures_util::stream::iter(initial_blocks);
 
-        // Then set up the real-time stream for new blocks
         let receiver = pubsub.blocks_subscribe();
         let real_time_stream = tokio_stream::wrappers::BroadcastStream::new(receiver)
             .filter_map(move |result| {
@@ -133,31 +125,21 @@ impl SubscriptionRoot {
                 }
             });
 
-        // Combine the two streams
         let combined_stream = initial_stream.chain(real_time_stream);
 
         Ok(combined_stream)
     }
 
-    // Initial transactions load + subscription for real-time updates
     async fn latest_transactions(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = TransactionUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
-        // Default to 10 transactions if not specified
         let limit = limit.unwrap_or(10);
 
-        // Create two streams:
-        // 1. Initial stream of the latest N transactions
-        // 2. Real-time stream of new transactions
-
-        // First, fetch the latest transactions
         let initial_transactions = get_latest_transactions(Arc::clone(&pool), limit).await?;
 
-        // Create a stream from the initial transactions
         let initial_stream = futures_util::stream::iter(initial_transactions);
 
-        // Then set up the real-time stream for new transactions
         let receiver = pubsub.transactions_subscribe();
         let real_time_stream = tokio_stream::wrappers::BroadcastStream::new(receiver)
             .filter_map(move |result| {
@@ -184,16 +166,13 @@ impl SubscriptionRoot {
                 }
             });
 
-        // Combine the two streams
         let combined_stream = initial_stream.chain(real_time_stream);
 
         Ok(combined_stream)
     }
 }
 
-// Helper function to fetch additional block data
 async fn get_block_data(pool: Arc<PgPool>, height: i64) -> Result<(chrono::DateTime<chrono::Utc>, i32), sqlx::Error> {
-    // Use query_as instead of query! to avoid the compile-time check
     let row = sqlx::query_as::<_, (chrono::DateTime<chrono::Utc>, i32)>(
         "SELECT timestamp, num_transactions FROM explorer_block_details WHERE height = $1"
     )
@@ -204,7 +183,6 @@ async fn get_block_data(pool: Arc<PgPool>, height: i64) -> Result<(chrono::DateT
     Ok(row)
 }
 
-// Helper function to fetch transaction data including the raw field
 async fn get_transaction_data(pool: Arc<PgPool>, block_height: i64) -> Result<(String, String), sqlx::Error> {
     let row = sqlx::query_as::<_, (Vec<u8>, String)>(
         "SELECT tx_hash, raw_data FROM explorer_transactions WHERE block_height = $1 LIMIT 1"
@@ -213,13 +191,11 @@ async fn get_transaction_data(pool: Arc<PgPool>, block_height: i64) -> Result<(S
         .fetch_one(pool.as_ref())
         .await?;
 
-    // Convert the binary hash to hex string
     let hash_hex = hex::encode_upper(&row.0);
 
     Ok((hash_hex, row.1))
 }
 
-// Helper function to fetch latest N blocks
 async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpdate>, sqlx::Error> {
     let rows = sqlx::query_as::<_, (i64, chrono::DateTime<chrono::Utc>, i32)>(
         "SELECT height, timestamp, num_transactions FROM explorer_block_details
@@ -242,7 +218,6 @@ async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpd
     Ok(blocks)
 }
 
-// Helper function to fetch latest N transactions
 async fn get_latest_transactions(pool: Arc<PgPool>, limit: i32) -> Result<Vec<TransactionUpdate>, sqlx::Error> {
     let rows = sqlx::query_as::<_, (i64, Vec<u8>, String)>(
         "SELECT block_height, tx_hash, raw_data FROM explorer_transactions
@@ -254,7 +229,6 @@ async fn get_latest_transactions(pool: Arc<PgPool>, limit: i32) -> Result<Vec<Tr
 
     let transactions = rows.into_iter()
         .map(|(block_height, tx_hash, raw_data)| {
-            // Convert binary hash to hex string
             let hash = hex::encode_upper(&tx_hash);
 
             TransactionUpdate {
