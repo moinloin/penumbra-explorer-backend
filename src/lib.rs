@@ -66,7 +66,6 @@ impl Explorer {
                 HeaderName::from_static("accept"),
                 HeaderName::from_static("origin"),
                 HeaderName::from_static("x-requested-with"),
-                // WebSocket specific headers
                 HeaderName::from_static("sec-websocket-key"),
                 HeaderName::from_static("sec-websocket-protocol"),
                 HeaderName::from_static("sec-websocket-version"),
@@ -78,7 +77,6 @@ impl Explorer {
         let api_router = Router::new()
             .route("/graphql", post(crate::api::handlers::graphql_handler))
             .route("/graphql/playground", get(crate::api::handlers::graphiql))
-            // Use route_service for WebSocket endpoint with our subscription service
             .route_service(
                 "/graphql/ws",
                 crate::api::handlers::create_subscription_service(schema.clone())
