@@ -90,7 +90,7 @@ impl SubscriptionRoot {
             }))
     }
 
-    async fn latest_blocks(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = BlockUpdate>> {
+    fn latest_blocks(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = BlockUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
