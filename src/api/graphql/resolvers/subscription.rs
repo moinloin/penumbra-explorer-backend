@@ -19,8 +19,8 @@ impl SubscriptionRoot {
 
         let receiver = pubsub.blocks_subscribe();
 
-        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map_unpin(move |result| {
+        Ok(tokio_stream::StreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
+            move |result| {
                 let pool_clone = Arc::clone(&pool);
                 async move {
                     match result {
