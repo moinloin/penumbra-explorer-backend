@@ -19,7 +19,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = { version = "0.6.20", features = ["ws"] }
 dotenv = "0.15"
-tower = "0.4" 
+tower = "0.4"
 tower-http = { version = "0.4.0", features = ["cors"] }
 async-graphql = { version = "5.0.10", features = ["chrono"] }
 async-graphql-axum = "5.0.10"
@@ -30,6 +30,7 @@ pq-sys = "0.6"
 base64 = "0.22"
 futures-util = "0.3"
 async-stream = "0.3"
+tokio-stream = { version = "0.1.17", features = ["sync"] }
 
 [lib]
 path = "src/lib.rs"
