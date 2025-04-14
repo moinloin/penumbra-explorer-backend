@@ -9,7 +9,7 @@ use async_graphql::Object;
 pub use block::{resolve_block, resolve_blocks};
 pub use search::resolve_search;
 pub use stats::resolve_stats;
-pub use subscription::SubscriptionRoot;
+pub use subscription::Root as SubscriptionRoot;
 pub use transaction::{resolve_transaction, resolve_transactions};
 
 /// Root query type that combines all GraphQL queries
