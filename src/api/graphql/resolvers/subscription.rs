@@ -52,10 +52,10 @@ impl SubscriptionRoot {
 
         let receiver = pubsub.transactions_subscribe();
 
-        Ok(tokio_stream::StreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
+        Ok(TokioStreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
             move |result| {
                 let pool_clone = Arc::clone(&pool);
-                async move {
+                Some(async move {
                     match result {
                         Ok(block_height) => {
                             match get_transaction_data(pool_clone, block_height).await {
