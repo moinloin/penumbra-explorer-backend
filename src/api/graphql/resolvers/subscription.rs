@@ -12,7 +12,7 @@ pub struct SubscriptionRoot;
 
 #[Subscription]
 impl SubscriptionRoot {
-    async fn blocks(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = BlockUpdate>> {
+    fn blocks(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = BlockUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
