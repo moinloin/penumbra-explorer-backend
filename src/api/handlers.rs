@@ -1,11 +1,11 @@
+use crate::api::graphql::schema::PenumbraSchema;
 use async_graphql::http::GraphiQLSource;
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::{
-    response::{Html, IntoResponse},
     extract::State,
     http::StatusCode,
+    response::{Html, IntoResponse},
 };
-use crate::api::graphql::schema::PenumbraSchema;
 
 pub async fn graphql_handler(
     State(schema): State<PenumbraSchema>,
