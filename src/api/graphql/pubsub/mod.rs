@@ -17,12 +17,6 @@ impl Default for PubSub {
     }
 }
 
-impl Default for PubSub {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl PubSub {
     #[must_use]
     pub fn new() -> Self {
