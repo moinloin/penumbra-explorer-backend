@@ -20,10 +20,10 @@ impl SubscriptionRoot {
 
         let receiver = pubsub.blocks_subscribe();
 
-        Ok(tokio_stream::StreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
+        Ok(TokioStreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
             move |result| {
                 let pool_clone = Arc::clone(&pool);
-                async move {
+                Some(async move {
                     match result {
                         Ok(height) => {
                             match get_block_data(pool_clone, height).await {
