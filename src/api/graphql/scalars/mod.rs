@@ -1,4 +1,3 @@
-// src/api/graphql/scalars/mod.rs
 mod datetime;
 use crate::api::graphql::resolvers::{QueryRoot, SubscriptionRoot};
 use async_graphql::{EmptyMutation, SchemaBuilder};
