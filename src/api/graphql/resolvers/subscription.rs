@@ -76,7 +76,7 @@ impl SubscriptionRoot {
             }))
     }
 
-    async fn transaction_count(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionCountUpdate>> {
+    fn transaction_count(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionCountUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let receiver = pubsub.transaction_count_subscribe();
 
