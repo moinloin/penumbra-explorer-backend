@@ -202,7 +202,7 @@ async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpd
         "SELECT height, timestamp, num_transactions FROM explorer_block_details
          ORDER BY height DESC LIMIT $1"
     )
-        .bind(limit as i64)
+        .bind(i64::from(limit))
         .fetch_all(pool.as_ref())
         .await?;
 
@@ -224,7 +224,7 @@ async fn get_latest_transactions(pool: Arc<PgPool>, limit: i32) -> Result<Vec<Tr
         "SELECT block_height, tx_hash, raw_data FROM explorer_transactions
          ORDER BY block_height DESC LIMIT $1"
     )
-        .bind(limit as i64)
+        .bind(i64::from(limit))
         .fetch_all(pool.as_ref())
         .await?;
 
