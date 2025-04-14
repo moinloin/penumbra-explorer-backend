@@ -102,10 +102,10 @@ impl SubscriptionRoot {
         let initial_stream = futures_util::stream::iter(initial_blocks);
 
         let receiver = pubsub.blocks_subscribe();
-        let real_time_stream = tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map(move |result| {
+        let real_time_stream = TokioStreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
+            move |result| {
                 let pool_clone = Arc::clone(&pool);
-                async move {
+                Some(async move {
                     match result {
                         Ok(height) => {
                             match get_block_data(pool_clone, height).await {
