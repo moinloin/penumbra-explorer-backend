@@ -1,6 +1,6 @@
-use async_graphql::{EmptyMutation, Schema};
+// src/api/graphql/schema.rs
+use async_graphql::Schema;
 use sqlx::PgPool;
-
 use crate::api::graphql::{
     context::ApiContext,
     pubsub::PubSub,
@@ -9,15 +9,13 @@ use crate::api::graphql::{
         Action, Block, BlockUpdate, Event, Fee, Transaction, TransactionBody, TransactionCountUpdate,
         TransactionParameters, TransactionUpdate,
     },
+    scalars,
 };
 
 /// Type alias for the complete GraphQL schema
-#[allow(clippy::module_name_repetitions)]
-pub type PenumbraSchema = Schema<QueryRoot, EmptyMutation, SubscriptionRoot>;
+pub type PenumbraSchema = Schema<QueryRoot, async_graphql::EmptyMutation, SubscriptionRoot>;
 
 /// Create a new GraphQL schema with the given database pool
-#[must_use]
-#[allow(clippy::module_name_repetitions)]
 pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
     let pubsub = PubSub::new();
     let pool_clone = db_pool.clone();
@@ -28,10 +26,16 @@ pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
         pubsub_clone.start_triggers(pool_clone).await;
     });
 
-    let builder = Schema::build(QueryRoot, EmptyMutation, SubscriptionRoot)
-        .data(ApiContext::new(db_pool))
-        .data(pubsub);
+    // Build and register the Schema
+    let builder = Schema::build(QueryRoot, async_graphql::EmptyMutation, SubscriptionRoot)
+        .data(ApiContext::new(db_pool.clone()))
+        .data(pubsub)
+        .data(db_pool); // Add the raw database pool to the context for subscription resolvers
 
+    // Register scalar types
+    let builder = scalars::register_scalars(builder);
+
+    // Register output types
     let builder = builder
         .register_output_type::<Block>()
         .register_output_type::<Transaction>()
