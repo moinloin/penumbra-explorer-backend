@@ -78,7 +78,11 @@ impl Explorer {
         let api_router = Router::new()
             .route("/graphql", post(crate::api::handlers::graphql_handler))
             .route("/graphql/playground", get(crate::api::handlers::graphiql))
-            .route("/graphql/ws", get(crate::api::handlers::graphql_subscription))
+            // Use route_service for WebSocket endpoint with our subscription service
+            .route_service(
+                "/graphql/ws",
+                crate::api::handlers::create_subscription_service(schema.clone())
+            )
             .route("/health", get(crate::api::handlers::health_check))
             .with_state(schema)
             .layer(cors);
