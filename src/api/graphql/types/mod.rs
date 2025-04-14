@@ -3,6 +3,7 @@ mod block;
 mod event;
 mod inputs;
 mod stats;
+#[allow(clippy::module_name_repetitions)]
 pub mod subscription_types;
 mod transaction;
 mod unions;
