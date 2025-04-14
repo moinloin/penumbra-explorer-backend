@@ -62,7 +62,7 @@ impl PubSub {
         ctx.data_opt::<Self>()
     }
 
-    pub async fn start_triggers(&self, pool: Pool<Postgres>) {
+    pub fn start_triggers(&self, pool: Pool<Postgres>) {
         info!("Starting subscription triggers");
 
         let pubsub_blocks = self.clone();
