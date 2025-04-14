@@ -5,7 +5,7 @@ use async_graphql::{
 };
 use sqlx::types::chrono::{DateTime as ChronoDateTime, Utc};
 
-/// DateTime scalar representing RFC3339 formatted date-times
+/// `DateTime` scalar representing RFC3339 formatted date-times
 #[derive(Clone, Debug)]
 pub struct DateTime(pub ChronoDateTime<Utc>);
 
@@ -39,7 +39,7 @@ impl From<DateTime> for ChronoDateTime<Utc> {
     }
 }
 
-/// Register the DateTime scalar with the schema
+/// Register the `DateTime` scalar with the schema
 pub fn register(
     builder: SchemaBuilder<QueryRoot, EmptyMutation, SubscriptionRoot>,
 ) -> SchemaBuilder<QueryRoot, EmptyMutation, SubscriptionRoot> {
