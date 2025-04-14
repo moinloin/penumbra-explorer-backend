@@ -1,4 +1,3 @@
-// src/api/graphql/types/subscription_types.rs
 use async_graphql::SimpleObject;
 use crate::api::graphql::scalars::DateTime;
 
@@ -11,9 +10,9 @@ pub struct BlockUpdate {
 
 #[derive(SimpleObject)]
 pub struct TransactionUpdate {
-    pub id: i64,          // This is block_height now
-    pub hash: String,     // Transaction hash as hex
-    pub raw: String,      // Raw transaction data
+    pub id: i64,
+    pub hash: String,
+    pub raw: String,
 }
 
 #[derive(SimpleObject)]
