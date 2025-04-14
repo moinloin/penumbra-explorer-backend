@@ -44,7 +44,7 @@ impl SubscriptionRoot {
             }))
     }
 
-    async fn transactions(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionUpdate>> {
+    fn transactions(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
