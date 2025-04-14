@@ -1,4 +1,3 @@
-// src/api/graphql/scalars/datetime.rs
 use crate::api::graphql::resolvers::{QueryRoot, SubscriptionRoot};
 use async_graphql::{
     EmptyMutation, InputValueError, InputValueResult, Scalar, ScalarType,
