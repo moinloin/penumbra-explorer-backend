@@ -57,6 +57,7 @@ impl PubSub {
         let _ = self.transaction_count_tx.send(count);
     }
 
+    #[must_use]
     pub fn from_context<'a>(ctx: &'a Context<'_>) -> Option<&'a Self> {
         ctx.data_opt::<Self>()
     }
