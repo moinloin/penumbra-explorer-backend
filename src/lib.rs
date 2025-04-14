@@ -59,7 +59,11 @@ impl Explorer {
                 "https://explorer.penumbra.pklabs.me".parse().unwrap(),
                 "https://explorer.penumbra.zone".parse().unwrap(),
             ])
-            .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::OPTIONS])
+            .allow_methods([
+                axum::http::Method::GET,
+                axum::http::Method::POST,
+                axum::http::Method::OPTIONS,
+            ])
             .allow_headers([
                 HeaderName::from_static("content-type"),
                 HeaderName::from_static("authorization"),
@@ -79,7 +83,7 @@ impl Explorer {
             .route("/graphql/playground", get(crate::api::handlers::graphiql))
             .route_service(
                 "/graphql/ws",
-                crate::api::handlers::create_subscription_service(schema.clone())
+                crate::api::handlers::create_subscription_service(schema.clone()),
             )
             .route("/health", get(crate::api::handlers::health_check))
             .with_state(schema)
@@ -115,7 +119,7 @@ impl Explorer {
         let server_task = tokio::spawn(async move {
             if let Err(e) = axum::Server::bind(&addr)
                 .serve(api_router.into_make_service())
-                .await 
+                .await
             {
                 error!("API server exited with error: {:?}", e);
             }
