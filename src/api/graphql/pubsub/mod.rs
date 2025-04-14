@@ -11,7 +11,20 @@ pub struct PubSub {
     transaction_count_tx: broadcast::Sender<i64>,
 }
 
+impl Default for PubSub {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for PubSub {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PubSub {
+    #[must_use]
     pub fn new() -> Self {
         let (blocks_tx, _) = broadcast::channel(100);
         let (transactions_tx, _) = broadcast::channel(100);
@@ -23,14 +36,17 @@ impl PubSub {
         }
     }
 
+    #[must_use]
     pub fn blocks_subscribe(&self) -> broadcast::Receiver<i64> {
         self.blocks_tx.subscribe()
     }
 
+    #[must_use]
     pub fn transactions_subscribe(&self) -> broadcast::Receiver<i64> {
         self.transactions_tx.subscribe()
     }
 
+    #[must_use]
     pub fn transaction_count_subscribe(&self) -> broadcast::Receiver<i64> {
         self.transaction_count_tx.subscribe()
     }
