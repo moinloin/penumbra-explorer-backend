@@ -45,7 +45,7 @@ impl SubscriptionRoot {
             }))
     }
 
-    fn transactions(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionUpdate>> {
+    async fn transactions(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
@@ -77,7 +77,7 @@ impl SubscriptionRoot {
             }))
     }
 
-    fn transaction_count(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionCountUpdate>> {
+    async fn transaction_count(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = TransactionCountUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let receiver = pubsub.transaction_count_subscribe();
 
@@ -90,7 +90,7 @@ impl SubscriptionRoot {
             }))
     }
 
-    fn latest_blocks(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = BlockUpdate>> {
+    async fn latest_blocks(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = BlockUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
@@ -131,7 +131,7 @@ impl SubscriptionRoot {
         Ok(combined_stream)
     }
 
-    fn latest_transactions(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = TransactionUpdate>> {
+    async fn latest_transactions(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = TransactionUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
