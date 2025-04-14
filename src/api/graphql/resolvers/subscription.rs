@@ -1,6 +1,5 @@
 use async_graphql::{Context, Result, Subscription};
-use futures_util::{Stream, StreamExt};
-use tokio_stream::StreamExt as TokioStreamExt;
+use futures_util::stream::{Stream, StreamExt};
 use crate::api::graphql::{
     pubsub::PubSub,
     types::subscription_types::{BlockUpdate, TransactionCountUpdate, TransactionUpdate},
@@ -9,7 +8,6 @@ use crate::api::graphql::{
 use sqlx::PgPool;
 use std::sync::Arc;
 
-#[allow(clippy::module_name_repetitions)]
 pub struct SubscriptionRoot;
 
 #[Subscription]
@@ -20,10 +18,10 @@ impl SubscriptionRoot {
 
         let receiver = pubsub.blocks_subscribe();
 
-        Ok(TokioStreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
-            move |result| {
+        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
+            .filter_map(move |result| {
                 let pool_clone = Arc::clone(&pool);
-                Some(async move {
+                async move {
                     match result {
                         Ok(height) => {
                             match get_block_data(pool_clone, height).await {
@@ -52,10 +50,10 @@ impl SubscriptionRoot {
 
         let receiver = pubsub.transactions_subscribe();
 
-        Ok(TokioStreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
-            move |result| {
+        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
+            .filter_map(move |result| {
                 let pool_clone = Arc::clone(&pool);
-                Some(async move {
+                async move {
                     match result {
                         Ok(block_height) => {
                             match get_transaction_data(pool_clone, block_height).await {
@@ -82,8 +80,8 @@ impl SubscriptionRoot {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let receiver = pubsub.transaction_count_subscribe();
 
-        Ok(TokioStreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
-            |result| Some(async move {
+        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
+            .filter_map(|result| async move {
                 match result {
                     Ok(count) => Some(TransactionCountUpdate { count }),
                     Err(_) => None
@@ -102,10 +100,10 @@ impl SubscriptionRoot {
         let initial_stream = futures_util::stream::iter(initial_blocks);
 
         let receiver = pubsub.blocks_subscribe();
-        let real_time_stream = TokioStreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
-            move |result| {
+        let real_time_stream = tokio_stream::wrappers::BroadcastStream::new(receiver)
+            .filter_map(move |result| {
                 let pool_clone = Arc::clone(&pool);
-                Some(async move {
+                async move {
                     match result {
                         Ok(height) => {
                             match get_block_data(pool_clone, height).await {
@@ -203,7 +201,7 @@ async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpd
         "SELECT height, timestamp, num_transactions FROM explorer_block_details
          ORDER BY height DESC LIMIT $1"
     )
-        .bind(i64::from(limit))
+        .bind(limit as i64)
         .fetch_all(pool.as_ref())
         .await?;
 
@@ -225,7 +223,7 @@ async fn get_latest_transactions(pool: Arc<PgPool>, limit: i32) -> Result<Vec<Tr
         "SELECT block_height, tx_hash, raw_data FROM explorer_transactions
          ORDER BY block_height DESC LIMIT $1"
     )
-        .bind(i64::from(limit))
+        .bind(limit as i64)
         .fetch_all(pool.as_ref())
         .await?;
 
