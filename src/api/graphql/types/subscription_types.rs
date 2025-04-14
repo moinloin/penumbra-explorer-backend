@@ -1,6 +1,6 @@
 // src/api/graphql/types/subscription_types.rs
-use async_graphql::SimpleObject;
 use crate::api::graphql::scalars::DateTime;
+use async_graphql::SimpleObject;
 
 #[derive(SimpleObject, Clone)]
 pub struct BlockUpdate {
