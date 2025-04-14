@@ -99,7 +99,7 @@ async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
                     last_height = Some(height);
                 }
             }
-            Ok(None) => {},
+            Ok(None) => {}
             Err(e) => error!("Error fetching latest block: {}", e),
         }
     }
@@ -119,7 +119,7 @@ async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
                     last_tx_height = Some(height);
                 }
             }
-            Ok(None) => {},
+            Ok(None) => {}
             Err(e) => error!("Error fetching latest transaction: {}", e),
         }
     }
@@ -146,26 +146,24 @@ async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
 
 async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1"
+        "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1",
     )
-        .fetch_optional(pool)
-        .await?;
+    .fetch_optional(pool)
+    .await?;
     Ok(result.map(|r| r.0))
 }
 
 async fn get_latest_transaction_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT block_height FROM explorer_transactions ORDER BY timestamp DESC LIMIT 1"
+        "SELECT block_height FROM explorer_transactions ORDER BY timestamp DESC LIMIT 1",
     )
-        .fetch_optional(pool)
-        .await?;
+    .fetch_optional(pool)
+    .await?;
     Ok(result.map(|r| r.0))
 }
 
 async fn get_transaction_count(pool: &Pool<Postgres>) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT COUNT(*) FROM explorer_transactions"
-    )
+    let result = sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM explorer_transactions")
         .fetch_one(pool)
         .await?;
     Ok(result.0)
