@@ -1,4 +1,5 @@
-use async_graphql::{Result, Subscription};
+use async_graphql::{Context, Result, Subscription};
+use futures_util::Stream;
 use crate::api::graphql::{
     pubsub::PubSub,
     types::subscription_types::{BlockUpdate, TransactionCountUpdate, TransactionUpdate},
