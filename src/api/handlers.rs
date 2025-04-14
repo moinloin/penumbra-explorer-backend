@@ -27,7 +27,6 @@ pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
-#[must_use]
 pub fn create_subscription_service(schema: PenumbraSchema) -> GraphQLSubscription<PenumbraSchema> {
     GraphQLSubscription::new(schema)
 }
