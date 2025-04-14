@@ -13,6 +13,8 @@ use crate::api::graphql::{
 
 pub type PenumbraSchema = Schema<QueryRoot, async_graphql::EmptyMutation, SubscriptionRoot>;
 
+#[allow(clippy::module_name_repetitions)]
+#[must_use]
 pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
     let pubsub = PubSub::new();
     let pool_clone = db_pool.clone();
