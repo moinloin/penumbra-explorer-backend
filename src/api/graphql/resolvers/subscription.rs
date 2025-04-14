@@ -81,8 +81,8 @@ impl SubscriptionRoot {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let receiver = pubsub.transaction_count_subscribe();
 
-        Ok(tokio_stream::wrappers::BroadcastStream::new(receiver)
-            .filter_map_unpin(|result| async move {
+        Ok(tokio_stream::StreamExt::filter_map(tokio_stream::wrappers::BroadcastStream::new(receiver),
+            |result| async move {
                 match result {
                     Ok(count) => Some(TransactionCountUpdate { count }),
                     Err(_) => None
