@@ -131,7 +131,7 @@ impl SubscriptionRoot {
         Ok(combined_stream)
     }
 
-    async fn latest_transactions(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = TransactionUpdate>> {
+    fn latest_transactions(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<impl Stream<Item = TransactionUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
         let pool = Arc::new(ctx.data::<sqlx::PgPool>()?.clone());
 
