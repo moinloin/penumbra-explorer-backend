@@ -62,25 +62,25 @@ impl PubSub {
         ctx.data_opt::<Self>()
     }
 
-    pub fn start_triggers(&self, pool: Pool<Postgres>) {
+    pub fn start_triggers(&self, pool: &Pool<Postgres>) {
         info!("Starting subscription triggers");
 
         let pubsub_blocks = self.clone();
         let pool_blocks = pool.clone();
         tokio::spawn(async move {
-            listen_for_blocks(pubsub_blocks, pool_blocks).await;
+            listen_for_blocks(pubsub_blocks, pool_blocks.clone()).await;
         });
 
         let pubsub_txs = self.clone();
         let pool_txs = pool.clone();
         tokio::spawn(async move {
-            listen_for_transactions(pubsub_txs, pool_txs).await;
+            listen_for_transactions(pubsub_txs, pool_txs.clone()).await;
         });
 
         let pubsub_count = self.clone();
         let pool_count = pool.clone();
         tokio::spawn(async move {
-            listen_for_transaction_count(pubsub_count, pool_count).await;
+            listen_for_transaction_count(pubsub_count, pool_count.clone()).await;
         });
     }
 }
