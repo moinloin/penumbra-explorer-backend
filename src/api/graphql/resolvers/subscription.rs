@@ -8,6 +8,7 @@ use crate::api::graphql::{
 use sqlx::PgPool;
 use std::sync::Arc;
 
+#[allow(clippy::module_name_repetitions)]
 pub struct SubscriptionRoot;
 
 #[Subscription]
