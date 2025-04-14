@@ -1,7 +1,6 @@
 use crate::api::graphql::resolvers::{QueryRoot, SubscriptionRoot};
 use async_graphql::{
-    EmptyMutation, InputValueError, InputValueResult, Scalar, ScalarType,
-    SchemaBuilder, Value,
+    EmptyMutation, InputValueError, InputValueResult, Scalar, ScalarType, SchemaBuilder, Value,
 };
 use sqlx::types::chrono::{DateTime as ChronoDateTime, Utc};
 
