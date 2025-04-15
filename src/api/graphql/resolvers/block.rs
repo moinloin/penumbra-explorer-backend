@@ -82,7 +82,7 @@ pub async fn resolve_blocks_collection(
     let mut count_query = String::from("SELECT COUNT(*) FROM explorer_block_details");
 
     if let Some(filter) = &filter {
-        if let Some(height) = filter.height {
+        if let Some(_height) = filter.height {
             count_query.push_str(" WHERE height = $1");
         }
     }
@@ -115,7 +115,7 @@ pub async fn resolve_blocks_collection(
     let length = limit.length.unwrap_or(10);
     let offset = limit.offset.unwrap_or(0);
 
-    query.push_str(&format!(" LIMIT {} OFFSET {}", length, offset));
+    query.push_str(&format!(" LIMIT {length} OFFSET {offset}"));
 
     let mut query_builder = sqlx::query(&query);
 
