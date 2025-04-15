@@ -85,15 +85,32 @@ impl Root {
         ctx: &async_graphql::Context<'_>,
     ) -> async_graphql::Result<impl Stream<Item = TransactionCountUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
+        let pool = Arc::new(ctx.data::<PgPool>()?.clone());
+
         let receiver = pubsub.transaction_count_subscribe();
 
         let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
-        Ok(StreamExt::filter_map(stream, |result| async move {
+
+        let initial_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM explorer_transactions")
+            .fetch_one(&*pool)
+            .await
+            .unwrap_or(0);
+
+        let initial = futures_util::stream::once(async move {
+            TransactionCountUpdate { count: initial_count }
+        });
+
+        let real_time = stream.filter_map(|result| async move {
             match result {
                 Ok(count) => Some(TransactionCountUpdate { count }),
-                Err(_) => None,
+                Err(_) => {
+                    tracing::error!("Failed to receive transaction count from broadcast channel");
+                    None
+                }
             }
-        }))
+        });
+
+        Ok(futures_util::stream::select(initial, real_time))
     }
 
     async fn latest_blocks(
