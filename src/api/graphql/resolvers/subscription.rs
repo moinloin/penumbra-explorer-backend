@@ -222,6 +222,7 @@ async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpd
 
     let blocks = rows
         .into_iter()
+        .rev()
         .map(|(height, timestamp, num_transactions)| BlockUpdate {
             height,
             created_at: DateTime(timestamp),
@@ -246,6 +247,7 @@ async fn get_latest_transactions(
 
     let transactions = rows
         .into_iter()
+        .rev() // Reverse the order to make oldest first, newest last
         .map(|(block_height, tx_hash, raw_data)| {
             let hash = hex::encode_upper(&tx_hash);
 
