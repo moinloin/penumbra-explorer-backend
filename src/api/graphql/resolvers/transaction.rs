@@ -1,6 +1,9 @@
 use crate::api::graphql::{
     context::ApiContext,
-    types::{Block, CollectionLimit, Event, RangeDirection, Transaction, TransactionCollection, TransactionFilter, TransactionsSelector},
+    types::{
+        Block, CollectionLimit, Event, RangeDirection, Transaction, TransactionCollection,
+        TransactionFilter, TransactionsSelector,
+    },
 };
 use async_graphql::Result;
 use sqlx::Row;
@@ -147,10 +150,10 @@ pub async fn resolve_transactions_collection(
     filter: Option<TransactionFilter>,
 ) -> Result<TransactionCollection> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
-    
+
     // Get the total count
     let mut count_query = String::from("SELECT COUNT(*) FROM explorer_transactions");
-    
+
     if let Some(filter) = &filter {
         if let Some(hash) = &filter.hash {
             let Ok(hash_bytes) = hex::decode(hash.trim_start_matches("0x")) else {
@@ -162,7 +165,7 @@ pub async fn resolve_transactions_collection(
             count_query.push_str(" WHERE tx_hash = $1");
         }
     }
-    
+
     let total_count: i64 = if let Some(filter) = &filter {
         if let Some(hash) = &filter.hash {
             let Ok(hash_bytes) = hex::decode(hash.trim_start_matches("0x")) else {
@@ -176,14 +179,10 @@ pub async fn resolve_transactions_collection(
                 .fetch_one(db)
                 .await?
         } else {
-            sqlx::query_scalar(&count_query)
-                .fetch_one(db)
-                .await?
+            sqlx::query_scalar(&count_query).fetch_one(db).await?
         }
     } else {
-        sqlx::query_scalar(&count_query)
-            .fetch_one(db)
-            .await?
+        sqlx::query_scalar(&count_query).fetch_one(db).await?
     };
 
     // Build the main query
@@ -202,10 +201,10 @@ pub async fn resolve_transactions_collection(
         JOIN
             explorer_block_details b ON t.block_height = b.height
     ";
-    
+
     let mut query = String::from(base_query);
     let mut params = Vec::new();
-    
+
     if let Some(filter) = &filter {
         if let Some(hash) = &filter.hash {
             let Ok(hash_bytes) = hex::decode(hash.trim_start_matches("0x")) else {
@@ -218,24 +217,24 @@ pub async fn resolve_transactions_collection(
             params.push(hash_bytes);
         }
     }
-    
+
     query.push_str(" ORDER BY t.timestamp DESC, t.tx_hash ASC");
-    
+
     let length = limit.length.unwrap_or(10);
     let offset = limit.offset.unwrap_or(0);
-    
+
     query.push_str(&format!(" LIMIT {} OFFSET {}", length, offset));
-    
+
     let mut query_builder = sqlx::query(&query);
-    
+
     for param in &params {
         query_builder = query_builder.bind(param);
     }
-    
+
     let rows = query_builder.fetch_all(db).await?;
-    
+
     let transactions = process_transaction_rows(rows)?;
-    
+
     Ok(TransactionCollection {
         items: transactions,
         total: i32::try_from(total_count).unwrap_or(0),
