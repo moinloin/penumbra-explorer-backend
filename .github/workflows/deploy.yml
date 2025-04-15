@@ -95,9 +95,17 @@ jobs:
         with:
           key: ${{ secrets.DEPLOY_SSH_KEY_DEV }}
           known_hosts: unnecessary
+          config: |
+            Host ${{ env.SERVER_HOST_DEV }}
+              User ${{ env.SERVER_USER_DEV }}
+              IdentityFile ~/.ssh/id_rsa
+              StrictHostKeyChecking no
 
       - name: Add server to known hosts
         run: ssh-keyscan -H ${{ env.SERVER_HOST_DEV }} >> ~/.ssh/known_hosts
+
+      - name: Test SSH connection
+        run: ssh ${{ env.SERVER_USER_DEV }}@${{ env.SERVER_HOST_DEV }} 'echo "SSH connection successful"'
 
       - name: Transfer Docker image and genesis file
         run: |
@@ -112,8 +120,8 @@ jobs:
           docker rm ${{ env.APP_NAME_DEV }} || true && \
           docker run -d --name ${{ env.APP_NAME_DEV }} \
             -p 8080:8080 \
-            -e SOURCE_DB_URL=${{ secrets.SOURCE_DB_URL }} \
-            -e DEST_DB_URL=${{ secrets.DEST_DB_URL }} \
+            -e SOURCE_DB_URL="postgresql://pkldev:OutplayedHerbalDuoSuitorScrubberCopartner@mainnet-events-1-do-user-10342154-0.k.db.ondigitalocean.com:25061/cometbft-pldev-01?sslmode=require" \
+            -e DEST_DB_URL="postgresql://localhost:5432/explorer?sslmode=disable" \
             -v $(pwd)/genesis.json:/app/genesis.json \
             --restart unless-stopped \
             ${{ env.APP_NAME_DEV }}:latest'
