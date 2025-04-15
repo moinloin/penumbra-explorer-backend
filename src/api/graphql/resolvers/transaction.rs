@@ -156,7 +156,7 @@ pub async fn resolve_transactions_collection(
 
     if let Some(filter) = &filter {
         if let Some(hash) = &filter.hash {
-            let Ok(hash_bytes) = hex::decode(hash.trim_start_matches("0x")) else {
+            let Ok(_hash_bytes) = hex::decode(hash.trim_start_matches("0x")) else {
                 return Ok(TransactionCollection {
                     items: vec![],
                     total: 0,
@@ -223,7 +223,7 @@ pub async fn resolve_transactions_collection(
     let length = limit.length.unwrap_or(10);
     let offset = limit.offset.unwrap_or(0);
 
-    query.push_str(&format!(" LIMIT {} OFFSET {}", length, offset));
+    query.push_str(&format!(" LIMIT {length} OFFSET {offset}"));
 
     let mut query_builder = sqlx::query(&query);
 
