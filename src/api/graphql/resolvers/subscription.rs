@@ -90,13 +90,16 @@ impl Root {
         let receiver = pubsub.transaction_count_subscribe();
         let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
 
-        let initial_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM explorer_transactions")
-            .fetch_one(&*pool)
-            .await
-            .unwrap_or(0);
+        let initial_count =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM explorer_transactions")
+                .fetch_one(&*pool)
+                .await
+                .unwrap_or(0);
 
         let initial = futures_util::stream::once(async move {
-            Some(TransactionCountUpdate { count: initial_count })
+            Some(TransactionCountUpdate {
+                count: initial_count,
+            })
         });
 
         let real_time = stream.map(|result| {
