@@ -1,7 +1,7 @@
 use crate::api::graphql::{
     pubsub::PubSub,
     scalars::DateTime,
-    types::subscription_types::{BlockUpdate, TransactionCountUpdate, TransactionUpdate},
+    types::subscription::{BlockUpdate, TransactionCountUpdate, TransactionUpdate},
 };
 use async_graphql::{Context, Result, Subscription};
 use futures_util::stream::Stream;
@@ -88,7 +88,6 @@ impl Root {
         let pool = Arc::new(ctx.data::<PgPool>()?.clone());
 
         let receiver = pubsub.transaction_count_subscribe();
-
         let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
 
         let initial_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM explorer_transactions")
@@ -97,20 +96,19 @@ impl Root {
             .unwrap_or(0);
 
         let initial = futures_util::stream::once(async move {
-            TransactionCountUpdate { count: initial_count }
+            Some(TransactionCountUpdate { count: initial_count })
         });
 
-        let real_time = stream.filter_map(|result| async move {
-            match result {
-                Ok(count) => Some(TransactionCountUpdate { count }),
-                Err(_) => {
-                    tracing::error!("Failed to receive transaction count from broadcast channel");
-                    None
-                }
+        let real_time = stream.map(|result| {
+            if let Ok(count) = result {
+                Some(TransactionCountUpdate { count })
+            } else {
+                tracing::error!("Failed to receive transaction count from broadcast channel");
+                None
             }
         });
 
-        Ok(futures_util::stream::select(initial, real_time))
+        Ok(futures_util::stream::select(initial, real_time).filter_map(|x| async move { x }))
     }
 
     async fn latest_blocks(
