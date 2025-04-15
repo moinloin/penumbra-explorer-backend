@@ -78,15 +78,15 @@ pub async fn resolve_blocks_collection(
     filter: Option<BlockFilter>,
 ) -> Result<BlockCollection> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
-    
+
     let mut count_query = String::from("SELECT COUNT(*) FROM explorer_block_details");
-    
+
     if let Some(filter) = &filter {
         if let Some(height) = filter.height {
             count_query.push_str(" WHERE height = $1");
         }
     }
-    
+
     let total_count: i64 = if let Some(filter) = &filter {
         if let Some(height) = filter.height {
             sqlx::query_scalar(&count_query)
@@ -94,41 +94,37 @@ pub async fn resolve_blocks_collection(
                 .fetch_one(db)
                 .await?
         } else {
-            sqlx::query_scalar(&count_query)
-                .fetch_one(db)
-                .await?
+            sqlx::query_scalar(&count_query).fetch_one(db).await?
         }
     } else {
-        sqlx::query_scalar(&count_query)
-            .fetch_one(db)
-            .await?
+        sqlx::query_scalar(&count_query).fetch_one(db).await?
     };
 
     let mut query = String::from("SELECT height, timestamp, raw_json FROM explorer_block_details");
     let mut params = Vec::new();
-    
+
     if let Some(filter) = &filter {
         if let Some(height) = filter.height {
             query.push_str(" WHERE height = $1");
             params.push(i64::from(height));
         }
     }
-    
+
     query.push_str(" ORDER BY height DESC");
-    
+
     let length = limit.length.unwrap_or(10);
     let offset = limit.offset.unwrap_or(0);
-    
+
     query.push_str(&format!(" LIMIT {} OFFSET {}", length, offset));
-    
+
     let mut query_builder = sqlx::query(&query);
-    
+
     for param in params {
         query_builder = query_builder.bind(param);
     }
-    
+
     let rows = query_builder.fetch_all(db).await?;
-    
+
     let blocks = rows
         .into_iter()
         .map(|row| {
@@ -139,7 +135,7 @@ pub async fn resolve_blocks_collection(
             )
         })
         .collect();
-    
+
     Ok(BlockCollection {
         items: blocks,
         total: i32::try_from(total_count).unwrap_or(0),
