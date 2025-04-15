@@ -123,6 +123,5 @@ jobs:
             -p 8080:8080 \
             -e SOURCE_DB_URL="postgresql://pkldev:OutplayedHerbalDuoSuitorScrubberCopartner@mainnet-events-1-do-user-10342154-0.k.db.ondigitalocean.com:25061/cometbft-pldev-01?sslmode=require" \
             -e DEST_DB_URL="${{ env.DEST_DB_URL_DEV }}" \
-            -v ~/deployments/genesis.json:/app/genesis.json \
             --restart unless-stopped \
             ${{ env.APP_NAME_DEV }}:latest'
