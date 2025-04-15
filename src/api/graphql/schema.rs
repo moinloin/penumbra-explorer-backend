@@ -4,8 +4,9 @@ use crate::api::graphql::{
     resolvers::{QueryRoot, SubscriptionRoot},
     scalars,
     types::{
-        Action, Block, BlockCollection, BlockUpdate, CollectionItem, Event, Fee, Transaction, TransactionBody,
-        TransactionCollection, TransactionCountUpdate, TransactionParameters, TransactionUpdate,
+        Action, Block, BlockCollection, BlockUpdate, CollectionItem, Event, Fee, Transaction,
+        TransactionBody, TransactionCollection, TransactionCountUpdate, TransactionParameters,
+        TransactionUpdate,
     },
 };
 use async_graphql::Schema as AsyncGraphQLSchema;
