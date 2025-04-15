@@ -12,8 +12,8 @@ pub use asset::*;
 pub use block::*;
 pub use event::*;
 pub use inputs::{
-    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, LatestBlock, LatestTransactions,
-    TransactionFilter, TransactionRange, TransactionsSelector,
+    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, LatestBlock,
+    LatestTransactions, TransactionFilter, TransactionRange, TransactionsSelector,
 };
 pub use stats::*;
 pub use subscription::*;
