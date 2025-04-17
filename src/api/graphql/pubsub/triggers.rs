@@ -1,14 +1,13 @@
 use sqlx::{Pool, Postgres};
 use tokio::time::{interval, Duration};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use super::PubSub;
 
 /// Starts all subscription triggers as concurrent tasks
-pub async fn start_triggers(pubsub: PubSub, pool: Pool<Postgres>) {
+pub async fn start(pubsub: PubSub, pool: Pool<Postgres>) {
     info!("Starting real-time subscription triggers");
 
-    // Set up database notification triggers if they don't exist yet
     if let Err(e) = setup_notification_triggers(&pool).await {
         error!("Failed to set up database notification triggers: {}", e);
         info!("Falling back to polling mechanism only");
@@ -16,14 +15,12 @@ pub async fn start_triggers(pubsub: PubSub, pool: Pool<Postgres>) {
         info!("Database notification triggers set up successfully");
     }
 
-    // Start polling mechanism since we're not using LISTEN/NOTIFY due to compatibility issues
     fallback_polling(pubsub, pool).await;
 }
 
-/// Sets up PostgreSQL notification triggers for real-time updates
+/// Sets up `PostgreSQL` notification triggers for real-time updates
 async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
-    // Create notification functions
-    sqlx::query(r#"
+    sqlx::query(r"
         CREATE OR REPLACE FUNCTION notify_block_update()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -31,9 +28,9 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#).execute(pool).await?;
+    ").execute(pool).await?;
 
-    sqlx::query(r#"
+    sqlx::query(r"
         CREATE OR REPLACE FUNCTION notify_transaction_update()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -42,26 +39,24 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    "#).execute(pool).await?;
+    ").execute(pool).await?;
 
-    // Drop existing triggers if they exist
     let _ = sqlx::query("DROP TRIGGER IF EXISTS block_update_trigger ON explorer_block_details")
         .execute(pool).await;
     let _ = sqlx::query("DROP TRIGGER IF EXISTS transaction_update_trigger ON explorer_transactions")
         .execute(pool).await;
 
-    // Create triggers for blocks and transactions
-    sqlx::query(r#"
+    sqlx::query(r"
         CREATE TRIGGER block_update_trigger
         AFTER INSERT OR UPDATE ON explorer_block_details
         FOR EACH ROW EXECUTE FUNCTION notify_block_update();
-    "#).execute(pool).await?;
+    ").execute(pool).await?;
 
-    sqlx::query(r#"
+    sqlx::query(r"
         CREATE TRIGGER transaction_update_trigger
         AFTER INSERT OR UPDATE ON explorer_transactions
         FOR EACH ROW EXECUTE FUNCTION notify_transaction_update();
-    "#).execute(pool).await?;
+    ").execute(pool).await?;
 
     info!("Successfully set up database notification triggers");
     Ok(())
