@@ -1,10 +1,10 @@
 use async_graphql::Context;
 use sqlx::{Pool, Postgres};
 use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 mod triggers;
-pub use triggers::start_triggers;
+pub use triggers::start;
 
 #[derive(Clone)]
 pub struct PubSub {
@@ -97,14 +97,14 @@ impl PubSub {
         ctx.data_opt::<Self>()
     }
 
-    pub fn start_triggers(&self, pool: &Pool<Postgres>) {
+    pub fn start_subscriptions(&self, pool: &Pool<Postgres>) {
         info!("Starting subscription triggers");
 
         let pubsub_clone = self.clone();
         let pool_clone = pool.clone();
 
         tokio::spawn(async move {
-            start_triggers(pubsub_clone, pool_clone).await;
+            start(pubsub_clone, pool_clone).await;
         });
     }
 }
@@ -131,7 +131,7 @@ mod tests {
             result = blocks_rx.recv() => {
                 assert_eq!(result.unwrap(), 100);
             }
-            _ = sleep(Duration::from_millis(100)) => {
+            () = sleep(Duration::from_millis(100)) => {
                 panic!("Timeout waiting for block update");
             }
         }
@@ -140,7 +140,7 @@ mod tests {
             result = txs_rx.recv() => {
                 assert_eq!(result.unwrap(), 200);
             }
-            _ = sleep(Duration::from_millis(100)) => {
+            () = sleep(Duration::from_millis(100)) => {
                 panic!("Timeout waiting for transaction update");
             }
         }
@@ -149,7 +149,7 @@ mod tests {
             result = count_rx.recv() => {
                 assert_eq!(result.unwrap(), 50);
             }
-            _ = sleep(Duration::from_millis(100)) => {
+            () = sleep(Duration::from_millis(100)) => {
                 panic!("Timeout waiting for transaction count update");
             }
         }
