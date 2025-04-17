@@ -1,8 +1,10 @@
 use async_graphql::Context;
 use sqlx::{Pool, Postgres};
 use tokio::sync::broadcast;
-use tokio::time::{interval, Duration};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
+
+mod triggers;
+pub use triggers::start_triggers;
 
 #[derive(Clone)]
 pub struct PubSub {
@@ -20,9 +22,9 @@ impl Default for PubSub {
 impl PubSub {
     #[must_use]
     pub fn new() -> Self {
-        let (blocks_tx, _) = broadcast::channel(100);
-        let (transactions_tx, _) = broadcast::channel(100);
-        let (transaction_count_tx, _) = broadcast::channel(100);
+        let (blocks_tx, _) = broadcast::channel(1000);
+        let (transactions_tx, _) = broadcast::channel(1000);
+        let (transaction_count_tx, _) = broadcast::channel(1000);
         Self {
             blocks_tx,
             transactions_tx,
@@ -46,15 +48,48 @@ impl PubSub {
     }
 
     pub fn publish_block(&self, height: i64) {
-        let _ = self.blocks_tx.send(height);
+        match self.blocks_tx.send(height) {
+            Ok(_) => debug!("Published block update: {}", height),
+            Err(e) => {
+                // Handle the error case
+                let receiver_count = self.blocks_tx.receiver_count();
+                if receiver_count == 0 {
+                    debug!("No receivers for block update");
+                } else {
+                    warn!("Failed to publish block update: {}", e);
+                }
+            }
+        }
     }
 
     pub fn publish_transaction(&self, id: i64) {
-        let _ = self.transactions_tx.send(id);
+        match self.transactions_tx.send(id) {
+            Ok(_) => debug!("Published transaction update: {}", id),
+            Err(e) => {
+                // Handle the error case
+                let receiver_count = self.transactions_tx.receiver_count();
+                if receiver_count == 0 {
+                    debug!("No receivers for transaction update");
+                } else {
+                    warn!("Failed to publish transaction update: {}", e);
+                }
+            }
+        }
     }
 
     pub fn publish_transaction_count(&self, count: i64) {
-        let _ = self.transaction_count_tx.send(count);
+        match self.transaction_count_tx.send(count) {
+            Ok(_) => debug!("Published transaction count update: {}", count),
+            Err(e) => {
+                // Handle the error case
+                let receiver_count = self.transaction_count_tx.receiver_count();
+                if receiver_count == 0 {
+                    debug!("No receivers for transaction count update");
+                } else {
+                    warn!("Failed to publish transaction count update: {}", e);
+                }
+            }
+        }
     }
 
     #[must_use]
@@ -65,106 +100,75 @@ impl PubSub {
     pub fn start_triggers(&self, pool: &Pool<Postgres>) {
         info!("Starting subscription triggers");
 
-        let pubsub_blocks = self.clone();
-        let pool_blocks = pool.clone();
-        tokio::spawn(async move {
-            listen_for_blocks(pubsub_blocks, pool_blocks.clone()).await;
-        });
+        let pubsub_clone = self.clone();
+        let pool_clone = pool.clone();
 
-        let pubsub_txs = self.clone();
-        let pool_txs = pool.clone();
         tokio::spawn(async move {
-            listen_for_transactions(pubsub_txs, pool_txs.clone()).await;
-        });
-
-        let pubsub_count = self.clone();
-        let pool_count = pool.clone();
-        tokio::spawn(async move {
-            listen_for_transaction_count(pubsub_count, pool_count.clone()).await;
+            start_triggers(pubsub_clone, pool_clone).await;
         });
     }
 }
 
-async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
-    let mut interval = interval(Duration::from_secs(6));
-    let mut last_height: Option<i64> = None;
-    loop {
-        interval.tick().await;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::broadcast::error::RecvError;
+    use tokio::time::{sleep, Duration};
 
-        match get_latest_block_height(&pool).await {
-            Ok(Some(height)) => {
-                if last_height.is_none() || last_height.unwrap() < height {
-                    debug!("New block detected: {}", height);
-                    pubsub.publish_block(height);
-                    last_height = Some(height);
-                }
+    #[tokio::test]
+    async fn test_pubsub_channels() {
+        let pubsub = PubSub::new();
+
+        let mut blocks_rx = pubsub.blocks_subscribe();
+        let mut txs_rx = pubsub.transactions_subscribe();
+        let mut count_rx = pubsub.transaction_count_subscribe();
+
+        pubsub.publish_block(100);
+        pubsub.publish_transaction(200);
+        pubsub.publish_transaction_count(50);
+
+        tokio::select! {
+            result = blocks_rx.recv() => {
+                assert_eq!(result.unwrap(), 100);
             }
-            Ok(None) => {}
-            Err(e) => error!("Error fetching latest block: {}", e),
+            _ = sleep(Duration::from_millis(100)) => {
+                panic!("Timeout waiting for block update");
+            }
+        }
+
+        tokio::select! {
+            result = txs_rx.recv() => {
+                assert_eq!(result.unwrap(), 200);
+            }
+            _ = sleep(Duration::from_millis(100)) => {
+                panic!("Timeout waiting for transaction update");
+            }
+        }
+
+        tokio::select! {
+            result = count_rx.recv() => {
+                assert_eq!(result.unwrap(), 50);
+            }
+            _ = sleep(Duration::from_millis(100)) => {
+                panic!("Timeout waiting for transaction count update");
+            }
         }
     }
-}
 
-async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
-    let mut interval = interval(Duration::from_secs(6));
-    let mut last_tx_height: Option<i64> = None;
-    loop {
-        interval.tick().await;
+    #[tokio::test]
+    async fn test_pubsub_lagged_receiver() {
+        let pubsub = PubSub::new();
+        let mut rx = pubsub.blocks_subscribe();
 
-        match get_latest_transaction_height(&pool).await {
-            Ok(Some(height)) => {
-                if last_tx_height.is_none() || last_tx_height.unwrap() < height {
-                    debug!("New transaction detected at height: {}", height);
-                    pubsub.publish_transaction(height);
-                    last_tx_height = Some(height);
-                }
-            }
-            Ok(None) => {}
-            Err(e) => error!("Error fetching latest transaction: {}", e),
+        for i in 0..1200 {
+            pubsub.publish_block(i);
         }
+
+        let result = rx.recv().await;
+        assert!(matches!(result, Err(RecvError::Lagged(_))));
+
+        pubsub.publish_block(1500);
+        let result = rx.recv().await;
+        assert_eq!(result.unwrap(), 1500);
     }
-}
-
-async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
-    let mut interval = interval(Duration::from_secs(6));
-    let mut last_count: Option<i64> = None;
-    loop {
-        interval.tick().await;
-
-        match get_transaction_count(&pool).await {
-            Ok(count) => {
-                if last_count.is_none() || last_count.unwrap() != count {
-                    debug!("Transaction count changed: {}", count);
-                    pubsub.publish_transaction_count(count);
-                    last_count = Some(count);
-                }
-            }
-            Err(e) => error!("Error fetching transaction count: {}", e),
-        }
-    }
-}
-
-async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
-    let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1",
-    )
-    .fetch_optional(pool)
-    .await?;
-    Ok(result.map(|r| r.0))
-}
-
-async fn get_latest_transaction_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
-    let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT block_height FROM explorer_transactions ORDER BY timestamp DESC LIMIT 1",
-    )
-    .fetch_optional(pool)
-    .await?;
-    Ok(result.map(|r| r.0))
-}
-
-async fn get_transaction_count(pool: &Pool<Postgres>) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM explorer_transactions")
-        .fetch_one(pool)
-        .await?;
-    Ok(result.0)
 }
