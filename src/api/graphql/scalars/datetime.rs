@@ -1,7 +1,6 @@
-use crate::api::graphql::resolvers::QueryRoot;
+use crate::api::graphql::resolvers::{QueryRoot, SubscriptionRoot};
 use async_graphql::{
-    EmptyMutation, EmptySubscription, InputValueError, InputValueResult, Scalar, ScalarType,
-    SchemaBuilder, Value,
+    EmptyMutation, InputValueError, InputValueResult, Scalar, ScalarType, SchemaBuilder, Value,
 };
 use sqlx::types::chrono::{DateTime as ChronoDateTime, Utc};
 
@@ -41,7 +40,7 @@ impl From<DateTime> for ChronoDateTime<Utc> {
 
 /// Register the `DateTime` scalar with the schema
 pub fn register(
-    builder: SchemaBuilder<QueryRoot, EmptyMutation, EmptySubscription>,
-) -> SchemaBuilder<QueryRoot, EmptyMutation, EmptySubscription> {
+    builder: SchemaBuilder<QueryRoot, EmptyMutation, SubscriptionRoot>,
+) -> SchemaBuilder<QueryRoot, EmptyMutation, SubscriptionRoot> {
     builder
 }

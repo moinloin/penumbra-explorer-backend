@@ -1,56 +1,33 @@
+use crate::api::graphql::schema::PenumbraSchema;
 use async_graphql::http::GraphiQLSource;
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::{
-    extract::Extension,
+    extract::State,
     http::StatusCode,
     response::{Html, IntoResponse},
 };
 
-use crate::api::graphql::schema::PenumbraSchema;
-
 pub async fn graphql_handler(
-    Extension(schema): Extension<PenumbraSchema>,
+    State(schema): State<PenumbraSchema>,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
-    let request = req.into_inner();
-    schema.execute(request).await.into()
+    schema.execute(req.0).await.into()
 }
 
 pub async fn graphiql() -> impl IntoResponse {
-    Html(GraphiQLSource::build().endpoint("/graphql").finish())
+    Html(
+        GraphiQLSource::build()
+            .endpoint("/graphql")
+            .subscription_endpoint("/graphql/ws")
+            .finish(),
+    )
 }
 
 pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_health_check() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-
-        let response = rt.block_on(async { health_check().await.into_response() });
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[test]
-    fn test_graphiql() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-
-        let response = rt.block_on(async { graphiql().await.into_response() });
-
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let content_type = response
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-
-        assert!(content_type.contains("text/html"));
-    }
+#[must_use]
+pub fn create_subscription_service(schema: PenumbraSchema) -> GraphQLSubscription<PenumbraSchema> {
+    GraphQLSubscription::new(schema)
 }

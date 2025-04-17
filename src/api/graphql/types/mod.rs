@@ -1,19 +1,22 @@
 mod asset;
 mod block;
 mod event;
-mod inputs;
+pub mod inputs;
 mod stats;
+#[allow(clippy::module_name_repetitions)]
+pub mod subscription;
 mod transaction;
-mod unions;
+pub mod unions;
 
 pub use asset::*;
 pub use block::*;
 pub use event::*;
 pub use inputs::{
-    BlockHeightRange, BlocksSelector, LatestBlock, LatestTransactions, TransactionRange,
-    TransactionsSelector,
+    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, LatestBlock,
+    LatestTransactions, TransactionFilter, TransactionRange, TransactionsSelector,
 };
 pub use stats::*;
+pub use subscription::*;
 pub use transaction::{
     extract_transaction_body, DbRawTransaction, Fee, RangeDirection, Transaction, TransactionBody,
     TransactionParameters,

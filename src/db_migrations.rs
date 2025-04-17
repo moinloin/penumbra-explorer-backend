@@ -40,28 +40,16 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
     if table_exists {
         info!("Migration tracking table exists, using existing migration state");
     } else {
-        info!("Migration tracking table doesn't exist, creating it");
-
-        diesel::sql_query(
-            "
-            CREATE TABLE __diesel_schema_migrations (
-                version VARCHAR(50) PRIMARY KEY,
-                run_on TIMESTAMP NOT NULL DEFAULT NOW()
-            )",
-        )
-        .execute(&mut conn)?;
-
-        diesel::sql_query(
-            "INSERT INTO __diesel_schema_migrations (version) VALUES ('20250324000001')",
-        )
-        .execute(&mut conn)?;
-
-        info!("Set up migration tracking table, marked initial schema as applied");
+        info!("Migration tracking table doesn't exist, using Diesel's migration system");
     }
 
     match conn.run_pending_migrations(MIGRATIONS) {
         Ok(applied) => {
-            info!("Successfully applied {} migrations", applied.len());
+            info!(
+                "Successfully applied {} migrations: {:?}",
+                applied.len(),
+                applied
+            );
         }
         Err(e) => {
             warn!("Failed to run migrations: {:?}", e);
