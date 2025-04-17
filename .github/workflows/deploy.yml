@@ -2,11 +2,11 @@ name: Rust CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -74,14 +74,12 @@ jobs:
     name: Deploy to Hetzner
     runs-on: ubuntu-latest
     needs: [code-quality, test]
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'release' && github.event.release.target_commitish == 'main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -89,24 +87,19 @@ jobs:
           push: false
           tags: ${{ env.APP_NAME }}:latest
           outputs: type=docker,dest=/tmp/${{ env.APP_NAME }}.tar
-
       - name: Install SSH key
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           known_hosts: unnecessary
-
       - name: Add server to known hosts
         run: ssh-keyscan -H ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts
-
       - name: Transfer Docker image
         run: |
           scp /tmp/${{ env.APP_NAME }}.tar ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:~/deployments/
-
       - name: Deploy with Blue-Green mechanism
         run: |
           ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} 'sudo /opt/deployment/deploy.sh'
-
       - name: Check deployment status
         run: |
           ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} 'cat /opt/deployment/deploy.log | tail -20'
