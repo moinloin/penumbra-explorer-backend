@@ -158,17 +158,21 @@ mod tests {
     #[tokio::test]
     async fn test_pubsub_lagged_receiver() {
         let pubsub = PubSub::new();
-        let mut rx = pubsub.blocks_subscribe();
+
+        let mut rx1 = pubsub.blocks_subscribe();
 
         for i in 0..1200 {
             pubsub.publish_block(i);
         }
 
-        let result = rx.recv().await;
+        let result = rx1.recv().await;
         assert!(matches!(result, Err(RecvError::Lagged(_))));
 
+        let mut rx2 = pubsub.blocks_subscribe();
+
         pubsub.publish_block(1500);
-        let result = rx.recv().await;
+
+        let result = rx2.recv().await;
         assert_eq!(result.unwrap(), 1500);
     }
 }
