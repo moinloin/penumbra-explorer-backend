@@ -1,21 +1,90 @@
 use sqlx::{Pool, Postgres};
 use tokio::time::{interval, Duration};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use super::PubSub;
 
+/// Starts all subscription triggers as concurrent tasks
 pub async fn start_triggers(pubsub: PubSub, pool: Pool<Postgres>) {
-    info!("Starting subscription triggers");
+    info!("Starting real-time subscription triggers");
+
+    // Set up database notification triggers if they don't exist yet
+    if let Err(e) = setup_notification_triggers(&pool).await {
+        error!("Failed to set up database notification triggers: {}", e);
+        info!("Falling back to polling mechanism only");
+    } else {
+        info!("Database notification triggers set up successfully");
+    }
+
+    // Start polling mechanism since we're not using LISTEN/NOTIFY due to compatibility issues
+    fallback_polling(pubsub, pool).await;
+}
+
+/// Sets up PostgreSQL notification triggers for real-time updates
+async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
+    // Create notification functions
+    sqlx::query(r#"
+        CREATE OR REPLACE FUNCTION notify_block_update()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            PERFORM pg_notify('explorer_block_update', NEW.height::text);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    "#).execute(pool).await?;
+
+    sqlx::query(r#"
+        CREATE OR REPLACE FUNCTION notify_transaction_update()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            PERFORM pg_notify('explorer_tx_update', NEW.block_height::text);
+            PERFORM pg_notify('explorer_tx_count_update', (SELECT COUNT(*)::text FROM explorer_transactions));
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    "#).execute(pool).await?;
+
+    // Drop existing triggers if they exist
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS block_update_trigger ON explorer_block_details")
+        .execute(pool).await;
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS transaction_update_trigger ON explorer_transactions")
+        .execute(pool).await;
+
+    // Create triggers for blocks and transactions
+    sqlx::query(r#"
+        CREATE TRIGGER block_update_trigger
+        AFTER INSERT OR UPDATE ON explorer_block_details
+        FOR EACH ROW EXECUTE FUNCTION notify_block_update();
+    "#).execute(pool).await?;
+
+    sqlx::query(r#"
+        CREATE TRIGGER transaction_update_trigger
+        AFTER INSERT OR UPDATE ON explorer_transactions
+        FOR EACH ROW EXECUTE FUNCTION notify_transaction_update();
+    "#).execute(pool).await?;
+
+    info!("Successfully set up database notification triggers");
+    Ok(())
+}
+
+/// Fallback polling mechanism
+/// This is the main method we'll use since LISTEN/NOTIFY has compatibility issues
+async fn fallback_polling(pubsub: PubSub, pool: Pool<Postgres>) {
+    info!("Starting polling mechanism");
+
+    let blocks_interval = interval(Duration::from_secs(1));
+    let txs_interval = interval(Duration::from_secs(1));
+    let count_interval = interval(Duration::from_secs(1));
 
     tokio::join!(
-        listen_for_blocks(pubsub.clone(), pool.clone()),
-        listen_for_transactions(pubsub.clone(), pool.clone()),
-        listen_for_transaction_count(pubsub, pool)
+        poll_blocks(pubsub.clone(), pool.clone(), blocks_interval),
+        poll_transactions(pubsub.clone(), pool.clone(), txs_interval),
+        poll_transaction_count(pubsub, pool, count_interval)
     );
 }
 
-async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
-    let mut interval = interval(Duration::from_secs(1));
+/// Polls for new blocks
+async fn poll_blocks(pubsub: PubSub, pool: Pool<Postgres>, mut interval: tokio::time::Interval) {
     let mut last_height: Option<i64> = None;
 
     loop {
@@ -24,7 +93,7 @@ async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
         match get_latest_block_height(&pool).await {
             Ok(Some(height)) => {
                 if last_height.is_none() || last_height.unwrap() < height {
-                    debug!("New block detected: {}", height);
+                    debug!("Polling: New block detected at height {}", height);
                     pubsub.publish_block(height);
                     last_height = Some(height);
                 }
@@ -35,8 +104,8 @@ async fn listen_for_blocks(pubsub: PubSub, pool: Pool<Postgres>) {
     }
 }
 
-async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
-    let mut interval = interval(Duration::from_secs(1));
+/// Polls for new transactions
+async fn poll_transactions(pubsub: PubSub, pool: Pool<Postgres>, mut interval: tokio::time::Interval) {
     let mut last_tx_height: Option<i64> = None;
 
     loop {
@@ -45,7 +114,7 @@ async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
         match get_latest_transaction_height(&pool).await {
             Ok(Some(height)) => {
                 if last_tx_height.is_none() || last_tx_height.unwrap() < height {
-                    debug!("New transaction detected at height: {}", height);
+                    debug!("Polling: New transaction detected at block height {}", height);
                     pubsub.publish_transaction(height);
                     last_tx_height = Some(height);
                 }
@@ -56,8 +125,8 @@ async fn listen_for_transactions(pubsub: PubSub, pool: Pool<Postgres>) {
     }
 }
 
-async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
-    let mut interval = interval(Duration::from_secs(1));
+/// Polls for changes in transaction count
+async fn poll_transaction_count(pubsub: PubSub, pool: Pool<Postgres>, mut interval: tokio::time::Interval) {
     let mut last_count: Option<i64> = None;
 
     loop {
@@ -66,7 +135,7 @@ async fn listen_for_transaction_count(pubsub: PubSub, pool: Pool<Postgres>) {
         match get_transaction_count(&pool).await {
             Ok(count) => {
                 if last_count.is_none() || last_count.unwrap() != count {
-                    debug!("Transaction count changed: {}", count);
+                    debug!("Polling: Transaction count changed to {}", count);
                     pubsub.publish_transaction_count(count);
                     last_count = Some(count);
                 }
