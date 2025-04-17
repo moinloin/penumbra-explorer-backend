@@ -7,9 +7,8 @@ pub mod parsing;
 pub use options::ExplorerOptions;
 
 use anyhow::{Context, Result};
-use axum::extract::Extension;
 use axum::{
-    http::Method,
+    http::HeaderName,
     routing::{get, post},
     Router,
 };
@@ -60,21 +59,34 @@ impl Explorer {
                 "https://explorer.penumbra.pklabs.me".parse().unwrap(),
                 "https://explorer.penumbra.zone".parse().unwrap(),
             ])
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_methods([
+                axum::http::Method::GET,
+                axum::http::Method::POST,
+                axum::http::Method::OPTIONS,
+            ])
             .allow_headers([
-                "Content-Type".parse().unwrap(),
-                "Authorization".parse().unwrap(),
-                "Accept".parse().unwrap(),
-                "Origin".parse().unwrap(),
-                "X-Requested-With".parse().unwrap(),
+                HeaderName::from_static("content-type"),
+                HeaderName::from_static("authorization"),
+                HeaderName::from_static("accept"),
+                HeaderName::from_static("origin"),
+                HeaderName::from_static("x-requested-with"),
+                HeaderName::from_static("sec-websocket-key"),
+                HeaderName::from_static("sec-websocket-protocol"),
+                HeaderName::from_static("sec-websocket-version"),
+                HeaderName::from_static("upgrade"),
+                HeaderName::from_static("connection"),
             ])
             .allow_credentials(true);
 
         let api_router = Router::new()
             .route("/graphql", post(crate::api::handlers::graphql_handler))
             .route("/graphql/playground", get(crate::api::handlers::graphiql))
+            .route_service(
+                "/graphql/ws",
+                crate::api::handlers::create_subscription_service(schema.clone()),
+            )
             .route("/health", get(crate::api::handlers::health_check))
-            .layer(Extension(schema))
+            .with_state(schema)
             .layer(cors);
 
         let api_host = "0.0.0.0";
@@ -96,14 +108,29 @@ impl Explorer {
         let indexer = Indexer::new(self.options.source_db_url.clone(), index_options)
             .with_index(Box::new(ExplorerView::new()));
 
+        let indexer_task = tokio::spawn(async move {
+            if let Err(e) = indexer.run().await {
+                error!("Indexer exited with error: {:?}", e);
+            }
+        });
+
+        info!("API server listening on {}", addr);
+
+        let server_task = tokio::spawn(async move {
+            if let Err(e) = axum::Server::bind(&addr)
+                .serve(api_router.into_make_service())
+                .await
+            {
+                error!("API server exited with error: {:?}", e);
+            }
+        });
+
         tokio::select! {
-            indexer_result = indexer.run() => {
-                error!("Indexer exited: {:?}", indexer_result);
-                indexer_result?;
+            _ = indexer_task => {
+                error!("Indexer task completed unexpectedly");
             },
-            server_result = axum::Server::bind(&addr).serve(api_router.into_make_service()) => {
-                error!("API server exited: {:?}", server_result);
-                server_result.map_err(|e| anyhow::anyhow!("API server error: {}", e))?;
+            _ = server_task => {
+                error!("Server task completed unexpectedly");
             }
         }
 

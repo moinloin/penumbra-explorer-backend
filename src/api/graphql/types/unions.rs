@@ -1,10 +1,28 @@
 use crate::api::graphql::types::{Block, Transaction};
-use async_graphql::Union;
+use async_graphql::{SimpleObject, Union};
 
 #[derive(Union)]
 pub enum SearchResult {
     Block(Block),
     Transaction(Transaction),
+}
+
+#[derive(Union)]
+pub enum CollectionItem {
+    Block(Block),
+    Transaction(Transaction),
+}
+
+#[derive(SimpleObject)]
+pub struct BlockCollection {
+    pub items: Vec<Block>,
+    pub total: i32,
+}
+
+#[derive(SimpleObject)]
+pub struct TransactionCollection {
+    pub items: Vec<Transaction>,
+    pub total: i32,
 }
 
 #[derive(Union)]

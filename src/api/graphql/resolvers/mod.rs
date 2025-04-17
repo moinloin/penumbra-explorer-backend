@@ -1,14 +1,16 @@
 mod block;
 mod search;
 mod stats;
+mod subscription;
 mod transaction;
 
 use async_graphql::Object;
 
-pub use block::{resolve_block, resolve_blocks};
+pub use block::{resolve_block, resolve_blocks, resolve_blocks_collection};
 pub use search::resolve_search;
 pub use stats::resolve_stats;
-pub use transaction::{resolve_transaction, resolve_transactions};
+pub use subscription::Root as SubscriptionRoot;
+pub use transaction::{resolve_transaction, resolve_transactions, resolve_transactions_collection};
 
 /// Root query type that combines all GraphQL queries
 pub struct QueryRoot;
@@ -33,6 +35,16 @@ impl QueryRoot {
         resolve_blocks(ctx, selector).await
     }
 
+    /// Get blocks with pagination and optional filtering
+    async fn blocks_collection(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        limit: crate::api::graphql::types::CollectionLimit,
+        filter: Option<crate::api::graphql::types::BlockFilter>,
+    ) -> async_graphql::Result<crate::api::graphql::types::BlockCollection> {
+        resolve_blocks_collection(ctx, limit, filter).await
+    }
+
     /// Get a transaction by hash
     async fn transaction(
         &self,
@@ -49,6 +61,16 @@ impl QueryRoot {
         selector: crate::api::graphql::types::TransactionsSelector,
     ) -> async_graphql::Result<Vec<crate::api::graphql::types::Transaction>> {
         resolve_transactions(ctx, selector).await
+    }
+
+    /// Get transactions with pagination and optional filtering
+    async fn transactions_collection(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        limit: crate::api::graphql::types::CollectionLimit,
+        filter: Option<crate::api::graphql::types::TransactionFilter>,
+    ) -> async_graphql::Result<crate::api::graphql::types::TransactionCollection> {
+        resolve_transactions_collection(ctx, limit, filter).await
     }
 
     /// Search for blocks or transactions

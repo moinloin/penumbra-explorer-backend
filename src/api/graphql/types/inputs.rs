@@ -35,3 +35,19 @@ pub struct TransactionsSelector {
     pub latest: Option<LatestTransactions>,
     pub range: Option<TransactionRange>,
 }
+
+#[derive(InputObject)]
+pub struct CollectionLimit {
+    pub length: Option<i32>,
+    pub offset: Option<i32>,
+}
+
+#[derive(InputObject)]
+pub struct BlockFilter {
+    pub height: Option<i32>,
+}
+
+#[derive(InputObject)]
+pub struct TransactionFilter {
+    pub hash: Option<String>,
+}
