@@ -45,7 +45,11 @@ pub fn run_migrations(database_url: &str) -> Result<()> {
 
     match conn.run_pending_migrations(MIGRATIONS) {
         Ok(applied) => {
-            info!("Successfully applied {} migrations: {:?}", applied.len(), applied);
+            info!(
+                "Successfully applied {} migrations: {:?}",
+                applied.len(),
+                applied
+            );
         }
         Err(e) => {
             warn!("Failed to run migrations: {:?}", e);
