@@ -1,4 +1,3 @@
-// src/api/graphql/types/subscription_types.rs
 use crate::api::graphql::scalars::DateTime;
 use async_graphql::SimpleObject;
 
