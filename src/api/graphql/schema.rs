@@ -24,7 +24,7 @@ pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
     let pubsub_clone = pubsub.clone();
 
     tokio::spawn(async move {
-        pubsub_clone.start_triggers(&pool_clone);
+        pubsub_clone.start_subscriptions(&pool_clone);
     });
 
     let builder =
