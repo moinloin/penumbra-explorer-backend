@@ -20,7 +20,8 @@ pub async fn start(pubsub: PubSub, pool: Pool<Postgres>) {
 
 /// Sets up `PostgreSQL` notification triggers for real-time updates
 async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
-    sqlx::query(r"
+    sqlx::query(
+        r"
         CREATE OR REPLACE FUNCTION notify_block_update()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -28,7 +29,10 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    ").execute(pool).await?;
+    ",
+    )
+    .execute(pool)
+    .await?;
 
     sqlx::query(r"
         CREATE OR REPLACE FUNCTION notify_transaction_update()
@@ -42,21 +46,32 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
     ").execute(pool).await?;
 
     let _ = sqlx::query("DROP TRIGGER IF EXISTS block_update_trigger ON explorer_block_details")
-        .execute(pool).await;
-    let _ = sqlx::query("DROP TRIGGER IF EXISTS transaction_update_trigger ON explorer_transactions")
-        .execute(pool).await;
+        .execute(pool)
+        .await;
+    let _ =
+        sqlx::query("DROP TRIGGER IF EXISTS transaction_update_trigger ON explorer_transactions")
+            .execute(pool)
+            .await;
 
-    sqlx::query(r"
+    sqlx::query(
+        r"
         CREATE TRIGGER block_update_trigger
         AFTER INSERT OR UPDATE ON explorer_block_details
         FOR EACH ROW EXECUTE FUNCTION notify_block_update();
-    ").execute(pool).await?;
+    ",
+    )
+    .execute(pool)
+    .await?;
 
-    sqlx::query(r"
+    sqlx::query(
+        r"
         CREATE TRIGGER transaction_update_trigger
         AFTER INSERT OR UPDATE ON explorer_transactions
         FOR EACH ROW EXECUTE FUNCTION notify_transaction_update();
-    ").execute(pool).await?;
+    ",
+    )
+    .execute(pool)
+    .await?;
 
     info!("Successfully set up database notification triggers");
     Ok(())
@@ -93,14 +108,18 @@ async fn poll_blocks(pubsub: PubSub, pool: Pool<Postgres>, mut interval: tokio::
                     last_height = Some(height);
                 }
             }
-            Ok(None) => {},
+            Ok(None) => {}
             Err(e) => error!("Error fetching latest block: {}", e),
         }
     }
 }
 
 /// Polls for new transactions
-async fn poll_transactions(pubsub: PubSub, pool: Pool<Postgres>, mut interval: tokio::time::Interval) {
+async fn poll_transactions(
+    pubsub: PubSub,
+    pool: Pool<Postgres>,
+    mut interval: tokio::time::Interval,
+) {
     let mut last_tx_height: Option<i64> = None;
 
     loop {
@@ -109,19 +128,26 @@ async fn poll_transactions(pubsub: PubSub, pool: Pool<Postgres>, mut interval: t
         match get_latest_transaction_height(&pool).await {
             Ok(Some(height)) => {
                 if last_tx_height.is_none() || last_tx_height.unwrap() < height {
-                    debug!("Polling: New transaction detected at block height {}", height);
+                    debug!(
+                        "Polling: New transaction detected at block height {}",
+                        height
+                    );
                     pubsub.publish_transaction(height);
                     last_tx_height = Some(height);
                 }
             }
-            Ok(None) => {},
+            Ok(None) => {}
             Err(e) => error!("Error fetching latest transaction: {}", e),
         }
     }
 }
 
 /// Polls for changes in transaction count
-async fn poll_transaction_count(pubsub: PubSub, pool: Pool<Postgres>, mut interval: tokio::time::Interval) {
+async fn poll_transaction_count(
+    pubsub: PubSub,
+    pool: Pool<Postgres>,
+    mut interval: tokio::time::Interval,
+) {
     let mut last_count: Option<i64> = None;
 
     loop {
@@ -142,28 +168,26 @@ async fn poll_transaction_count(pubsub: PubSub, pool: Pool<Postgres>, mut interv
 
 async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1"
+        "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1",
     )
-        .fetch_optional(pool)
-        .await?;
+    .fetch_optional(pool)
+    .await?;
 
     Ok(result.map(|r| r.0))
 }
 
 async fn get_latest_transaction_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT block_height FROM explorer_transactions ORDER BY timestamp DESC LIMIT 1"
+        "SELECT block_height FROM explorer_transactions ORDER BY timestamp DESC LIMIT 1",
     )
-        .fetch_optional(pool)
-        .await?;
+    .fetch_optional(pool)
+    .await?;
 
     Ok(result.map(|r| r.0))
 }
 
 async fn get_transaction_count(pool: &Pool<Postgres>) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query_as::<_, (i64,)>(
-        "SELECT COUNT(*) FROM explorer_transactions"
-    )
+    let result = sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM explorer_transactions")
         .fetch_one(pool)
         .await?;
 
