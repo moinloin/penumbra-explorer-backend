@@ -16,6 +16,7 @@ use cometindex::Indexer;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info};
@@ -49,6 +50,14 @@ impl Explorer {
             .connect(&self.options.dest_db_url)
             .await
             .context("Failed to connect to destination database for API")?;
+
+        let source_pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&self.options.source_db_url)
+            .await
+            .context("Failed to connect to source database for raw data access")?;
+
+        let source_pool = Arc::new(source_pool);
 
         let schema = crate::api::graphql::schema::create_schema(pool.clone());
 
@@ -105,8 +114,10 @@ impl Explorer {
             exit_on_catchup: false,
         };
 
+        let explorer_view = ExplorerView::new().with_source_pool(source_pool);
+
         let indexer = Indexer::new(self.options.source_db_url.clone(), index_options)
-            .with_index(Box::new(ExplorerView::new()));
+            .with_index(Box::new(explorer_view));
 
         let indexer_task = tokio::spawn(async move {
             if let Err(e) = indexer.run().await {
