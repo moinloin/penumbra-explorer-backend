@@ -188,7 +188,3 @@ The project uses:
 The codebase follows Rust's naming conventions:
 - snake_case for variables/functions
 - CamelCase for types/traits
-
-## License
-
-© 2025 PK Labs
