@@ -1,9 +1,11 @@
+use std::sync::Arc;
 use anyhow::Result;
 use cometindex::{
     async_trait,
     index::{EventBatch, EventBatchContext},
     sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
+use sqlx::postgres::PgPool;
 
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
@@ -16,8 +18,10 @@ use std::time::Instant;
 
 use crate::parsing::{encode_to_base64, encode_to_hex, event_to_json, parse_attribute_string};
 
-#[derive(Debug, Default)]
-pub struct Explorer {}
+#[derive(Debug)]
+pub struct Explorer {
+    source_pool: Option<Arc<PgPool>>,
+}
 
 struct BlockMetadata<'a> {
     height: u64,
@@ -38,10 +42,40 @@ struct TransactionMetadata<'a> {
     decoded_tx_json: Value,
 }
 
+impl Default for Explorer {
+    fn default() -> Self {
+        Self {
+            source_pool: None,
+        }
+    }
+}
+
 impl Explorer {
     #[must_use]
     pub fn new() -> Self {
-        Self {}
+        Self {
+            source_pool: None,
+        }
+    }
+
+    pub fn with_source_pool(mut self, pool: Arc<PgPool>) -> Self {
+        self.source_pool = Some(pool);
+        self
+    }
+
+    async fn fetch_chain_id_for_block(&self, height: u64) -> Result<Option<String>, anyhow::Error> {
+        if let Some(pool) = &self.source_pool {
+            let chain_id = sqlx::query_scalar::<_, Option<String>>(
+                "SELECT chain_id FROM blocks WHERE height = $1"
+            )
+                .bind(i64::try_from(height)?)
+                .fetch_optional(pool.as_ref())
+                .await?;
+
+            Ok(chain_id.flatten())
+        } else {
+            Ok(None)
+        }
     }
 
     async fn insert_block(
@@ -57,9 +91,9 @@ impl Explorer {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
         )
-        .bind(height_i64)
-        .fetch_one(dbtx.as_mut())
-        .await?;
+            .bind(height_i64)
+            .fetch_one(dbtx.as_mut())
+            .await?;
 
         let validator_key = None::<String>;
         let previous_hash = None::<Vec<u8>>;
@@ -80,14 +114,14 @@ impl Explorer {
             WHERE height = $1
             ",
             )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&raw_json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(height_i64)
+                .bind(&meta.root)
+                .bind(meta.timestamp)
+                .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(&raw_json_str)
+                .execute(dbtx.as_mut())
+                .await?;
 
             tracing::debug!("Updated block {}", meta.height);
         } else {
@@ -99,17 +133,17 @@ impl Explorer {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
             ",
             )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(validator_key)
-            .bind(previous_hash)
-            .bind(block_hash)
-            .bind(&raw_json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(height_i64)
+                .bind(&meta.root)
+                .bind(meta.timestamp)
+                .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(validator_key)
+                .bind(previous_hash)
+                .bind(block_hash)
+                .bind(&raw_json_str)
+                .execute(dbtx.as_mut())
+                .await?;
 
             tracing::debug!("Inserted block {}", meta.height);
         }
@@ -132,9 +166,9 @@ impl Explorer {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
         )
-        .bind(meta.tx_hash.as_ref())
-        .fetch_one(dbtx.as_mut())
-        .await?;
+            .bind(meta.tx_hash.as_ref())
+            .fetch_one(dbtx.as_mut())
+            .await?;
 
         let json_str = serde_json::to_string(&meta.decoded_tx_json).map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
@@ -157,15 +191,15 @@ impl Explorer {
             WHERE tx_hash = $1
             ",
             )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(meta.tx_hash.as_ref())
+                .bind(height_i64)
+                .bind(meta.timestamp)
+                .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(&meta.tx_bytes_base64)
+                .bind(&json_str)
+                .execute(dbtx.as_mut())
+                .await?;
         } else {
             sqlx::query(
                 r"
@@ -174,15 +208,15 @@ impl Explorer {
             VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
             ",
             )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(meta.tx_hash.as_ref())
+                .bind(height_i64)
+                .bind(meta.timestamp)
+                .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(&meta.tx_bytes_base64)
+                .bind(&json_str)
+                .execute(dbtx.as_mut())
+                .await?;
         }
 
         Ok(())
@@ -380,26 +414,26 @@ impl AppView for Explorer {
             )
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
-            CREATE INDEX IF NOT EXISTS idx_explorer_block_details_timestamp 
+            CREATE INDEX IF NOT EXISTS idx_explorer_block_details_timestamp
             ON explorer_block_details(timestamp DESC)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
-            CREATE INDEX IF NOT EXISTS idx_explorer_block_details_validator 
+            CREATE INDEX IF NOT EXISTS idx_explorer_block_details_validator
             ON explorer_block_details(validator_identity_key)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -416,26 +450,26 @@ impl AppView for Explorer {
             )
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
-            CREATE INDEX IF NOT EXISTS idx_explorer_transactions_block_height 
+            CREATE INDEX IF NOT EXISTS idx_explorer_transactions_block_height
             ON explorer_transactions(block_height)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
-            CREATE INDEX IF NOT EXISTS idx_explorer_transactions_timestamp 
+            CREATE INDEX IF NOT EXISTS idx_explorer_transactions_timestamp
             ON explorer_transactions(timestamp DESC)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -454,8 +488,8 @@ impl AppView for Explorer {
                 height DESC
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -473,8 +507,8 @@ impl AppView for Explorer {
                 t.timestamp DESC
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         Ok(())
     }
@@ -489,7 +523,8 @@ impl AppView for Explorer {
         let mut block_data_to_process = Vec::new();
         let mut transactions_to_process = Vec::new();
 
-        let block_results = process_block_events(&batch).await?;
+        // Pass self to process_block_events to access source_pool
+        let block_results = process_block_events(self, &batch).await?;
 
         tracing::info!("Processed {} blocks from batch", block_results.len());
 
@@ -536,7 +571,7 @@ impl AppView for Explorer {
                 chain_id_opt,
                 dbtx,
             )
-            .await?;
+                .await?;
         }
 
         Ok(())
@@ -545,112 +580,128 @@ impl AppView for Explorer {
 
 #[allow(clippy::needless_lifetimes, clippy::unused_async)]
 async fn process_block_events<'a>(
+    explorer: &Explorer,
     batch: &'a EventBatch,
 ) -> Result<
-    Vec<(
-        u64,
-        Vec<u8>,
-        DateTime<sqlx::types::chrono::Utc>,
-        usize,
-        Option<String>,
-        Value,
-        Vec<([u8; 32], Vec<u8>, u64, Vec<ContextualizedEvent<'static>>)>,
-    )>,
-    anyhow::Error,
+Vec<(
+u64,
+Vec<u8>,
+DateTime<sqlx::types::chrono::Utc>,
+usize,
+Option<String>,
+Value,
+Vec<([u8; 32], Vec<u8>, u64, Vec<ContextualizedEvent<'static>>)>,
+)>,
+anyhow::Error,
 > {
-    let mut results = Vec::new();
+let mut results = Vec::new();
 
-    for block_data in batch.events_by_block() {
-        let height = block_data.height();
-        let tx_count = block_data.transactions().count();
+for block_data in batch.events_by_block() {
+let height = block_data.height();
+let tx_count = block_data.transactions().count();
 
-        tracing::info!(
-            "Processing block height {} with {} transactions",
-            height,
-            tx_count
-        );
+tracing::info!(
+"Processing block height {} with {} transactions",
+height,
+tx_count
+);
 
-        let mut block_root = None;
-        let mut timestamp = None;
-        let mut chain_id: Option<String> = None;
-        let mut block_events = Vec::new();
-        let mut tx_events = Vec::new();
+let mut block_root = None;
+let mut timestamp = None;
+let mut chain_id: Option<String> = None;
+let mut block_events = Vec::new();
+let mut tx_events = Vec::new();
 
-        let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
+let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
 
-        for event in block_data.events() {
-            if let Ok(pe) = pb::EventBlockRoot::from_event(event.event) {
-                let timestamp_proto = pe.timestamp.unwrap_or_default();
-                timestamp = DateTime::from_timestamp(
-                    timestamp_proto.seconds,
-                    u32::try_from(timestamp_proto.nanos)?,
-                );
-                block_root = pe.root.map(|r| r.inner);
-            }
+chain_id = match explorer.fetch_chain_id_for_block(height).await {
+Ok(Some(id)) => {
+Some(id)
+},
+_ => None,
+};
 
-            let event_json = event_to_json(event, event.tx_hash())?;
+for event in block_data.events() {
+if let Ok(pe) = pb::EventBlockRoot::from_event(event.event) {
+let timestamp_proto = pe.timestamp.unwrap_or_default();
+timestamp = DateTime::from_timestamp(
+timestamp_proto.seconds,
+u32::try_from(timestamp_proto.nanos)?,
+);
+block_root = pe.root.map(|r| r.inner);
+}
 
-            if let Some(tx_hash) = event.tx_hash() {
-                let owned_event = clone_event(event);
+let event_json = event_to_json(event, event.tx_hash())?;
 
-                events_by_tx_hash
-                    .entry(tx_hash)
-                    .or_default()
-                    .push(owned_event);
-                tx_events.push(event_json);
-            } else {
-                block_events.push(event_json);
-            }
-        }
+if let Some(tx_hash) = event.tx_hash() {
+let owned_event = clone_event(event);
 
-        if tx_count > 0 {
-            if let Some((_, tx_bytes)) = block_data.transactions().next() {
-                chain_id = extract_chain_id_from_bytes(tx_bytes);
-            }
-        }
+events_by_tx_hash
+.entry(tx_hash)
+.or_default()
+.push(owned_event);
+tx_events.push(event_json);
+} else {
+block_events.push(event_json);
+}
+}
 
-        let transactions: Vec<Value> = block_data
-            .transactions()
-            .enumerate()
-            .map(|(index, (tx_hash, _))| {
-                json!({
-                    "block_id": height,
-                    "index": index,
-                    "created_at": timestamp,
-                    "tx_hash": encode_to_hex(tx_hash)
-                })
-            })
-            .collect();
+if chain_id.is_none() && tx_count > 0 {
+if let Some((_, tx_bytes)) = block_data.transactions().next() {
+chain_id = extract_chain_id_from_bytes(tx_bytes);
+if let Some(ref id) = chain_id {
+tracing::info!("Using fallback chain_id = {} from transaction bytes at height {}", id, height);
+}
+}
+}
 
-        let mut all_events = Vec::new();
-        all_events.extend(block_events);
-        all_events.extend(tx_events);
+if chain_id.is_none() {
+chain_id = Some("penumbra-1".to_string());
+tracing::info!("Using default chain_id = penumbra-1 for height {}", height);
+}
 
-        let raw_json = json!({
-            "block": {
-                "height": height,
-                "chain_id": chain_id.as_deref().unwrap_or("unknown"),
-                "created_at": timestamp,
-                "transactions": transactions,
-                "events": all_events
-            }
-        });
+let transactions: Vec<Value> = block_data
+.transactions()
+.enumerate()
+.map(|(index, (tx_hash, _))| {
+json!({
+"block_id": height,
+"index": index,
+"created_at": timestamp,
+"tx_hash": encode_to_hex(tx_hash)
+})
+})
+.collect();
 
-        if let (Some(root), Some(ts)) = (block_root, timestamp) {
-            let mut block_txs = Vec::new();
+let mut all_events = Vec::new();
+all_events.extend(block_events);
+all_events.extend(tx_events);
 
-            for (tx_index, (tx_hash, tx_bytes)) in block_data.transactions().enumerate() {
-                let tx_bytes_vec = tx_bytes.to_vec();
-                let tx_events = events_by_tx_hash.get(&tx_hash).cloned().unwrap_or_default();
+let raw_json = json!({
+"block": {
+"height": height,
+"chain_id": chain_id.as_deref().unwrap_or("penumbra-1"),
+"created_at": timestamp,
+"transactions": transactions,
+"events": all_events
+}
+});
 
-                block_txs.push((tx_hash, tx_bytes_vec, tx_index as u64, tx_events));
-            }
+if let (Some(root), Some(ts)) = (block_root, timestamp) {
+let mut block_txs = Vec::new();
 
-            results.push((height, root, ts, tx_count, chain_id, raw_json, block_txs));
-        }
-    }
+for (tx_index, (tx_hash, tx_bytes)) in block_data.transactions().enumerate() {
+let tx_bytes_vec = tx_bytes.to_vec();
+let tx_events = events_by_tx_hash.get(&tx_hash).cloned().unwrap_or_default();
 
-    Ok(results)
+block_txs.push((tx_hash, tx_bytes_vec, tx_index as u64, tx_events));
+}
+
+results.push((height, root, ts, tx_count, chain_id, raw_json, block_txs));
+}
+}
+
+Ok(results)
 }
 
 #[allow(clippy::too_many_arguments)]
