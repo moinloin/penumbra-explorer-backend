@@ -18,7 +18,7 @@ use std::time::Instant;
 
 use crate::parsing::{encode_to_base64, encode_to_hex, event_to_json, parse_attribute_string};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Explorer {
     source_pool: Option<Arc<PgPool>>,
 }
@@ -42,14 +42,6 @@ struct TransactionMetadata<'a> {
     decoded_tx_json: Value,
 }
 
-impl Default for Explorer {
-    fn default() -> Self {
-        Self {
-            source_pool: None,
-        }
-    }
-}
-
 impl Explorer {
     #[must_use]
     pub fn new() -> Self {
@@ -58,6 +50,7 @@ impl Explorer {
         }
     }
 
+    #[must_use]
     pub fn with_source_pool(mut self, pool: Arc<PgPool>) -> Self {
         self.source_pool = Some(pool);
         self
@@ -523,7 +516,6 @@ impl AppView for Explorer {
         let mut block_data_to_process = Vec::new();
         let mut transactions_to_process = Vec::new();
 
-        // Pass self to process_block_events to access source_pool
         let block_results = process_block_events(self, &batch).await?;
 
         tracing::info!("Processed {} blocks from batch", block_results.len());
@@ -608,16 +600,13 @@ tx_count
 
 let mut block_root = None;
 let mut timestamp = None;
-let mut chain_id: Option<String> = None;
 let mut block_events = Vec::new();
 let mut tx_events = Vec::new();
 
 let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
 
-chain_id = match explorer.fetch_chain_id_for_block(height).await {
-Ok(Some(id)) => {
-Some(id)
-},
+let mut chain_id = match explorer.fetch_chain_id_for_block(height).await {
+Ok(Some(id)) => Some(id),
 _ => None,
 };
 
