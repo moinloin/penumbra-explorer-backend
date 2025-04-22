@@ -99,7 +99,6 @@ pub fn create_block_json(
         .unwrap_or_else(|_| "{}".to_string())
 }
 
-// Async function to insert block into the database
 pub async fn insert_block(
     dbtx: &mut PgTransaction<'_>,
     meta: BlockMetadata<'_>,
