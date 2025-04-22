@@ -57,9 +57,9 @@ impl Block {
                 timestamp ASC
             ",
         )
-            .bind(i64::from(self.height))
-            .fetch_all(db)
-            .await?;
+        .bind(i64::from(self.height))
+        .fetch_all(db)
+        .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
