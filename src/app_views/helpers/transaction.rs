@@ -242,7 +242,6 @@ pub async fn insert_transaction(
     Ok(())
 }
 
-// Process transaction from batch
 pub async fn process_transaction(
     tx_hash: [u8; 32],
     tx_bytes: &[u8],
