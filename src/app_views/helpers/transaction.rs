@@ -167,7 +167,6 @@ pub fn create_transaction_json(
     let tx_result_decoded = decode_transaction(tx_hash, tx_bytes);
     let tx_hash_hex = encode_to_hex(tx_hash);
 
-    // Create JSON object with fields in the exact specified order
     let mut tx_json = serde_json::Map::new();
     tx_json.insert("hash".to_string(), json!(tx_hash_hex));
     tx_json.insert("block_height".to_string(), json!(height.to_string()));
