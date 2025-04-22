@@ -57,7 +57,6 @@ pub async fn fetch_chain_ids_for_blocks(
     Ok(result)
 }
 
-// Fetch chain ID for a single block
 pub async fn fetch_chain_id_for_block(
     source_pool: &Option<Arc<PgPool>>,
     height: u64
