@@ -120,7 +120,6 @@ pub fn decode_transaction(tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
     }
 }
 
-// app_views/helpers/transaction.rs - updated create_transaction_json function
 pub fn create_transaction_json(
     tx_hash: [u8; 32],
     tx_bytes: &[u8],
