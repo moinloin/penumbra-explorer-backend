@@ -6,7 +6,6 @@ use serde_json::{json, Value};
 use sqlx::{types::chrono::DateTime, PgTransaction};
 use std::time::Instant;
 
-// Fixed import, removed unused event_to_json
 use crate::parsing::{encode_to_base64, encode_to_hex, parse_attribute_string};
 
 pub struct TransactionMetadata<'a> {
