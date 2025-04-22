@@ -1,9 +1,9 @@
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use cometindex::ContextualizedEvent;
+use regex::Regex;
 use serde_json::{json, Value};
 use std::fmt::Write;
-use regex::Regex;
 
 /// Helper function to convert bytes to a hexadecimal string
 #[must_use]
@@ -31,7 +31,8 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
     // Check if this is a V037 EventAttribute format
     if attr_str.contains("EventAttribute") {
         // Extract key and value from EventAttribute using regex
-        let re = Regex::new(r#"EventAttribute\s*\{\s*key:\s*"([^"]+)",\s*value:\s*"([^"]+)""#).ok()?;
+        let re =
+            Regex::new(r#"EventAttribute\s*\{\s*key:\s*"([^"]+)",\s*value:\s*"([^"]+)""#).ok()?;
         if let Some(caps) = re.captures(attr_str) {
             let key = caps.get(1)?.as_str().to_string();
             let value = caps.get(2)?.as_str().replace("\\\"", "\"");
