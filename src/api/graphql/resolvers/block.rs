@@ -30,13 +30,13 @@ pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Res
 
     Ok(row.map(|r| {
         let raw_json_str: String = r.get("raw_json");
-        let raw_json = if !raw_json_str.is_empty() {
+        let raw_json = if raw_json_str.is_empty() {
+            None
+        } else {
             match serde_json::from_str(&raw_json_str) {
                 Ok(parsed) => Some(parsed),
                 Err(_) => None,
             }
-        } else {
-            None
         };
 
         Block::new(
@@ -70,13 +70,13 @@ pub async fn resolve_blocks(
         .into_iter()
         .map(|row| {
             let raw_json_str: String = row.get("raw_json");
-            let raw_json = if !raw_json_str.is_empty() {
+            let raw_json = if raw_json_str.is_empty() {
+                None
+            } else {
                 match serde_json::from_str(&raw_json_str) {
                     Ok(parsed) => Some(parsed),
                     Err(_) => None,
                 }
-            } else {
-                None
             };
 
             Block::new(
@@ -150,13 +150,13 @@ pub async fn resolve_blocks_collection(
         .into_iter()
         .map(|row| {
             let raw_json_str: String = row.get("raw_json");
-            let raw_json = if !raw_json_str.is_empty() {
+            let raw_json = if raw_json_str.is_empty() {
+                None
+            } else {
                 match serde_json::from_str(&raw_json_str) {
                     Ok(parsed) => Some(parsed),
                     Err(_) => None,
                 }
-            } else {
-                None
             };
 
             Block::new(
