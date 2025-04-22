@@ -80,7 +80,6 @@ pub fn extract_chain_id_from_bytes(tx_bytes: &[u8]) -> Option<String> {
     None
 }
 
-// Decode transaction bytes into JSON representation
 pub fn decode_transaction(tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
     let start = Instant::now();
     let hash_hex = encode_to_hex(tx_hash);
