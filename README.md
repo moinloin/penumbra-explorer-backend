@@ -81,6 +81,80 @@ docker-compose logs -f app
 The GraphQL API is accessible at:
 - GraphQL API: `/graphql`
 - GraphQL Playground: `/graphql/playground`
+- Public playground for testing: [https://api.explorer.penumbra.zone/](https://api.explorer.penumbra.zone/)
+
+### WebSocket Support
+
+The Penumbra Explorer Backend supports real-time updates via WebSocket GraphQL subscriptions. This enables live streaming of new blocks, transactions, and transaction count changes directly to subscribed clients.
+
+Example subscriptions:
+```graphql
+subscription {
+  latestBlocks(limit: 10) {
+    height
+    createdAt
+    transactionsCount
+  }
+}
+
+subscription {
+  latestTransactions(limit: 10) {
+    id
+    hash
+    raw
+  }
+}
+
+subscription {
+  transactionCount {
+    count
+  }
+}
+```
+
+### Example Queries
+
+You can try the following sample GraphQL queries in the public playground:
+
+#### Full Transaction Query
+```graphql
+query {
+  transaction(hash: "84A8AD3E364E1F98A7C73A5D411737F634A7802265C71A528EA9720BD2ED8095") {
+    hash
+    block {
+      height
+      createdAt
+    }
+    body {
+      memo
+      parameters {
+        chainId
+        fee {
+          amount
+        }
+      }
+    }
+    raw
+    rawJson
+  }
+}
+```
+
+#### Full Block Query (replace with actual query if available)
+```graphql
+query {
+  block(height: 123456) {
+    height
+    createdAt
+    transactions {
+      hash
+      body {
+        memo
+      }
+    }
+  }
+}
+```
 
 ## Configuration
 
@@ -114,7 +188,3 @@ The project uses:
 The codebase follows Rust's naming conventions:
 - snake_case for variables/functions
 - CamelCase for types/traits
-
-## License
-
-© 2025 PK Labs
