@@ -94,7 +94,7 @@ impl Transaction {
 
         match serde_json::to_string_pretty(&json_value) {
             Ok(formatted) => Ok(formatted),
-            Err(_) => Ok(serde_json::to_string(&self.raw_json).unwrap_or_default())
+            Err(_) => Ok(serde_json::to_string(&self.raw_json).unwrap_or_default()),
         }
     }
 }
@@ -220,9 +220,9 @@ impl DbRawTransaction {
                 tx_hash = $1
             ",
         )
-            .bind(&tx_hash_bytes)
-            .fetch_optional(db)
-            .await?;
+        .bind(&tx_hash_bytes)
+        .fetch_optional(db)
+        .await?;
 
         if let Some(row) = row_result {
             let tx_hash: Vec<u8> = row.get("tx_hash");
@@ -283,10 +283,10 @@ impl DbRawTransaction {
             LIMIT $1 OFFSET $2
             ",
         )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(db)
-            .await?;
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(db)
+        .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
@@ -321,7 +321,8 @@ impl DbRawTransaction {
 
 #[must_use]
 pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
-    let tx_result_decoded = json.get("transaction_view")
+    let tx_result_decoded = json
+        .get("transaction_view")
         .or_else(|| json.get("tx_result_decoded"))
         .unwrap_or(json);
 
