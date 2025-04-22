@@ -94,7 +94,6 @@ pub fn create_block_json(
     let events_value = serde_json::Value::Array(events.to_vec());
     block_json.insert("events".to_string(), events_value);
 
-    // Convert to pretty JSON string with indentation
     let json_value = serde_json::Value::Object(block_json);
     serde_json::to_string_pretty(&json_value)
         .unwrap_or_else(|_| "{}".to_string())
