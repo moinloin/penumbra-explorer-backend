@@ -175,7 +175,6 @@ pub fn create_transaction_json(
     tx_json.insert("transaction_view".to_string(), tx_result_decoded);
     tx_json.insert("events".to_string(), json!(processed_events));
 
-    // Convert to pretty JSON with indentation
     let json_value = serde_json::Value::Object(tx_json);
     serde_json::to_string_pretty(&json_value)
         .unwrap_or_else(|_| "{}".to_string())
