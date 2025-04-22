@@ -257,7 +257,6 @@ pub async fn process_transaction(
         tx_hash, tx_bytes, height, timestamp, tx_index, tx_events,
     );
 
-    // We need to temporarily parse the JSON to extract fee and chain_id
     let parsed_json: Value = serde_json::from_str(&decoded_tx_json)
         .map_err(|e| anyhow::anyhow!("Failed to parse transaction JSON: {}", e))?;
 
