@@ -49,7 +49,6 @@ pub async fn fetch_chain_ids_for_blocks(
             }
         }
     } else {
-        // If no source pool is configured, return None for all heights
         for &height in heights {
             result.insert(height, None);
         }
