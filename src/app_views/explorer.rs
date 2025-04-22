@@ -5,18 +5,18 @@ use cometindex::{
     index::{EventBatch, EventBatchContext},
     sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
-use sqlx::postgres::PgPool;
-use std::sync::Arc;
-use std::collections::HashMap;
-use sqlx::types::chrono::DateTime;
 use serde_json::{json, Value};
+use sqlx::postgres::PgPool;
+use sqlx::types::chrono::DateTime;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use penumbra_sdk_proto::event::ProtoEvent; // Added missing import
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
+use penumbra_sdk_proto::event::ProtoEvent; // Added missing import
 
 use crate::app_views::helpers::{
-    block::{BlockMetadata, create_block_json, insert_block, fetch_chain_ids_for_blocks},
-    transaction::{process_transaction, extract_chain_id_from_bytes, clone_event},
+    block::{create_block_json, fetch_chain_ids_for_blocks, insert_block, BlockMetadata},
+    transaction::{clone_event, extract_chain_id_from_bytes, process_transaction},
 };
 use crate::parsing::{encode_to_hex, event_to_json};
 
@@ -66,8 +66,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -75,8 +75,8 @@ impl AppView for Explorer {
             ON explorer_block_details(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -84,8 +84,8 @@ impl AppView for Explorer {
             ON explorer_block_details(validator_identity_key)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -102,8 +102,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -111,8 +111,8 @@ impl AppView for Explorer {
             ON explorer_transactions(block_height)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -120,8 +120,8 @@ impl AppView for Explorer {
             ON explorer_transactions(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -140,8 +140,8 @@ impl AppView for Explorer {
                 height DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -159,8 +159,8 @@ impl AppView for Explorer {
                 t.timestamp DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         Ok(())
     }
@@ -221,7 +221,7 @@ impl AppView for Explorer {
                 chain_id_opt,
                 dbtx,
             )
-                .await?;
+            .await?;
         }
 
         Ok(())
@@ -246,7 +246,8 @@ async fn process_block_events<'a>(
 > {
     let mut results = Vec::new();
 
-    let heights: Vec<u64> = batch.events_by_block()
+    let heights: Vec<u64> = batch
+        .events_by_block()
         .map(|block| block.height())
         .collect();
 
