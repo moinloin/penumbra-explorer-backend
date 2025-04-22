@@ -1,10 +1,9 @@
 use anyhow::Result;
-use sqlx::{PgTransaction, postgres::PgPool};
+use serde_json::{json, Value};
 use sqlx::types::chrono::DateTime;
+use sqlx::{postgres::PgPool, PgTransaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json::{json, Value};
-
 
 use crate::parsing;
 
@@ -19,12 +18,13 @@ pub struct BlockMetadata<'a> {
 
 pub async fn fetch_chain_ids_for_blocks(
     source_pool: &Option<Arc<PgPool>>,
-    heights: &[u64]
+    heights: &[u64],
 ) -> Result<HashMap<u64, Option<String>>, anyhow::Error> {
     let mut result = HashMap::with_capacity(heights.len());
 
     if let Some(pool) = source_pool {
-        let height_i64s: Vec<i64> = heights.iter()
+        let height_i64s: Vec<i64> = heights
+            .iter()
             .filter_map(|&h| i64::try_from(h).ok())
             .collect();
 
@@ -33,11 +33,11 @@ pub async fn fetch_chain_ids_for_blocks(
         }
 
         let rows = sqlx::query_as::<_, (i64, Option<String>)>(
-            "SELECT height, chain_id FROM blocks WHERE height = ANY($1)"
+            "SELECT height, chain_id FROM blocks WHERE height = ANY($1)",
         )
-            .bind(&height_i64s)
-            .fetch_all(pool.as_ref())
-            .await?;
+        .bind(&height_i64s)
+        .fetch_all(pool.as_ref())
+        .await?;
 
         for (height, chain_id) in rows {
             result.insert(u64::try_from(height)?, chain_id);
@@ -59,15 +59,15 @@ pub async fn fetch_chain_ids_for_blocks(
 
 pub async fn fetch_chain_id_for_block(
     source_pool: &Option<Arc<PgPool>>,
-    height: u64
+    height: u64,
 ) -> Result<Option<String>, anyhow::Error> {
     if let Some(pool) = source_pool {
         let chain_id = sqlx::query_scalar::<_, Option<String>>(
             "SELECT chain_id FROM blocks WHERE height = $1",
         )
-            .bind(i64::try_from(height)?)
-            .fetch_optional(pool.as_ref())
-            .await?;
+        .bind(i64::try_from(height)?)
+        .fetch_optional(pool.as_ref())
+        .await?;
 
         Ok(chain_id.flatten())
     } else {
@@ -95,8 +95,7 @@ pub fn create_block_json(
     block_json.insert("events".to_string(), events_value);
 
     let json_value = serde_json::Value::Object(block_json);
-    serde_json::to_string_pretty(&json_value)
-        .unwrap_or_else(|_| "{}".to_string())
+    serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
 }
 
 pub async fn insert_block(
@@ -111,9 +110,9 @@ pub async fn insert_block(
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
     )
-        .bind(height_i64)
-        .fetch_one(dbtx.as_mut())
-        .await?;
+    .bind(height_i64)
+    .fetch_one(dbtx.as_mut())
+    .await?;
 
     let validator_key = None::<String>;
     let previous_hash = None::<Vec<u8>>;
@@ -132,14 +131,14 @@ pub async fn insert_block(
         WHERE height = $1
         ",
         )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.raw_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(height_i64)
+        .bind(&meta.root)
+        .bind(meta.timestamp)
+        .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(&meta.raw_json)
+        .execute(dbtx.as_mut())
+        .await?;
 
         tracing::debug!("Updated block {}", meta.height);
     } else {
@@ -151,17 +150,17 @@ pub async fn insert_block(
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ",
         )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(validator_key)
-            .bind(previous_hash)
-            .bind(block_hash)
-            .bind(&meta.raw_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(height_i64)
+        .bind(&meta.root)
+        .bind(meta.timestamp)
+        .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(validator_key)
+        .bind(previous_hash)
+        .bind(block_hash)
+        .bind(&meta.raw_json)
+        .execute(dbtx.as_mut())
+        .await?;
 
         tracing::debug!("Inserted block {}", meta.height);
     }
