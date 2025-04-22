@@ -55,7 +55,6 @@ pub fn extract_chain_id(tx_result: &Value) -> Option<String> {
         .map(std::string::ToString::to_string)
 }
 
-// Extract chain ID from transaction bytes
 pub fn extract_chain_id_from_bytes(tx_bytes: &[u8]) -> Option<String> {
     match TransactionView::decode(tx_bytes) {
         Ok(tx_view) => {
