@@ -24,9 +24,9 @@ pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Res
             height = $1
         ",
     )
-        .bind(i64::from(height))
-        .fetch_optional(db)
-        .await?;
+    .bind(i64::from(height))
+    .fetch_optional(db)
+    .await?;
 
     Ok(row.map(|r| {
         let raw_json_str: String = r.get("raw_json");
