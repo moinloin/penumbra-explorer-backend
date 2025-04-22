@@ -46,7 +46,6 @@ pub fn extract_fee_amount(tx_result: &Value) -> u64 {
         .unwrap_or(0)
 }
 
-// Extract chain ID from transaction result
 pub fn extract_chain_id(tx_result: &Value) -> Option<String> {
     tx_result
         .get("body")
