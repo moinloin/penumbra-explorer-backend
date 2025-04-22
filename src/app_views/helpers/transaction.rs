@@ -176,8 +176,7 @@ pub fn create_transaction_json(
     tx_json.insert("events".to_string(), json!(processed_events));
 
     let json_value = serde_json::Value::Object(tx_json);
-    serde_json::to_string_pretty(&json_value)
-        .unwrap_or_else(|_| "{}".to_string())
+    serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
 }
 pub async fn insert_transaction(
     dbtx: &mut PgTransaction<'_>,
@@ -193,9 +192,9 @@ pub async fn insert_transaction(
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
     )
-        .bind(meta.tx_hash.as_ref())
-        .fetch_one(dbtx.as_mut())
-        .await?;
+    .bind(meta.tx_hash.as_ref())
+    .fetch_one(dbtx.as_mut())
+    .await?;
 
     if exists {
         sqlx::query(
@@ -211,15 +210,15 @@ pub async fn insert_transaction(
         WHERE tx_hash = $1
         ",
         )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&meta.decoded_tx_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(meta.tx_hash.as_ref())
+        .bind(height_i64)
+        .bind(meta.timestamp)
+        .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(&meta.tx_bytes_base64)
+        .bind(&meta.decoded_tx_json)
+        .execute(dbtx.as_mut())
+        .await?;
     } else {
         sqlx::query(
             r"
@@ -228,15 +227,15 @@ pub async fn insert_transaction(
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         ",
         )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&meta.decoded_tx_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(meta.tx_hash.as_ref())
+        .bind(height_i64)
+        .bind(meta.timestamp)
+        .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(&meta.tx_bytes_base64)
+        .bind(&meta.decoded_tx_json)
+        .execute(dbtx.as_mut())
+        .await?;
     }
 
     Ok(())
@@ -252,9 +251,8 @@ pub async fn process_transaction(
     chain_id_opt: Option<String>,
     dbtx: &mut PgTransaction<'_>,
 ) -> Result<(), anyhow::Error> {
-    let decoded_tx_json = create_transaction_json(
-        tx_hash, tx_bytes, height, timestamp, tx_index, tx_events,
-    );
+    let decoded_tx_json =
+        create_transaction_json(tx_hash, tx_bytes, height, timestamp, tx_index, tx_events);
 
     let parsed_json: Value = serde_json::from_str(&decoded_tx_json)
         .map_err(|e| anyhow::anyhow!("Failed to parse transaction JSON: {}", e))?;
