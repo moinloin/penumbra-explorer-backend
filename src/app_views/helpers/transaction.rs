@@ -18,7 +18,6 @@ pub struct TransactionMetadata<'a> {
     pub decoded_tx_json: String,
 }
 
-// Clone an event to extend its lifetime
 pub fn clone_event(event: ContextualizedEvent<'_>) -> ContextualizedEvent<'static> {
     let event_clone = event.event.clone();
 
