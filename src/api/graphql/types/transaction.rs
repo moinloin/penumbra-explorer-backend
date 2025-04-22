@@ -69,8 +69,33 @@ impl Transaction {
     }
 
     #[graphql(name = "rawJson")]
-    async fn raw_json(&self) -> &serde_json::Value {
-        &self.raw_json
+    async fn raw_json(&self) -> Result<serde_json::Value> {
+        // Since raw_json might be a string in some resolvers
+        if let Some(json_str) = self.raw_json.as_str() {
+            match serde_json::from_str::<serde_json::Value>(json_str) {
+                Ok(parsed) => Ok(parsed),
+                Err(_) => Ok(self.raw_json.clone()),
+            }
+        } else {
+            Ok(self.raw_json.clone())
+        }
+    }
+
+    #[graphql(name = "formattedRawJson")]
+    async fn formatted_raw_json(&self) -> Result<String> {
+        let json_value = if let Some(json_str) = self.raw_json.as_str() {
+            match serde_json::from_str::<serde_json::Value>(json_str) {
+                Ok(parsed) => parsed,
+                Err(_) => self.raw_json.clone(),
+            }
+        } else {
+            self.raw_json.clone()
+        };
+
+        match serde_json::to_string_pretty(&json_value) {
+            Ok(formatted) => Ok(formatted),
+            Err(_) => Ok(serde_json::to_string(&self.raw_json).unwrap_or_default())
+        }
     }
 }
 
@@ -195,13 +220,24 @@ impl DbRawTransaction {
                 tx_hash = $1
             ",
         )
-        .bind(&tx_hash_bytes)
-        .fetch_optional(db)
-        .await?;
+            .bind(&tx_hash_bytes)
+            .fetch_optional(db)
+            .await?;
 
         if let Some(row) = row_result {
             let tx_hash: Vec<u8> = row.get("tx_hash");
             let raw_data: Option<String> = row.get("raw_data");
+            let raw_json_str: String = row.get("raw_json");
+
+            // Parse the JSON string
+            let json_value = if !raw_json_str.is_empty() {
+                match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
+                    Ok(value) => Some(value),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
 
             Ok(Some(Self {
                 tx_hash_hex: hex::encode_upper(&tx_hash),
@@ -210,7 +246,7 @@ impl DbRawTransaction {
                 fee_amount: row.get("fee_amount"),
                 chain_id: row.get("chain_id"),
                 raw_data_hex: raw_data,
-                raw_json: row.get("raw_json"),
+                raw_json: json_value,
             }))
         } else {
             Ok(None)
@@ -248,16 +284,27 @@ impl DbRawTransaction {
             LIMIT $1 OFFSET $2
             ",
         )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(db)
-        .await?;
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(db)
+            .await?;
 
         let mut transactions = Vec::with_capacity(rows.len());
 
         for row in rows {
             let tx_hash: Vec<u8> = row.get("tx_hash");
             let raw_data: Option<String> = row.get("raw_data");
+            let raw_json_str: String = row.get("raw_json");
+
+            // Parse the JSON string
+            let json_value = if !raw_json_str.is_empty() {
+                match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
+                    Ok(value) => Some(value),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
 
             transactions.push(Self {
                 tx_hash_hex: hex::encode_upper(&tx_hash),
@@ -266,7 +313,7 @@ impl DbRawTransaction {
                 fee_amount: row.get("fee_amount"),
                 chain_id: row.get("chain_id"),
                 raw_data_hex: raw_data,
-                raw_json: row.get("raw_json"),
+                raw_json: json_value,
             });
         }
 
@@ -276,25 +323,26 @@ impl DbRawTransaction {
 
 #[must_use]
 pub fn extract_transaction_body(json: &serde_json::Value) -> TransactionBody {
-    let memo = json
-        .get("tx_result_decoded")
-        .and_then(|tx| tx.get("body"))
+    let tx_result_decoded = json.get("transaction_view")
+        .or_else(|| json.get("tx_result_decoded"))
+        .unwrap_or(json);
+
+    let memo = tx_result_decoded
+        .get("body")
         .and_then(|body| body.get("memo"))
         .and_then(|memo| memo.as_str())
         .map(ToString::to_string);
 
-    let chain_id = json
-        .get("tx_result_decoded")
-        .and_then(|tx| tx.get("body"))
+    let chain_id = tx_result_decoded
+        .get("body")
         .and_then(|body| body.get("transactionParameters"))
         .and_then(|params| params.get("chainId"))
         .and_then(|chain_id| chain_id.as_str())
         .unwrap_or("penumbra-1")
         .to_string();
 
-    let fee_amount = json
-        .get("tx_result_decoded")
-        .and_then(|tx| tx.get("body"))
+    let fee_amount = tx_result_decoded
+        .get("body")
         .and_then(|body| body.get("transactionParameters"))
         .and_then(|params| params.get("fee"))
         .and_then(|fee| fee.get("amount"))
