@@ -229,7 +229,6 @@ impl DbRawTransaction {
             let raw_data: Option<String> = row.get("raw_data");
             let raw_json_str: String = row.get("raw_json");
 
-            // Parse the JSON string
             let json_value = if !raw_json_str.is_empty() {
                 match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
                     Ok(value) => Some(value),
@@ -296,7 +295,6 @@ impl DbRawTransaction {
             let raw_data: Option<String> = row.get("raw_data");
             let raw_json_str: String = row.get("raw_json");
 
-            // Parse the JSON string
             let json_value = if !raw_json_str.is_empty() {
                 match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
                     Ok(value) => Some(value),
