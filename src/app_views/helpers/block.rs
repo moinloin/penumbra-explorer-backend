@@ -14,7 +14,7 @@ pub struct BlockMetadata<'a> {
     pub timestamp: DateTime<sqlx::types::chrono::Utc>,
     pub tx_count: usize,
     pub chain_id: &'a str,
-    pub raw_json: String, // Changed to String for ordered storage
+    pub raw_json: String,
 }
 
 // Fetch chain IDs for multiple blocks in a single query
