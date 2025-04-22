@@ -1,4 +1,3 @@
-// app_views/helpers/transaction.rs
 use anyhow::Result;
 use cometindex::ContextualizedEvent;
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
