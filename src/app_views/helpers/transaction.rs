@@ -34,7 +34,6 @@ pub fn clone_event(event: ContextualizedEvent<'_>) -> ContextualizedEvent<'stati
     }
 }
 
-// Extract fee amount from transaction result
 pub fn extract_fee_amount(tx_result: &Value) -> u64 {
     tx_result
         .get("body")
