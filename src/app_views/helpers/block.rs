@@ -1,5 +1,4 @@
 use anyhow::Result;
-// Removed unused import: use cometindex::ContextualizedEvent;
 use sqlx::{PgTransaction, postgres::PgPool};
 use sqlx::types::chrono::DateTime;
 use std::collections::HashMap;
