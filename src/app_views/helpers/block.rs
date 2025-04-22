@@ -84,7 +84,6 @@ pub fn create_block_json(
 ) -> String {
     let mut block_json = serde_json::Map::new();
 
-    // Add fields in the exact specified order: height first, then chain_id, etc.
     block_json.insert("height".to_string(), json!(height));
     block_json.insert("chain_id".to_string(), json!(chain_id));
     block_json.insert("timestamp".to_string(), json!(timestamp.to_rfc3339()));
