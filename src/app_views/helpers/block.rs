@@ -24,7 +24,6 @@ pub async fn fetch_chain_ids_for_blocks(
     let mut result = HashMap::with_capacity(heights.len());
 
     if let Some(pool) = source_pool {
-        // Convert u64 heights to i64 for PostgreSQL compatibility
         let height_i64s: Vec<i64> = heights.iter()
             .filter_map(|&h| i64::try_from(h).ok())
             .collect();
