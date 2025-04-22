@@ -2681,6 +2681,7 @@ dependencies = [
  "penumbra-sdk-proto",
  "pq-sys",
  "prost",
+ "regex",
  "serde",
  "serde_json",
  "sqlx",

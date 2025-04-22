@@ -24,14 +24,25 @@ pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Res
             height = $1
         ",
     )
-    .bind(i64::from(height))
-    .fetch_optional(db)
-    .await?;
+        .bind(i64::from(height))
+        .fetch_optional(db)
+        .await?;
+
     Ok(row.map(|r| {
+        let raw_json_str: String = r.get("raw_json");
+        let raw_json = if !raw_json_str.is_empty() {
+            match serde_json::from_str(&raw_json_str) {
+                Ok(parsed) => Some(parsed),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
         Block::new(
             i32::try_from(r.get::<i64, _>("height")).unwrap_or_default(),
             r.get("timestamp"),
-            r.get("raw_json"),
+            raw_json,
         )
     }))
 }
@@ -58,10 +69,20 @@ pub async fn resolve_blocks(
     let blocks = rows
         .into_iter()
         .map(|row| {
+            let raw_json_str: String = row.get("raw_json");
+            let raw_json = if !raw_json_str.is_empty() {
+                match serde_json::from_str(&raw_json_str) {
+                    Ok(parsed) => Some(parsed),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
             Block::new(
                 i32::try_from(row.get::<i64, _>("height")).unwrap_or_default(),
                 row.get("timestamp"),
-                row.get("raw_json"),
+                raw_json,
             )
         })
         .collect();
@@ -128,10 +149,20 @@ pub async fn resolve_blocks_collection(
     let blocks = rows
         .into_iter()
         .map(|row| {
+            let raw_json_str: String = row.get("raw_json");
+            let raw_json = if !raw_json_str.is_empty() {
+                match serde_json::from_str(&raw_json_str) {
+                    Ok(parsed) => Some(parsed),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
             Block::new(
                 i32::try_from(row.get::<i64, _>("height")).unwrap_or_default(),
                 row.get("timestamp"),
-                row.get("raw_json"),
+                raw_json,
             )
         })
         .collect();
