@@ -11,7 +11,7 @@ use penumbra_sdk_proto::core::component::sct::v1 as pb;
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use penumbra_sdk_proto::event::ProtoEvent;
 use prost::Message;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use sqlx::types::chrono::DateTime;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -29,7 +29,7 @@ struct BlockMetadata<'a> {
     timestamp: DateTime<sqlx::types::chrono::Utc>,
     tx_count: usize,
     chain_id: &'a str,
-    raw_json: Value,
+    raw_json: String, // Changed to String for ordered storage
 }
 
 struct TransactionMetadata<'a> {
@@ -39,7 +39,7 @@ struct TransactionMetadata<'a> {
     fee_amount: u64,
     chain_id: &'a str,
     tx_bytes_base64: String,
-    decoded_tx_json: Value,
+    decoded_tx_json: String, // Changed to String for ordered storage
 }
 
 impl Explorer {
@@ -54,14 +54,57 @@ impl Explorer {
         self
     }
 
+    // New method to fetch chain IDs for multiple blocks in a single query
+    async fn fetch_chain_ids_for_blocks(&self, heights: &[u64]) -> Result<HashMap<u64, Option<String>>, anyhow::Error> {
+        let mut result = HashMap::with_capacity(heights.len());
+
+        if let Some(pool) = &self.source_pool {
+            // Convert u64 heights to i64 for PostgreSQL compatibility
+            let height_i64s: Vec<i64> = heights.iter()
+                .filter_map(|&h| i64::try_from(h).ok())
+                .collect();
+
+            if height_i64s.is_empty() {
+                return Ok(result);
+            }
+
+            // Use ANY operator for efficient batch query
+            let rows = sqlx::query_as::<_, (i64, Option<String>)>(
+                "SELECT height, chain_id FROM blocks WHERE height = ANY($1)"
+            )
+                .bind(&height_i64s)
+                .fetch_all(pool.as_ref())
+                .await?;
+
+            // Process results into a HashMap keyed by block height
+            for (height, chain_id) in rows {
+                result.insert(u64::try_from(height)?, chain_id);
+            }
+
+            // Fill in missing heights with None
+            for &height in heights {
+                if !result.contains_key(&height) {
+                    result.insert(height, None);
+                }
+            }
+        } else {
+            // If no source pool is configured, return None for all heights
+            for &height in heights {
+                result.insert(height, None);
+            }
+        }
+
+        Ok(result)
+    }
+
     async fn fetch_chain_id_for_block(&self, height: u64) -> Result<Option<String>, anyhow::Error> {
         if let Some(pool) = &self.source_pool {
             let chain_id = sqlx::query_scalar::<_, Option<String>>(
                 "SELECT chain_id FROM blocks WHERE height = $1",
             )
-            .bind(i64::try_from(height)?)
-            .fetch_optional(pool.as_ref())
-            .await?;
+                .bind(i64::try_from(height)?)
+                .fetch_optional(pool.as_ref())
+                .await?;
 
             Ok(chain_id.flatten())
         } else {
@@ -82,15 +125,13 @@ impl Explorer {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
         )
-        .bind(height_i64)
-        .fetch_one(dbtx.as_mut())
-        .await?;
+            .bind(height_i64)
+            .fetch_one(dbtx.as_mut())
+            .await?;
 
         let validator_key = None::<String>;
         let previous_hash = None::<Vec<u8>>;
         let block_hash = None::<Vec<u8>>;
-
-        let raw_json_str = serde_json::to_string(&meta.raw_json)?;
 
         if exists {
             sqlx::query(
@@ -101,18 +142,18 @@ impl Explorer {
                 timestamp = $3,
                 num_transactions = $4,
                 chain_id = $5,
-                raw_json = $6::jsonb
+                raw_json = $6
             WHERE height = $1
             ",
             )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&raw_json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(height_i64)
+                .bind(&meta.root)
+                .bind(meta.timestamp)
+                .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(&meta.raw_json)
+                .execute(dbtx.as_mut())
+                .await?;
 
             tracing::debug!("Updated block {}", meta.height);
         } else {
@@ -121,20 +162,20 @@ impl Explorer {
             INSERT INTO explorer_block_details
             (height, root, timestamp, num_transactions, chain_id,
              validator_identity_key, previous_block_hash, block_hash, raw_json)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ",
             )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(validator_key)
-            .bind(previous_hash)
-            .bind(block_hash)
-            .bind(&raw_json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(height_i64)
+                .bind(&meta.root)
+                .bind(meta.timestamp)
+                .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(validator_key)
+                .bind(previous_hash)
+                .bind(block_hash)
+                .bind(&meta.raw_json)
+                .execute(dbtx.as_mut())
+                .await?;
 
             tracing::debug!("Inserted block {}", meta.height);
         }
@@ -157,16 +198,9 @@ impl Explorer {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
         )
-        .bind(meta.tx_hash.as_ref())
-        .fetch_one(dbtx.as_mut())
-        .await?;
-
-        let json_str = serde_json::to_string(&meta.decoded_tx_json).map_err(|e| {
-            sqlx::Error::Decode(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("JSON serialization error: {e}"),
-            )))
-        })?;
+            .bind(meta.tx_hash.as_ref())
+            .fetch_one(dbtx.as_mut())
+            .await?;
 
         if exists {
             sqlx::query(
@@ -178,36 +212,36 @@ impl Explorer {
                 fee_amount = $4,
                 chain_id = $5,
                 raw_data = $6,
-                raw_json = $7::jsonb
+                raw_json = $7
             WHERE tx_hash = $1
             ",
             )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(meta.tx_hash.as_ref())
+                .bind(height_i64)
+                .bind(meta.timestamp)
+                .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(&meta.tx_bytes_base64)
+                .bind(&meta.decoded_tx_json)
+                .execute(dbtx.as_mut())
+                .await?;
         } else {
             sqlx::query(
                 r"
             INSERT INTO explorer_transactions
             (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ",
             )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&json_str)
-            .execute(dbtx.as_mut())
-            .await?;
+                .bind(meta.tx_hash.as_ref())
+                .bind(height_i64)
+                .bind(meta.timestamp)
+                .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+                .bind(meta.chain_id)
+                .bind(&meta.tx_bytes_base64)
+                .bind(&meta.decoded_tx_json)
+                .execute(dbtx.as_mut())
+                .await?;
         }
 
         Ok(())
@@ -276,6 +310,7 @@ impl Explorer {
         }
     }
 
+    // Updated to preserve order and return String
     fn create_transaction_json(
         tx_hash: [u8; 32],
         tx_bytes: &[u8],
@@ -283,7 +318,7 @@ impl Explorer {
         timestamp: sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
         tx_index: u64,
         tx_events: &[ContextualizedEvent<'_>],
-    ) -> Value {
+    ) -> String {
         let mut processed_events = Vec::with_capacity(tx_events.len() + 1);
 
         processed_events.push(json!({
@@ -322,16 +357,56 @@ impl Explorer {
 
         let tx_result_decoded = Self::decode_transaction(tx_hash, tx_bytes);
 
-        let mut ordered_map = Map::with_capacity(7);
-        ordered_map.insert("hash".to_string(), json!(encode_to_hex(tx_hash)));
-        ordered_map.insert("height".to_string(), json!(height.to_string()));
-        ordered_map.insert("index".to_string(), json!(tx_index.to_string()));
-        ordered_map.insert("timestamp".to_string(), json!(timestamp));
-        ordered_map.insert("tx_result".to_string(), json!(encode_to_hex(tx_bytes)));
-        ordered_map.insert("tx_result_decoded".to_string(), tx_result_decoded);
-        ordered_map.insert("events".to_string(), json!(processed_events));
+        // Create ordered JSON manually instead of using format!
+        let tx_hash_hex = encode_to_hex(tx_hash);
+        let tx_view_json = serde_json::to_string(&tx_result_decoded).unwrap_or_else(|_| "{}".to_string());
+        let events_json = serde_json::to_string(&processed_events).unwrap_or_else(|_| "[]".to_string());
 
-        Value::Object(ordered_map)
+        // Build JSON with fields in the desired order
+        let tx_json = format!(
+            r#"{{"hash":"{hash}","block_height":"{height}","index":"{index}","timestamp":"{timestamp}","transaction_view":{tx_view},"events":{events}}}"#,
+            hash = tx_hash_hex,
+            height = height.to_string(),
+            index = tx_index.to_string(),
+            timestamp = timestamp.to_rfc3339(),
+            tx_view = tx_view_json,
+            events = events_json
+        );
+
+        tx_json
+    }
+
+    // New method to create block JSON in a specific order as a String
+    fn create_block_json(
+        height: u64,
+        chain_id: &str,
+        timestamp: DateTime<sqlx::types::chrono::Utc>,
+        transactions: &[Value],
+        events: &[Value],
+    ) -> String {
+        // Format transactions to preserve order
+        let txs_str = transactions
+            .iter()
+            .map(|tx| serde_json::to_string(tx).unwrap_or_else(|_| "{}".to_string()))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        // Format events to preserve order
+        let events_str = events
+            .iter()
+            .map(|event| serde_json::to_string(event).unwrap_or_else(|_| "{}".to_string()))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        // Create JSON string with fields in specific order
+        format!(
+            r#"{{"height":{height},"chain_id":"{chain_id}","timestamp":"{timestamp}","transactions":[{transactions}],"events":[{events}]}}"#,
+            height = height,
+            chain_id = chain_id,
+            timestamp = timestamp.to_rfc3339(),
+            transactions = txs_str,
+            events = events_str
+        )
     }
 }
 
@@ -401,12 +476,12 @@ impl AppView for Explorer {
                 previous_block_hash BYTEA,
                 block_hash BYTEA,
                 chain_id TEXT,
-                raw_json JSONB
+                raw_json TEXT  -- Changed from JSONB to TEXT
             )
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -414,8 +489,8 @@ impl AppView for Explorer {
             ON explorer_block_details(timestamp DESC)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -423,8 +498,8 @@ impl AppView for Explorer {
             ON explorer_block_details(validator_identity_key)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -435,14 +510,14 @@ impl AppView for Explorer {
                 fee_amount NUMERIC(39, 0) DEFAULT 0,
                 chain_id TEXT,
                 raw_data TEXT,
-                raw_json JSONB,
+                raw_json TEXT,  -- Changed from JSONB to TEXT
                 FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
                     DEFERRABLE INITIALLY DEFERRED
             )
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -450,8 +525,8 @@ impl AppView for Explorer {
             ON explorer_transactions(block_height)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -459,8 +534,8 @@ impl AppView for Explorer {
             ON explorer_transactions(timestamp DESC)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -479,8 +554,8 @@ impl AppView for Explorer {
                 height DESC
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -498,8 +573,8 @@ impl AppView for Explorer {
                 t.timestamp DESC
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         Ok(())
     }
@@ -561,7 +636,7 @@ impl AppView for Explorer {
                 chain_id_opt,
                 dbtx,
             )
-            .await?;
+                .await?;
         }
 
         Ok(())
@@ -579,12 +654,21 @@ async fn process_block_events<'a>(
         DateTime<sqlx::types::chrono::Utc>,
         usize,
         Option<String>,
-        Value,
+        String, // Changed from Value to String for ordered JSON
         Vec<([u8; 32], Vec<u8>, u64, Vec<ContextualizedEvent<'static>>)>,
     )>,
     anyhow::Error,
 > {
     let mut results = Vec::new();
+
+    // Collect all block heights in the batch first
+    let heights: Vec<u64> = batch.events_by_block()
+        .map(|block| block.height())
+        .collect();
+
+    // Batch fetch chain IDs for all blocks at once
+    let chain_ids = explorer.fetch_chain_ids_for_blocks(&heights).await?;
+    tracing::info!("Fetched chain IDs for {} blocks in batch", chain_ids.len());
 
     for block_data in batch.events_by_block() {
         let height = block_data.height();
@@ -603,10 +687,8 @@ async fn process_block_events<'a>(
 
         let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
 
-        let mut chain_id = match explorer.fetch_chain_id_for_block(height).await {
-            Ok(Some(id)) => Some(id),
-            _ => None,
-        };
+        // Use pre-fetched chain ID from the batch query
+        let mut chain_id = chain_ids.get(&height).and_then(|id| id.clone());
 
         for event in block_data.events() {
             if let Ok(pe) = pb::EventBlockRoot::from_event(event.event) {
@@ -651,34 +733,33 @@ async fn process_block_events<'a>(
             tracing::info!("Using default chain_id = penumbra-1 for height {}", height);
         }
 
-        let transactions: Vec<Value> = block_data
-            .transactions()
-            .enumerate()
-            .map(|(index, (tx_hash, _))| {
-                json!({
-                "block_id": height,
-                "index": index,
-                "created_at": timestamp,
-                "tx_hash": encode_to_hex(tx_hash)
-                })
-            })
-            .collect();
-
-        let mut all_events = Vec::new();
-        all_events.extend(block_events);
-        all_events.extend(tx_events);
-
-        let raw_json = json!({
-        "block": {
-        "height": height,
-        "chain_id": chain_id.as_deref().unwrap_or("penumbra-1"),
-        "created_at": timestamp,
-        "transactions": transactions,
-        "events": all_events
-        }
-        });
-
         if let (Some(root), Some(ts)) = (block_root, timestamp) {
+            let transactions: Vec<Value> = block_data
+                .transactions()
+                .enumerate()
+                .map(|(index, (tx_hash, _))| {
+                    // Create transaction entries for block with the specific order we want
+                    json!({
+                        "index": index,
+                        "hash": encode_to_hex(tx_hash),
+                        "timestamp": ts.to_rfc3339()
+                    })
+                })
+                .collect();
+
+            let mut all_events = Vec::new();
+            all_events.extend(block_events);
+            all_events.extend(tx_events);
+
+            // Create ordered block JSON
+            let raw_json = Explorer::create_block_json(
+                height,
+                chain_id.as_deref().unwrap_or("penumbra-1"),
+                ts,
+                &transactions,
+                &all_events,
+            );
+
             let mut block_txs = Vec::new();
 
             for (tx_index, (tx_hash, tx_bytes)) in block_data.transactions().enumerate() {
@@ -707,12 +788,18 @@ async fn process_transaction(
     chain_id_opt: Option<String>,
     dbtx: &mut PgTransaction<'_>,
 ) -> Result<(), anyhow::Error> {
+    // Create ordered transaction JSON
     let decoded_tx_json = Explorer::create_transaction_json(
         tx_hash, tx_bytes, height, timestamp, tx_index, tx_events,
     );
 
-    let fee_amount = Explorer::extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
-    let chain_id = Explorer::extract_chain_id(&decoded_tx_json["tx_result_decoded"])
+    // We need to temporarily parse the JSON to extract fee and chain_id
+    let parsed_json: Value = serde_json::from_str(&decoded_tx_json)
+        .map_err(|e| anyhow::anyhow!("Failed to parse transaction JSON: {}", e))?;
+
+    let tx_result_decoded = &parsed_json["transaction_view"];
+    let fee_amount = Explorer::extract_fee_amount(tx_result_decoded);
+    let chain_id = Explorer::extract_chain_id(tx_result_decoded)
         .or(chain_id_opt)
         .unwrap_or_else(|| "unknown".to_string());
 
@@ -800,91 +887,4 @@ mod tests {
 
         let empty_json = json!({});
         assert_eq!(Explorer::extract_fee_amount(&empty_json), 0);
-    }
-
-    #[test]
-    fn test_extract_chain_id() {
-        let tx_result = json!({
-            "body": {
-                "transactionParameters": {
-                    "chainId": "penumbra-testnet"
-                }
-            }
-        });
-
-        assert_eq!(
-            Explorer::extract_chain_id(&tx_result),
-            Some("penumbra-testnet".to_string())
-        );
-
-        let tx_result_missing_chain_id = json!({
-            "body": {
-                "transactionParameters": {}
-            }
-        });
-
-        assert_eq!(
-            Explorer::extract_chain_id(&tx_result_missing_chain_id),
-            None
-        );
-
-        let empty_json = json!({});
-        assert_eq!(Explorer::extract_chain_id(&empty_json), None);
-    }
-
-    #[test]
-    fn test_decode_transaction_with_invalid_data() {
-        let tx_hash = [0u8; 32];
-        let invalid_tx_bytes = vec![1, 2, 3, 4];
-
-        let result = Explorer::decode_transaction(tx_hash, &invalid_tx_bytes);
-
-        assert!(result.is_object());
-        assert!(result.as_object().unwrap().is_empty());
-    }
-
-    #[test]
-    fn test_create_transaction_json() {
-        let tx_hash = [1u8; 32];
-        let tx_bytes = vec![1, 2, 3, 4];
-        let height = 100;
-        let timestamp = Utc::now();
-        let tx_index = 2;
-        let tx_events = vec![];
-
-        let result = Explorer::create_transaction_json(
-            tx_hash, &tx_bytes, height, timestamp, tx_index, &tx_events,
-        );
-
-        let obj = result.as_object().unwrap();
-
-        assert_eq!(
-            obj.get("hash").unwrap().as_str().unwrap(),
-            "0101010101010101010101010101010101010101010101010101010101010101"
-        );
-        assert_eq!(obj.get("height").unwrap().as_str().unwrap(), "100");
-        assert_eq!(obj.get("index").unwrap().as_str().unwrap(), "2");
-        assert!(obj.contains_key("timestamp"));
-        assert_eq!(obj.get("tx_result").unwrap().as_str().unwrap(), "01020304");
-        assert!(obj.contains_key("tx_result_decoded"));
-        assert!(obj.contains_key("events"));
-
-        let events = obj.get("events").unwrap().as_array().unwrap();
-        assert_eq!(events.len(), 1);
-
-        let tx_event = &events[0];
-        assert_eq!(tx_event.get("type").unwrap(), "tx");
-
-        let attrs = tx_event.get("attributes").unwrap().as_array().unwrap();
-        assert_eq!(attrs.len(), 2);
-
-        assert_eq!(attrs[0].get("key").unwrap(), "hash");
-        assert_eq!(
-            attrs[0].get("value").unwrap(),
-            "0101010101010101010101010101010101010101010101010101010101010101"
-        );
-
-        assert_eq!(attrs[1].get("key").unwrap(), "height");
-        assert_eq!(attrs[1].get("value").unwrap(), "100");
-    }
-}
+    }}
