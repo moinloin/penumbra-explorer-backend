@@ -32,7 +32,6 @@ pub async fn fetch_chain_ids_for_blocks(
             return Ok(result);
         }
 
-        // Use ANY operator for efficient batch query
         let rows = sqlx::query_as::<_, (i64, Option<String>)>(
             "SELECT height, chain_id FROM blocks WHERE height = ANY($1)"
         )
