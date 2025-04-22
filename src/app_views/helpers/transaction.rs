@@ -15,7 +15,7 @@ pub struct TransactionMetadata<'a> {
     pub fee_amount: u64,
     pub chain_id: &'a str,
     pub tx_bytes_base64: String,
-    pub decoded_tx_json: String, // Changed to String for ordered storage
+    pub decoded_tx_json: String,
 }
 
 // Clone an event to extend its lifetime
