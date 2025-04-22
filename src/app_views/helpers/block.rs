@@ -17,7 +17,6 @@ pub struct BlockMetadata<'a> {
     pub raw_json: String,
 }
 
-// Fetch chain IDs for multiple blocks in a single query
 pub async fn fetch_chain_ids_for_blocks(
     source_pool: &Option<Arc<PgPool>>,
     heights: &[u64]
