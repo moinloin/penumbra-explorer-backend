@@ -253,7 +253,6 @@ pub async fn process_transaction(
     chain_id_opt: Option<String>,
     dbtx: &mut PgTransaction<'_>,
 ) -> Result<(), anyhow::Error> {
-    // Create ordered transaction JSON
     let decoded_tx_json = create_transaction_json(
         tx_hash, tx_bytes, height, timestamp, tx_index, tx_events,
     );
