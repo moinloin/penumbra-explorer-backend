@@ -39,7 +39,6 @@ pub async fn fetch_chain_ids_for_blocks(
             .fetch_all(pool.as_ref())
             .await?;
 
-        // Process results into a HashMap keyed by block height
         for (height, chain_id) in rows {
             result.insert(u64::try_from(height)?, chain_id);
         }
