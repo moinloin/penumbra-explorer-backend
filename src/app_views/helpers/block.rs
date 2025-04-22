@@ -1,4 +1,3 @@
-// app_views/helpers/block.rs
 use anyhow::Result;
 // Removed unused import: use cometindex::ContextualizedEvent;
 use sqlx::{PgTransaction, postgres::PgPool};
