@@ -104,6 +104,7 @@ impl Block {
     }
 
     #[graphql(name = "rawJson")]
+    #[allow(clippy::unused_async)]
     async fn raw_json(&self) -> Result<Option<serde_json::Value>> {
         Ok(self.raw_json.clone())
     }
