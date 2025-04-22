@@ -91,7 +91,6 @@ pub fn create_block_json(
     let txs_value = serde_json::Value::Array(transactions.to_vec());
     block_json.insert("transactions".to_string(), txs_value);
 
-    // Add events array last
     let events_value = serde_json::Value::Array(events.to_vec());
     block_json.insert("events".to_string(), events_value);
 
