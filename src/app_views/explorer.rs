@@ -239,19 +239,17 @@ async fn process_block_events<'a>(
         DateTime<sqlx::types::chrono::Utc>,
         usize,
         Option<String>,
-        String, // Changed from Value to String for ordered JSON
+        String,
         Vec<([u8; 32], Vec<u8>, u64, Vec<ContextualizedEvent<'static>>)>,
     )>,
     anyhow::Error,
 > {
     let mut results = Vec::new();
 
-    // Collect all block heights in the batch first
     let heights: Vec<u64> = batch.events_by_block()
         .map(|block| block.height())
         .collect();
 
-    // Batch fetch chain IDs for all blocks at once
     let chain_ids = fetch_chain_ids_for_blocks(&explorer.source_pool, &heights).await?;
     tracing::info!("Fetched chain IDs for {} blocks in batch", chain_ids.len());
 
@@ -272,7 +270,6 @@ async fn process_block_events<'a>(
 
         let mut events_by_tx_hash: HashMap<[u8; 32], Vec<ContextualizedEvent>> = HashMap::new();
 
-        // Use pre-fetched chain ID from the batch query
         let mut chain_id = chain_ids.get(&height).and_then(|id| id.clone());
 
         for event in block_data.events() {
@@ -323,10 +320,8 @@ async fn process_block_events<'a>(
                 .transactions()
                 .enumerate()
                 .map(|(index, (tx_hash, _))| {
-                    // Create transaction entries for block with the specific order we want
                     let mut tx_json = serde_json::Map::new();
 
-                    // Add fields in exact order: index, hash, timestamp
                     tx_json.insert("index".to_string(), json!(index));
                     tx_json.insert("hash".to_string(), json!(encode_to_hex(tx_hash)));
                     tx_json.insert("timestamp".to_string(), json!(ts.to_rfc3339()));
@@ -339,7 +334,6 @@ async fn process_block_events<'a>(
             all_events.extend(block_events);
             all_events.extend(tx_events);
 
-            // Create ordered block JSON
             let raw_json = create_block_json(
                 height,
                 chain_id.as_deref().unwrap_or("penumbra-1"),
