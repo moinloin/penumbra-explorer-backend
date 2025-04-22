@@ -153,7 +153,6 @@ pub async fn resolve_transactions_collection(
 ) -> Result<TransactionCollection> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
-    // Get the total count
     let mut count_query = String::from("SELECT COUNT(*) FROM explorer_transactions");
 
     if let Some(filter) = &filter {
@@ -187,7 +186,6 @@ pub async fn resolve_transactions_collection(
         sqlx::query_scalar(&count_query).fetch_one(db).await?
     };
 
-    // Build the main query
     let base_query = r"
         SELECT
             t.tx_hash,
@@ -254,7 +252,6 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
         let raw_data: String = row.get("raw_data");
         let raw_json_str: String = row.get("raw_json");
 
-        // Parse the JSON string
         if !raw_json_str.is_empty() {
             let json_value = match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
                 Ok(value) => value,
