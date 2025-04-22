@@ -43,7 +43,6 @@ pub async fn fetch_chain_ids_for_blocks(
             result.insert(u64::try_from(height)?, chain_id);
         }
 
-        // Fill in missing heights with None
         for &height in heights {
             if !result.contains_key(&height) {
                 result.insert(height, None);
