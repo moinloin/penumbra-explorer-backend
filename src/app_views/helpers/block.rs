@@ -88,7 +88,6 @@ pub fn create_block_json(
     block_json.insert("chain_id".to_string(), json!(chain_id));
     block_json.insert("timestamp".to_string(), json!(timestamp.to_rfc3339()));
 
-    // Add transactions array
     let txs_value = serde_json::Value::Array(transactions.to_vec());
     block_json.insert("transactions".to_string(), txs_value);
 
