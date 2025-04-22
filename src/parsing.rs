@@ -90,14 +90,12 @@ pub fn event_to_json(
         let attr_str = format!("{attr:?}");
 
         if let Some((key, value)) = parse_attribute_string(&attr_str) {
-            // Create attribute with specific field order: key first, then value
             let mut attr_json = serde_json::Map::new();
             attr_json.insert("key".to_string(), json!(key));
             attr_json.insert("value".to_string(), json!(value));
 
             attributes.push(serde_json::Value::Object(attr_json));
         } else {
-            // Create attribute with specific field order
             let mut attr_json = serde_json::Map::new();
             attr_json.insert("key".to_string(), json!(attr_str.clone()));
             attr_json.insert("value".to_string(), json!("Unknown"));
@@ -106,7 +104,6 @@ pub fn event_to_json(
         }
     }
 
-    // Build the event JSON with type first, then attributes
     let mut json_event_map = serde_json::Map::new();
     json_event_map.insert("type".to_string(), json!(event.event.kind));
     json_event_map.insert("attributes".to_string(), json!(attributes));
@@ -161,7 +158,6 @@ mod tests {
         assert_eq!(key, "action");
         assert_eq!(value, "swap");
 
-        // Test V037 EventAttribute format
         let v037_attr = "V037(EventAttribute { key: \"height\", value: \"44033\", index: false })";
         let result = parse_attribute_string(v037_attr);
         assert!(result.is_some());
@@ -169,7 +165,6 @@ mod tests {
         assert_eq!(key, "height");
         assert_eq!(value, "44033");
 
-        // Test JSON format
         let attr_with_json = "event_type {\"timestamp\": 12345, \"block\": 100}";
         let result = parse_attribute_string(attr_with_json);
         assert!(result.is_some());
@@ -177,12 +172,10 @@ mod tests {
         assert_eq!(key, "event_type");
         assert_eq!(value, "{\"timestamp\": 12345, \"block\": 100}");
 
-        // Test invalid format
         let invalid_attr = "Something without key or value";
         let result = parse_attribute_string(invalid_attr);
         assert!(result.is_none());
 
-        // Test empty string
         let empty_attr = "";
         let result = parse_attribute_string(empty_attr);
         assert!(result.is_none());
