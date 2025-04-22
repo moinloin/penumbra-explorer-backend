@@ -57,24 +57,6 @@ pub async fn fetch_chain_ids_for_blocks(
     Ok(result)
 }
 
-pub async fn fetch_chain_id_for_block(
-    source_pool: &Option<Arc<PgPool>>,
-    height: u64,
-) -> Result<Option<String>, anyhow::Error> {
-    if let Some(pool) = source_pool {
-        let chain_id = sqlx::query_scalar::<_, Option<String>>(
-            "SELECT chain_id FROM blocks WHERE height = $1",
-        )
-        .bind(i64::try_from(height)?)
-        .fetch_optional(pool.as_ref())
-        .await?;
-
-        Ok(chain_id.flatten())
-    } else {
-        Ok(None)
-    }
-}
-
 pub fn create_block_json(
     height: u64,
     chain_id: &str,
