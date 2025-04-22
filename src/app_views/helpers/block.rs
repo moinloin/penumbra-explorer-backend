@@ -82,7 +82,6 @@ pub fn create_block_json(
     transactions: &[Value],
     events: &[Value],
 ) -> String {
-    // Create a structured value with fields in specific order
     let mut block_json = serde_json::Map::new();
 
     // Add fields in the exact specified order: height first, then chain_id, etc.
