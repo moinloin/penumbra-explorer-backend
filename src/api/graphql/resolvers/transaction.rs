@@ -42,9 +42,9 @@ pub async fn resolve_transaction(
             t.tx_hash = $1
         ",
     )
-        .bind(hash_bytes.as_slice())
-        .fetch_optional(db)
-        .await?;
+    .bind(hash_bytes.as_slice())
+    .fetch_optional(db)
+    .await?;
 
     if let Some(r) = row {
         let tx_hash: Vec<u8> = r.get("tx_hash");
@@ -256,7 +256,10 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
             let json_value = match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
                 Ok(value) => value,
                 Err(_) => {
-                    tracing::warn!("Failed to parse JSON for transaction: {}", hex::encode_upper(&tx_hash));
+                    tracing::warn!(
+                        "Failed to parse JSON for transaction: {}",
+                        hex::encode_upper(&tx_hash)
+                    );
                     continue;
                 }
             };
