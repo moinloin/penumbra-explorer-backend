@@ -69,6 +69,7 @@ impl Transaction {
     }
 
     #[graphql(name = "rawJson")]
+    #[allow(clippy::unused_async)]
     async fn raw_json(&self) -> Result<serde_json::Value> {
         // Since raw_json might be a string in some resolvers
         if let Some(json_str) = self.raw_json.as_str() {
@@ -82,6 +83,7 @@ impl Transaction {
     }
 
     #[graphql(name = "formattedRawJson")]
+    #[allow(clippy::unused_async)]
     async fn formatted_raw_json(&self) -> Result<String> {
         let json_value = if let Some(json_str) = self.raw_json.as_str() {
             match serde_json::from_str::<serde_json::Value>(json_str) {
@@ -229,13 +231,13 @@ impl DbRawTransaction {
             let raw_data: Option<String> = row.get("raw_data");
             let raw_json_str: String = row.get("raw_json");
 
-            let json_value = if !raw_json_str.is_empty() {
+            let json_value = if raw_json_str.is_empty() {
+                None
+            } else {
                 match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
                     Ok(value) => Some(value),
                     Err(_) => None,
                 }
-            } else {
-                None
             };
 
             Ok(Some(Self {
@@ -295,13 +297,13 @@ impl DbRawTransaction {
             let raw_data: Option<String> = row.get("raw_data");
             let raw_json_str: String = row.get("raw_json");
 
-            let json_value = if !raw_json_str.is_empty() {
+            let json_value = if raw_json_str.is_empty() {
+                None
+            } else {
                 match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
                     Ok(value) => Some(value),
                     Err(_) => None,
                 }
-            } else {
-                None
             };
 
             transactions.push(Self {
