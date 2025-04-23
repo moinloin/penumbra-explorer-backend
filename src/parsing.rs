@@ -138,7 +138,6 @@ pub fn event_to_json(
     for attr in &event.event.attributes {
         let attr_str = format!("{attr:?}");
 
-        // Try to parse the attribute for better key-value representation
         if let Some((key, value)) = parse_attribute_string(&attr_str) {
             // Skip empty values or values with empty amounts
             if value.contains("{\"amount\":{}}") ||
