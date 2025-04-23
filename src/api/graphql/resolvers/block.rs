@@ -9,7 +9,6 @@ use sqlx::Row;
 ///
 /// # Errors
 /// Returns an error if the database query fails
-#[allow(clippy::module_name_repetitions)]
 pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Result<Option<Block>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
     let row = sqlx::query(
@@ -24,19 +23,18 @@ pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Res
             height = $1
         ",
     )
-    .bind(i64::from(height))
-    .fetch_optional(db)
-    .await?;
+        .bind(i64::from(height))
+        .fetch_optional(db)
+        .await?;
 
     Ok(row.map(|r| {
         let raw_json_str: String = r.get("raw_json");
+        // Pass the raw JSON string directly without parsing
         let raw_json = if raw_json_str.is_empty() {
             None
         } else {
-            match serde_json::from_str(&raw_json_str) {
-                Ok(parsed) => Some(parsed),
-                Err(_) => None,
-            }
+            // Store the raw JSON string in a serde_json::Value
+            Some(serde_json::Value::String(raw_json_str))
         };
 
         Block::new(
@@ -73,10 +71,8 @@ pub async fn resolve_blocks(
             let raw_json = if raw_json_str.is_empty() {
                 None
             } else {
-                match serde_json::from_str(&raw_json_str) {
-                    Ok(parsed) => Some(parsed),
-                    Err(_) => None,
-                }
+                // Store the raw JSON string directly without parsing
+                Some(serde_json::Value::String(raw_json_str))
             };
 
             Block::new(
@@ -153,10 +149,8 @@ pub async fn resolve_blocks_collection(
             let raw_json = if raw_json_str.is_empty() {
                 None
             } else {
-                match serde_json::from_str(&raw_json_str) {
-                    Ok(parsed) => Some(parsed),
-                    Err(_) => None,
-                }
+                // Store the raw JSON string directly without parsing
+                Some(serde_json::Value::String(raw_json_str))
             };
 
             Block::new(
