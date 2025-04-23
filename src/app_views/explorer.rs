@@ -71,7 +71,6 @@ impl Explorer {
 
     /// Attempts to read the chain_id from the genesis.json file
     fn read_chain_id_from_genesis() -> Option<String> {
-        // Try to open the genesis file
         let file = match File::open("genesis.json") {
             Ok(f) => f,
             Err(e) => {
@@ -80,25 +79,21 @@ impl Explorer {
             }
         };
 
-        // Try to read the file contents
         let mut contents = String::new();
         if let Err(e) = file.take(10_000_000).read_to_string(&mut contents) {
             tracing::error!("Failed to read genesis.json: {}", e);
             return None;
         }
 
-        // Try to parse JSON
         let genesis: Result<serde_json::Value, _> = serde_json::from_str(&contents);
         if let Err(e) = genesis {
             tracing::error!("Failed to parse genesis.json: {}", e);
             return None;
         }
 
-        // Extract the chain_id if present
         let genesis = genesis.unwrap();
         let chain_id = genesis["chain_id"].as_str().map(String::from);
 
-        // Log if we couldn't find the chain_id
         if chain_id.is_none() {
             tracing::error!("Could not find chain_id in genesis.json");
         }
@@ -132,7 +127,6 @@ impl Explorer {
         let previous_hash = None::<Vec<u8>>;
         let block_hash = None::<Vec<u8>>;
 
-        // Store as TEXT directly
         if exists {
             sqlx::query(
                 r"
@@ -202,7 +196,6 @@ impl Explorer {
             .fetch_one(dbtx.as_mut())
             .await?;
 
-        // Store as TEXT directly
         if exists {
             sqlx::query(
                 r"
@@ -311,8 +304,6 @@ impl Explorer {
         }
     }
 
-    // Format the transaction JSON according to the desired format
-    // Format the transaction JSON according to the desired format with exact ordering
     fn create_transaction_json(
         tx_hash: [u8; 32],
         tx_bytes: &[u8],
@@ -339,7 +330,6 @@ impl Explorer {
                 let attr_str = format!("{attr:?}");
 
                 if let Some((key, value)) = parse_attribute_string(&attr_str) {
-                    // Skip empty values
                     if value.contains("{\"amount\":{}}") || value.trim().is_empty() {
                         continue;
                     }
@@ -356,7 +346,6 @@ impl Explorer {
                 }
             }
 
-            // Only include events with attributes
             if !attributes.is_empty() {
                 processed_events.push(json!({
                 "type": event.event.kind,
@@ -368,40 +357,31 @@ impl Explorer {
         let tx_result_decoded = Self::decode_transaction(tx_hash, tx_bytes);
         let tx_hash_hex = encode_to_hex(tx_hash);
 
-        // Manually build the JSON string to ensure exact field order
         let mut json_str = String::new();
 
-        // Start object
         json_str.push_str("{\n");
 
-        // Order: hash, block_height, index, timestamp, transaction_view, events
         json_str.push_str(&format!("  \"hash\": \"{}\",\n", tx_hash_hex));
         json_str.push_str(&format!("  \"block_height\": \"{}\",\n", height));
         json_str.push_str(&format!("  \"index\": \"{}\",\n", tx_index));
         json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
 
-        // transaction_view object
         json_str.push_str("  \"transaction_view\": ");
         let tx_view_json = serde_json::to_string_pretty(&tx_result_decoded).unwrap_or_else(|_| "{}".to_string());
-        // Indent each line
         let tx_view_indented = tx_view_json.replace('\n', "\n  ");
         json_str.push_str(&tx_view_indented);
         json_str.push_str(",\n");
 
-        // events array
         json_str.push_str("  \"events\": ");
         let events_json = serde_json::to_string_pretty(&processed_events).unwrap_or_else(|_| "[]".to_string());
-        // Indent each line
         let events_indented = events_json.replace('\n', "\n  ");
         json_str.push_str(&events_indented);
         json_str.push_str("\n");
 
-        // End object
         json_str.push_str("}");
 
         json_str
     }
-    // Format the block JSON according to the desired format with exact ordering
     fn create_block_json(
         height: u64,
         chain_id: &str,
@@ -409,34 +389,26 @@ impl Explorer {
         transactions: &[Value],
         events: &[Value],
     ) -> String {
-        // We need to manually construct the JSON string to ensure the exact desired order
         let mut json_str = String::new();
 
-        // Start object
         json_str.push_str("{\n");
 
-        // Order: height, chain_id, timestamp, transactions, events
         json_str.push_str(&format!("  \"height\": {},\n", height));
         json_str.push_str(&format!("  \"chain_id\": \"{}\",\n", chain_id));
         json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
 
-        // Transactions array
         json_str.push_str("  \"transactions\": ");
         let tx_json = serde_json::to_string_pretty(transactions).unwrap_or_else(|_| "[]".to_string());
-        // Indent each line
         let tx_json_indented = tx_json.replace('\n', "\n  ");
         json_str.push_str(&tx_json_indented);
         json_str.push_str(",\n");
 
-        // Events array
         json_str.push_str("  \"events\": ");
         let events_json = serde_json::to_string_pretty(events).unwrap_or_else(|_| "[]".to_string());
-        // Indent each line
         let events_json_indented = events_json.replace('\n', "\n  ");
         json_str.push_str(&events_json_indented);
         json_str.push_str("\n");
 
-        // End object
         json_str.push_str("}");
 
         json_str
@@ -473,7 +445,6 @@ impl AppView for Explorer {
     ) -> Result<(), anyhow::Error> {
         tracing::info!("Initializing Explorer with chain_id = {}", self.get_chain_id());
 
-        // Using TEXT for raw_json
         sqlx::query(
             r"
             CREATE TABLE IF NOT EXISTS explorer_block_details (
@@ -511,7 +482,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Using TEXT for raw_json
         sqlx::query(
             r"
             CREATE TABLE IF NOT EXISTS explorer_transactions (
@@ -605,7 +575,6 @@ impl AppView for Explorer {
         tracing::info!("Processed {} blocks from batch", block_results.len());
 
         for (height, root, ts, tx_count, _, raw_json, block_txs) in block_results {
-            // Format the block JSON with our custom function
             let formatted_block_json = Explorer::create_block_json(
                 height,
                 self.get_chain_id(),
@@ -614,7 +583,6 @@ impl AppView for Explorer {
                 &collect_block_events(&raw_json),
             );
 
-            // Use our chain_id from genesis instead of the one from the blocks
             block_data_to_process.push((height, root, ts, tx_count, formatted_block_json));
 
             for (tx_hash, tx_bytes, tx_index, tx_events) in block_txs {
@@ -635,7 +603,7 @@ impl AppView for Explorer {
                 root,
                 timestamp: ts,
                 tx_count,
-                chain_id: self.get_chain_id(), // Use our chain_id from genesis
+                chain_id: self.get_chain_id(),
                 raw_json: formatted_json,
             };
 
@@ -643,17 +611,14 @@ impl AppView for Explorer {
         }
 
         for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events) in transactions_to_process {
-            // Create formatted transaction JSON string
             let formatted_tx_json = Self::create_transaction_json(
                 tx_hash, &tx_bytes, height, timestamp, tx_index, &tx_events,
             );
 
-            // Extract fee amount from the JSON
             let parsed_json: Value = serde_json::from_str(&formatted_tx_json)
                 .unwrap_or_else(|_| json!({}));
             let fee_amount = Self::extract_fee_amount(&parsed_json["transaction_view"]);
 
-            // Use our chain_id from genesis
             let chain_id = self.chain_id.clone().unwrap_or_else(|| "unknown".to_string());
 
             let tx_bytes_base64 = encode_to_base64(&tx_bytes);
@@ -698,12 +663,10 @@ impl AppView for Explorer {
     }
 }
 
-// Helper functions to extract transactions and events from block JSON
 fn collect_block_transactions(raw_json: &Value, timestamp: DateTime<sqlx::types::chrono::Utc>) -> Vec<Value> {
     if let Some(block) = raw_json.get("block") {
         if let Some(txs) = block.get("transactions") {
             if let Some(txs_array) = txs.as_array() {
-                // Transform the transactions to match the desired format in the example
                 return txs_array
                     .iter()
                     .map(|tx| {
@@ -724,29 +687,23 @@ fn collect_block_events(raw_json: &Value) -> Vec<Value> {
     if let Some(block) = raw_json.get("block") {
         if let Some(events) = block.get("events") {
             if let Some(events_array) = events.as_array() {
-                // Transform each event to match the desired format
                 let mut result = Vec::new();
 
                 for event in events_array {
                     let event_type = event.get("type").and_then(|t| t.as_str()).unwrap_or("unknown");
 
-                    // Extract and properly format the attributes
                     let mut attributes = Vec::new();
 
                     if let Some(attrs) = event.get("attributes").and_then(|a| a.as_array()) {
                         for attr in attrs {
-                            // Parse key and value from the attribute
                             let key = attr.get("key").and_then(|k| k.as_str()).unwrap_or("");
                             let value = attr.get("value").and_then(|v| v.as_str()).unwrap_or("Unknown");
 
-                            // Skip empty values
                             if value.contains("{\"amount\":{}}") || key.trim().is_empty() {
                                 continue;
                             }
 
-                            // Try to parse with our enhanced attribute string parser
                             if let Some((parsed_key, parsed_value)) = parse_attribute_string(key) {
-                                // Skip empty values
                                 if parsed_value.contains("{\"amount\":{}}") || parsed_value.trim().is_empty() {
                                     continue;
                                 }
@@ -756,7 +713,6 @@ fn collect_block_events(raw_json: &Value) -> Vec<Value> {
                                     "value": parsed_value
                                 }));
                             } else {
-                                // Use the raw values
                                 attributes.push(json!({
                                     "key": key,
                                     "value": value
@@ -765,7 +721,6 @@ fn collect_block_events(raw_json: &Value) -> Vec<Value> {
                         }
                     }
 
-                    // Only include the event if it has attributes
                     if !attributes.is_empty() {
                         result.push(json!({
                             "type": event_type,
@@ -781,7 +736,6 @@ fn collect_block_events(raw_json: &Value) -> Vec<Value> {
     Vec::new()
 }
 
-// This process_block_events function remains unchanged to maintain compatibility
 #[allow(clippy::needless_lifetimes, clippy::unused_async)]
 async fn process_block_events<'a>(
     batch: &'a EventBatch,
@@ -842,7 +796,6 @@ async fn process_block_events<'a>(
             }
         }
 
-        // We still extract chain_id for compatibility, but we won't use it
         if tx_count > 0 {
             if let Some((_, tx_bytes)) = block_data.transactions().next() {
                 chain_id = extract_chain_id_from_bytes(tx_bytes);
@@ -893,7 +846,6 @@ async fn process_block_events<'a>(
     Ok(results)
 }
 
-// Function to extract chain ID from transaction bytes
 fn extract_chain_id_from_bytes(tx_bytes: &[u8]) -> Option<String> {
     use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
     use prost::Message;
