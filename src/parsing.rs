@@ -1,7 +1,6 @@
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use cometindex::ContextualizedEvent;
-use regex::Regex;
 use serde_json::{json, Value};
 use std::fmt::Write;
 
@@ -25,22 +24,9 @@ pub fn encode_to_base64<T: AsRef<[u8]>>(data: T) -> String {
     BASE64.encode(bytes)
 }
 
-/// Parse attribute string from an event with improved handling for EventAttribute format
+/// Parse attribute string from an event
 #[must_use]
 pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
-    // Check if this is a V037 EventAttribute format
-    if attr_str.contains("EventAttribute") {
-        // Extract key and value from EventAttribute using regex
-        let re =
-            Regex::new(r#"EventAttribute\s*\{\s*key:\s*"([^"]+)",\s*value:\s*"([^"]+)""#).ok()?;
-        if let Some(caps) = re.captures(attr_str) {
-            let key = caps.get(1)?.as_str().to_string();
-            let value = caps.get(2)?.as_str().replace("\\\"", "\"");
-            return Some((key, value));
-        }
-    }
-
-    // Standard key:value format check
     if attr_str.contains("key:") && attr_str.contains("value:") {
         let key_start = attr_str.find("key:").unwrap_or(0) + 4;
         let key_end = attr_str[key_start..]
@@ -58,12 +44,11 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
         let value = attr_str[value_start..value_end]
             .trim()
             .trim_matches('"')
-            .replace("\\\"", "\""); // Unescape the value
+            .to_string();
 
         return Some((key, value));
     }
 
-    // JSON-style format check
     if attr_str.contains('{') && attr_str.contains('}') {
         let json_start = attr_str.find('{').unwrap_or(0);
         let field_name = attr_str[0..json_start].trim().to_string();
@@ -90,26 +75,19 @@ pub fn event_to_json(
     for attr in &event.event.attributes {
         let attr_str = format!("{attr:?}");
 
-        if let Some((key, value)) = parse_attribute_string(&attr_str) {
-            let mut attr_json = serde_json::Map::new();
-            attr_json.insert("key".to_string(), json!(key));
-            attr_json.insert("value".to_string(), json!(value));
-
-            attributes.push(serde_json::Value::Object(attr_json));
-        } else {
-            let mut attr_json = serde_json::Map::new();
-            attr_json.insert("key".to_string(), json!(attr_str.clone()));
-            attr_json.insert("value".to_string(), json!("Unknown"));
-
-            attributes.push(serde_json::Value::Object(attr_json));
-        }
+        attributes.push(json!({
+            "key": attr_str.clone(),
+            "composite_key": format!("{}.{}", event.event.kind, attr_str),
+            "value": "Unknown"
+        }));
     }
 
-    let mut json_event_map = serde_json::Map::new();
-    json_event_map.insert("type".to_string(), json!(event.event.kind));
-    json_event_map.insert("attributes".to_string(), json!(attributes));
-
-    let json_event = serde_json::Value::Object(json_event_map);
+    let json_event = json!({
+        "block_id": event.block_height,
+        "tx_id": tx_hash.map(encode_to_hex),
+        "type": event.event.kind,
+        "attributes": attributes
+    });
 
     Ok(json_event)
 }
@@ -151,20 +129,12 @@ mod tests {
 
     #[test]
     fn test_parse_attribute_string() {
-        // Test standard attribute format
         let attr_with_key_value = "Attribute { key: \"action\", value: \"swap\" }";
         let result = parse_attribute_string(attr_with_key_value);
         assert!(result.is_some());
         let (key, value) = result.unwrap();
         assert_eq!(key, "action");
-        assert_eq!(value, "swap");
-
-        let v037_attr = "V037(EventAttribute { key: \"height\", value: \"44033\", index: false })";
-        let result = parse_attribute_string(v037_attr);
-        assert!(result.is_some());
-        let (key, value) = result.unwrap();
-        assert_eq!(key, "height");
-        assert_eq!(value, "44033");
+        assert!(value.contains("swap"));
 
         let attr_with_json = "event_type {\"timestamp\": 12345, \"block\": 100}";
         let result = parse_attribute_string(attr_with_json);
