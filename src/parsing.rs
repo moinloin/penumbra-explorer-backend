@@ -229,7 +229,6 @@ mod tests {
         assert_eq!(key, "action");
         assert!(value.contains("swap"));
 
-        // Complex event attribute parsing
         let complex_attr = "V037(EventAttribute { key: \"height\", value: \"82095\", index: false })";
         let result = parse_attribute_string(complex_attr);
         assert!(result.is_some());
