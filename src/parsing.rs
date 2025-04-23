@@ -139,7 +139,6 @@ pub fn event_to_json(
         let attr_str = format!("{attr:?}");
 
         if let Some((key, value)) = parse_attribute_string(&attr_str) {
-            // Skip empty values or values with empty amounts
             if value.contains("{\"amount\":{}}") ||
                 value.trim().is_empty() ||
                 value == "{}" ||
