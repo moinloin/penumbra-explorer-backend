@@ -50,8 +50,8 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
         // Clean up escaped quotes in the value
         let clean_value = value.replace("\\\"", "\"");
 
-        // Skip empty values like "{\"amount\":{}}"
-        if clean_value == "{\"amount\":{}}" {
+        // Skip empty values or values with empty amounts
+        if clean_value == "{\"amount\":{}}" || clean_value.trim().is_empty() {
             return None;
         }
 
@@ -81,27 +81,40 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
         // Clean up escaped quotes in the value
         let clean_value = value.replace("\\\"", "\"");
 
-        // Skip empty values like "{\"amount\":{}}"
-        if clean_value == "{\"amount\":{}}" {
+        // Skip empty values or values with empty amounts
+        if clean_value == "{\"amount\":{}}" || clean_value.trim().is_empty() {
             return None;
         }
 
         return Some((key, clean_value));
     }
 
-    // JSON content in braces
-    if attr_str.contains('{') && attr_str.contains('}') {
+    // JSON content in braces - fix incomplete JSON
+    if attr_str.contains('{') {
         let json_start = attr_str.find('{').unwrap_or(0);
         let field_name = attr_str[0..json_start].trim().to_string();
 
         if !field_name.is_empty() {
-            let json_content = &attr_str[json_start..];
+            let mut json_content = attr_str[json_start..].to_string();
+
+            // Fix incomplete JSON objects by adding missing closing braces
+            let open_braces = json_content.chars().filter(|&c| c == '{').count();
+            let close_braces = json_content.chars().filter(|&c| c == '}').count();
+
+            if open_braces > close_braces {
+                for _ in 0..(open_braces - close_braces) {
+                    json_content.push('}');
+                }
+            }
 
             // Clean up escaped quotes and backslashes in the JSON content
             let clean_json = json_content.replace("\\\"", "\"").replace("\\\\", "\\");
 
-            // Skip empty JSON values like "{\"amount\":{}}"
-            if clean_json == "{\"amount\":{}}" {
+            // Skip empty JSON values like "{\"amount\":{}}" or incomplete objects
+            if clean_json == "{\"amount\":{}}" ||
+                clean_json.contains("{\"amount\":{}}") ||
+                clean_json.trim().is_empty() ||
+                clean_json.ends_with(":{") {
                 return None;
             }
 
@@ -127,21 +140,40 @@ pub fn event_to_json(
 
         // Try to parse the attribute for better key-value representation
         if let Some((key, value)) = parse_attribute_string(&attr_str) {
+            // Skip empty values or values with empty amounts
+            if value.contains("{\"amount\":{}}") ||
+                value.trim().is_empty() ||
+                value == "{}" ||
+                value.ends_with(":{") {
+                continue;
+            }
+
+            // Fix incomplete JSON for fields like "position" and "state"
+            let fixed_value = if (key == "position" || key == "state") && !value.ends_with("}") {
+                let mut fixed = value.clone();
+                let open_braces = fixed.chars().filter(|&c| c == '{').count();
+                let close_braces = fixed.chars().filter(|&c| c == '}').count();
+
+                for _ in 0..(open_braces - close_braces) {
+                    fixed.push('}');
+                }
+                fixed
+            } else if key == "gasUsed" && !value.ends_with("\"") {
+                value.to_string() + "\""
+            } else {
+                value
+            };
+
             attributes.push(json!({
                 "key": key,
-                "value": value
+                "value": fixed_value
             }));
         } else {
-            // Fallback to the original representation but without the composite_key
-            attributes.push(json!({
-                "key": attr_str.clone(),
-                "value": "Unknown"
-            }));
+            // Skip the attribute if we can't parse it properly
+            continue;
         }
     }
 
-    // For the final event JSON structure, we maintain the previous format for compatibility,
-    // but our collecting functions will transform this to the desired output format
     let json_event = json!({
         "block_id": event.block_height,
         "tx_id": tx_hash.map(encode_to_hex),
@@ -212,6 +244,19 @@ mod tests {
         let (key, value) = result.unwrap();
         assert_eq!(key, "event_type");
         assert_eq!(value, "{\"timestamp\": 12345, \"block\": 100}");
+
+        // Incomplete JSON
+        let incomplete_json = "position {\"closeOnFill\":true";
+        let result = parse_attribute_string(incomplete_json);
+        assert!(result.is_some());
+        let (key, value) = result.unwrap();
+        assert_eq!(key, "position");
+        assert_eq!(value, "{\"closeOnFill\":true}");
+
+        // Empty amount
+        let empty_amount = "swappedFeeTotal {\"amount\":{}}";
+        let result = parse_attribute_string(empty_amount);
+        assert!(result.is_none());
 
         // Invalid attribute
         let invalid_attr = "Something without key or value";
