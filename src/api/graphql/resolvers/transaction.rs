@@ -253,15 +253,12 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
         let raw_json_str: String = row.get("raw_json");
 
         if !raw_json_str.is_empty() {
-            let json_value = match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
-                Ok(value) => value,
-                Err(_) => {
-                    tracing::warn!(
-                        "Failed to parse JSON for transaction: {}",
-                        hex::encode_upper(&tx_hash)
-                    );
-                    continue;
-                }
+            let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&raw_json_str) else {
+                tracing::warn!(
+                    "Failed to parse JSON for transaction: {}",
+                    hex::encode_upper(&tx_hash)
+                );
+                continue;
             };
 
             let hash = hex::encode_upper(&tx_hash);
