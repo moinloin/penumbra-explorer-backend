@@ -110,10 +110,8 @@ impl Block {
     async fn raw_json(&self) -> Result<Option<String>> {
         if let Some(json_value) = &self.raw_json {
             if let Some(raw_str) = json_value.as_str() {
-                // If we have a string value, return it directly
                 Ok(Some(raw_str.to_string()))
             } else {
-                // Otherwise try to convert it to a string
                 Ok(Some(serde_json::to_string(json_value)?))
             }
         } else {
