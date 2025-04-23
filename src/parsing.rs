@@ -253,7 +253,6 @@ mod tests {
         assert_eq!(key, "position");
         assert_eq!(value, "{\"closeOnFill\":true}");
 
-        // Empty amount
         let empty_amount = "swappedFeeTotal {\"amount\":{}}";
         let result = parse_attribute_string(empty_amount);
         assert!(result.is_none());
