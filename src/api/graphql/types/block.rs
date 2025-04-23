@@ -118,6 +118,18 @@ impl Block {
             Ok(None)
         }
     }
+
+    #[graphql(name = "chainId")]
+    async fn chain_id(&self, ctx: &Context<'_>) -> Result<Option<String>> {
+        let db = &ctx.data_unchecked::<ApiContext>().db;
+        let chain_id = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT chain_id FROM explorer_block_details WHERE height = $1",
+        )
+        .bind(i64::from(self.height))
+        .fetch_one(db)
+        .await?;
+        Ok(chain_id)
+    }
 }
 
 use async_graphql::SimpleObject;
