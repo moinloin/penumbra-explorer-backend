@@ -71,31 +71,10 @@ impl Transaction {
     #[graphql(name = "rawJson")]
     #[allow(clippy::unused_async)]
     async fn raw_json(&self) -> Result<String> {
-        // Return the raw JSON string exactly as stored
         if let Some(raw_str) = self.raw_json.as_str() {
             Ok(raw_str.to_string())
         } else {
             Ok(serde_json::to_string(&self.raw_json)?)
-        }
-    }
-
-    #[graphql(name = "formattedRawJson")]
-    #[allow(clippy::unused_async)]
-    async fn formatted_raw_json(&self) -> Result<String> {
-        // Get the raw JSON string
-        let raw_json_str = if let Some(json_str) = self.raw_json.as_str() {
-            json_str.to_string()
-        } else {
-            serde_json::to_string(&self.raw_json).unwrap_or_default()
-        };
-        
-        // Parse and format the JSON
-        match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
-            Ok(parsed) => match serde_json::to_string_pretty(&parsed) {
-                Ok(formatted) => Ok(formatted),
-                Err(_) => Ok(raw_json_str),
-            },
-            Err(_) => Ok(raw_json_str),
         }
     }
 }
