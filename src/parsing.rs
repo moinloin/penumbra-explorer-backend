@@ -27,7 +27,6 @@ pub fn encode_to_base64<T: AsRef<[u8]>>(data: T) -> String {
 /// Parse attribute string from an event
 #[must_use]
 pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
-    // For complex event attributes like "V037(EventAttribute { key: \"height\", value: \"82095\", index: false })"
     if attr_str.contains("EventAttribute") && attr_str.contains("key:") && attr_str.contains("value:") {
         let key_start = attr_str.find("key:").unwrap_or(0) + 5;
         let key_end = attr_str[key_start..]
