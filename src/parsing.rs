@@ -105,7 +105,6 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
                 }
             }
 
-            // Clean up escaped quotes and backslashes in the JSON content
             let clean_json = json_content.replace("\\\"", "\"").replace("\\\\", "\\");
 
             if clean_json == "{\"amount\":{}}" ||
