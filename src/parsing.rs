@@ -236,7 +236,6 @@ mod tests {
         assert_eq!(key, "height");
         assert_eq!(value, "82095");
 
-        // JSON content
         let attr_with_json = "event_type {\"timestamp\": 12345, \"block\": 100}";
         let result = parse_attribute_string(attr_with_json);
         assert!(result.is_some());
