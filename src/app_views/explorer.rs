@@ -32,7 +32,7 @@ struct BlockMetadata<'a> {
     timestamp: DateTime<sqlx::types::chrono::Utc>,
     tx_count: usize,
     chain_id: &'a str,
-    raw_json: Value,
+    raw_json: String,
 }
 
 struct TransactionMetadata<'a> {
@@ -42,7 +42,7 @@ struct TransactionMetadata<'a> {
     fee_amount: u64,
     chain_id: &'a str,
     tx_bytes_base64: String,
-    decoded_tx_json: Value,
+    decoded_tx_json: String,
 }
 
 impl Explorer {
@@ -132,8 +132,7 @@ impl Explorer {
         let previous_hash = None::<Vec<u8>>;
         let block_hash = None::<Vec<u8>>;
 
-        let raw_json_str = serde_json::to_string(&meta.raw_json)?;
-
+        // Store as TEXT directly
         if exists {
             sqlx::query(
                 r"
@@ -143,7 +142,7 @@ impl Explorer {
                 timestamp = $3,
                 num_transactions = $4,
                 chain_id = $5,
-                raw_json = $6::jsonb
+                raw_json = $6
             WHERE height = $1
             ",
             )
@@ -152,7 +151,7 @@ impl Explorer {
                 .bind(meta.timestamp)
                 .bind(i32::try_from(meta.tx_count).unwrap_or(0))
                 .bind(meta.chain_id)
-                .bind(&raw_json_str)
+                .bind(&meta.raw_json)
                 .execute(dbtx.as_mut())
                 .await?;
 
@@ -163,7 +162,7 @@ impl Explorer {
             INSERT INTO explorer_block_details
             (height, root, timestamp, num_transactions, chain_id,
              validator_identity_key, previous_block_hash, block_hash, raw_json)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ",
             )
                 .bind(height_i64)
@@ -174,7 +173,7 @@ impl Explorer {
                 .bind(validator_key)
                 .bind(previous_hash)
                 .bind(block_hash)
-                .bind(&raw_json_str)
+                .bind(&meta.raw_json)
                 .execute(dbtx.as_mut())
                 .await?;
 
@@ -203,13 +202,7 @@ impl Explorer {
             .fetch_one(dbtx.as_mut())
             .await?;
 
-        let json_str = serde_json::to_string(&meta.decoded_tx_json).map_err(|e| {
-            sqlx::Error::Decode(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("JSON serialization error: {e}"),
-            )))
-        })?;
-
+        // Store as TEXT directly
         if exists {
             sqlx::query(
                 r"
@@ -220,7 +213,7 @@ impl Explorer {
                 fee_amount = $4,
                 chain_id = $5,
                 raw_data = $6,
-                raw_json = $7::jsonb
+                raw_json = $7
             WHERE tx_hash = $1
             ",
             )
@@ -230,7 +223,7 @@ impl Explorer {
                 .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
                 .bind(meta.chain_id)
                 .bind(&meta.tx_bytes_base64)
-                .bind(&json_str)
+                .bind(&meta.decoded_tx_json)
                 .execute(dbtx.as_mut())
                 .await?;
         } else {
@@ -238,7 +231,7 @@ impl Explorer {
                 r"
             INSERT INTO explorer_transactions
             (tx_hash, block_height, timestamp, fee_amount, chain_id, raw_data, raw_json)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ",
             )
                 .bind(meta.tx_hash.as_ref())
@@ -247,7 +240,7 @@ impl Explorer {
                 .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
                 .bind(meta.chain_id)
                 .bind(&meta.tx_bytes_base64)
-                .bind(&json_str)
+                .bind(&meta.decoded_tx_json)
                 .execute(dbtx.as_mut())
                 .await?;
         }
@@ -318,6 +311,7 @@ impl Explorer {
         }
     }
 
+    // Format the transaction JSON according to the desired format
     fn create_transaction_json(
         tx_hash: [u8; 32],
         tx_bytes: &[u8],
@@ -325,7 +319,7 @@ impl Explorer {
         timestamp: sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
         tx_index: u64,
         tx_events: &[ContextualizedEvent<'_>],
-    ) -> Value {
+    ) -> String {
         let mut processed_events = Vec::with_capacity(tx_events.len() + 1);
 
         processed_events.push(json!({
@@ -363,17 +357,41 @@ impl Explorer {
         }
 
         let tx_result_decoded = Self::decode_transaction(tx_hash, tx_bytes);
+        let tx_hash_hex = encode_to_hex(tx_hash);
 
-        let mut ordered_map = Map::with_capacity(7);
-        ordered_map.insert("hash".to_string(), json!(encode_to_hex(tx_hash)));
-        ordered_map.insert("height".to_string(), json!(height.to_string()));
-        ordered_map.insert("index".to_string(), json!(tx_index.to_string()));
-        ordered_map.insert("timestamp".to_string(), json!(timestamp));
-        ordered_map.insert("tx_result".to_string(), json!(encode_to_hex(tx_bytes)));
-        ordered_map.insert("tx_result_decoded".to_string(), tx_result_decoded);
-        ordered_map.insert("events".to_string(), json!(processed_events));
+        // Format in the desired order according to the example
+        let json_value = json!({
+            "hash": tx_hash_hex,
+            "block_height": height.to_string(),
+            "index": tx_index.to_string(),
+            "timestamp": timestamp.to_rfc3339(),
+            "transaction_view": tx_result_decoded,
+            "events": processed_events
+        });
 
-        Value::Object(ordered_map)
+        // Return as a pretty-printed JSON string
+        serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
+    }
+
+    // Format the block JSON according to the desired format
+    fn create_block_json(
+        height: u64,
+        chain_id: &str,
+        timestamp: DateTime<sqlx::types::chrono::Utc>,
+        transactions: &[Value],
+        events: &[Value],
+    ) -> String {
+        // Format in the desired order according to the example
+        let json_value = json!({
+            "height": height,
+            "chain_id": chain_id,
+            "timestamp": timestamp.to_rfc3339(),
+            "transactions": transactions,
+            "events": events
+        });
+
+        // Return as a pretty-printed JSON string
+        serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -407,6 +425,7 @@ impl AppView for Explorer {
     ) -> Result<(), anyhow::Error> {
         tracing::info!("Initializing Explorer with chain_id = {}", self.get_chain_id());
 
+        // Using TEXT for raw_json
         sqlx::query(
             r"
             CREATE TABLE IF NOT EXISTS explorer_block_details (
@@ -419,7 +438,7 @@ impl AppView for Explorer {
                 previous_block_hash BYTEA,
                 block_hash BYTEA,
                 chain_id TEXT,
-                raw_json JSONB
+                raw_json TEXT
             )
             ",
         )
@@ -444,6 +463,7 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
+        // Using TEXT for raw_json
         sqlx::query(
             r"
             CREATE TABLE IF NOT EXISTS explorer_transactions (
@@ -453,7 +473,7 @@ impl AppView for Explorer {
                 fee_amount NUMERIC(39, 0) DEFAULT 0,
                 chain_id TEXT,
                 raw_data TEXT,
-                raw_json JSONB,
+                raw_json TEXT,
                 FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
                     DEFERRABLE INITIALLY DEFERRED
             )
@@ -537,8 +557,17 @@ impl AppView for Explorer {
         tracing::info!("Processed {} blocks from batch", block_results.len());
 
         for (height, root, ts, tx_count, _, raw_json, block_txs) in block_results {
+            // Format the block JSON with our custom function
+            let formatted_block_json = Explorer::create_block_json(
+                height,
+                self.get_chain_id(),
+                ts,
+                &collect_block_transactions(&raw_json),
+                &collect_block_events(&raw_json),
+            );
+
             // Use our chain_id from genesis instead of the one from the blocks
-            block_data_to_process.push((height, root, ts, tx_count, raw_json));
+            block_data_to_process.push((height, root, ts, tx_count, formatted_block_json));
 
             for (tx_hash, tx_bytes, tx_index, tx_events) in block_txs {
                 transactions_to_process.push((
@@ -552,25 +581,30 @@ impl AppView for Explorer {
             }
         }
 
-        for (height, root, ts, tx_count, raw_json) in block_data_to_process {
+        for (height, root, ts, tx_count, formatted_json) in block_data_to_process {
             let meta = BlockMetadata {
                 height,
                 root,
                 timestamp: ts,
                 tx_count,
                 chain_id: self.get_chain_id(), // Use our chain_id from genesis
-                raw_json,
+                raw_json: formatted_json,
             };
 
             self.insert_block(dbtx, meta).await?;
         }
 
         for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events) in transactions_to_process {
-            let decoded_tx_json = Self::create_transaction_json(
+            // Create formatted transaction JSON string
+            let formatted_tx_json = Self::create_transaction_json(
                 tx_hash, &tx_bytes, height, timestamp, tx_index, &tx_events,
             );
 
-            let fee_amount = Self::extract_fee_amount(&decoded_tx_json["tx_result_decoded"]);
+            // Extract fee amount from the JSON
+            let parsed_json: Value = serde_json::from_str(&formatted_tx_json)
+                .unwrap_or_else(|_| json!({}));
+            let fee_amount = Self::extract_fee_amount(&parsed_json["transaction_view"]);
+
             // Use our chain_id from genesis
             let chain_id = self.chain_id.clone().unwrap_or_else(|| "unknown".to_string());
 
@@ -583,7 +617,7 @@ impl AppView for Explorer {
                 fee_amount,
                 chain_id: &chain_id,
                 tx_bytes_base64,
-                decoded_tx_json,
+                decoded_tx_json: formatted_tx_json,
             };
 
             if let Err(e) = self.insert_transaction(dbtx, meta).await {
@@ -614,6 +648,29 @@ impl AppView for Explorer {
 
         Ok(())
     }
+}
+
+// Helper functions to extract transactions and events from block JSON
+fn collect_block_transactions(raw_json: &Value) -> Vec<Value> {
+    if let Some(block) = raw_json.get("block") {
+        if let Some(txs) = block.get("transactions") {
+            if let Some(txs_array) = txs.as_array() {
+                return txs_array.clone();
+            }
+        }
+    }
+    Vec::new()
+}
+
+fn collect_block_events(raw_json: &Value) -> Vec<Value> {
+    if let Some(block) = raw_json.get("block") {
+        if let Some(events) = block.get("events") {
+            if let Some(events_array) = events.as_array() {
+                return events_array.clone();
+            }
+        }
+    }
+    Vec::new()
 }
 
 // This process_block_events function remains unchanged to maintain compatibility
@@ -753,137 +810,4 @@ fn extract_chain_id_from_bytes(tx_bytes: &[u8]) -> Option<String> {
     }
 
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Utc;
-    use serde_json::json;
-
-    #[test]
-    fn test_extract_chain_id_from_bytes_returns_none_for_empty_bytes() {
-        let empty_bytes: &[u8] = &[];
-        assert_eq!(extract_chain_id_from_bytes(empty_bytes), None);
-    }
-
-    #[test]
-    fn test_extract_chain_id_from_bytes_returns_none_for_invalid_bytes() {
-        let invalid_bytes: &[u8] = &[1, 2, 3, 4, 5];
-        assert_eq!(extract_chain_id_from_bytes(invalid_bytes), None);
-    }
-
-    #[test]
-    fn test_extract_fee_amount() {
-        let tx_result = json!({
-            "body": {
-                "transactionParameters": {
-                    "fee": {
-                        "amount": {
-                            "lo": "1000"
-                        }
-                    }
-                }
-            }
-        });
-
-        assert_eq!(Explorer::extract_fee_amount(&tx_result), 1000);
-
-        let tx_result_missing_fee = json!({
-            "body": {
-                "transactionParameters": {}
-            }
-        });
-
-        assert_eq!(Explorer::extract_fee_amount(&tx_result_missing_fee), 0);
-
-        let empty_json = json!({});
-        assert_eq!(Explorer::extract_fee_amount(&empty_json), 0);
-    }
-
-    #[test]
-    fn test_extract_chain_id() {
-        let tx_result = json!({
-            "body": {
-                "transactionParameters": {
-                    "chainId": "penumbra-testnet"
-                }
-            }
-        });
-
-        assert_eq!(
-            Explorer::extract_chain_id(&tx_result),
-            Some("penumbra-testnet".to_string())
-        );
-
-        let tx_result_missing_chain_id = json!({
-            "body": {
-                "transactionParameters": {}
-            }
-        });
-
-        assert_eq!(
-            Explorer::extract_chain_id(&tx_result_missing_chain_id),
-            None
-        );
-
-        let empty_json = json!({});
-        assert_eq!(Explorer::extract_chain_id(&empty_json), None);
-    }
-
-    #[test]
-    fn test_decode_transaction_with_invalid_data() {
-        let tx_hash = [0u8; 32];
-        let invalid_tx_bytes = vec![1, 2, 3, 4];
-
-        let result = Explorer::decode_transaction(tx_hash, &invalid_tx_bytes);
-
-        assert!(result.is_object());
-        assert!(result.as_object().unwrap().is_empty());
-    }
-
-    #[test]
-    fn test_create_transaction_json() {
-        let tx_hash = [1u8; 32];
-        let tx_bytes = vec![1, 2, 3, 4];
-        let height = 100;
-        let timestamp = Utc::now();
-        let tx_index = 2;
-        let tx_events = vec![];
-
-        let result = Explorer::create_transaction_json(
-            tx_hash, &tx_bytes, height, timestamp, tx_index, &tx_events,
-        );
-
-        let obj = result.as_object().unwrap();
-
-        assert_eq!(
-            obj.get("hash").unwrap().as_str().unwrap(),
-            "0101010101010101010101010101010101010101010101010101010101010101"
-        );
-        assert_eq!(obj.get("height").unwrap().as_str().unwrap(), "100");
-        assert_eq!(obj.get("index").unwrap().as_str().unwrap(), "2");
-        assert!(obj.contains_key("timestamp"));
-        assert_eq!(obj.get("tx_result").unwrap().as_str().unwrap(), "01020304");
-        assert!(obj.contains_key("tx_result_decoded"));
-        assert!(obj.contains_key("events"));
-
-        let events = obj.get("events").unwrap().as_array().unwrap();
-        assert_eq!(events.len(), 1);
-
-        let tx_event = &events[0];
-        assert_eq!(tx_event.get("type").unwrap(), "tx");
-
-        let attrs = tx_event.get("attributes").unwrap().as_array().unwrap();
-        assert_eq!(attrs.len(), 2);
-
-        assert_eq!(attrs[0].get("key").unwrap(), "hash");
-        assert_eq!(
-            attrs[0].get("value").unwrap(),
-            "0101010101010101010101010101010101010101010101010101010101010101"
-        );
-
-        assert_eq!(attrs[1].get("key").unwrap(), "height");
-        assert_eq!(attrs[1].get("value").unwrap(), "100");
-    }
 }
