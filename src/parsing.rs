@@ -258,7 +258,6 @@ mod tests {
         let result = parse_attribute_string(empty_amount);
         assert!(result.is_none());
 
-        // Invalid attribute
         let invalid_attr = "Something without key or value";
         let result = parse_attribute_string(invalid_attr);
         assert!(result.is_none());
