@@ -146,7 +146,6 @@ pub fn event_to_json(
                 continue;
             }
 
-            // Fix incomplete JSON for fields like "position" and "state"
             let fixed_value = if (key == "position" || key == "state") && !value.ends_with("}") {
                 let mut fixed = value.clone();
                 let open_braces = fixed.chars().filter(|&c| c == '{').count();
