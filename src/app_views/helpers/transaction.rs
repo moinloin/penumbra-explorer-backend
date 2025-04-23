@@ -46,38 +46,6 @@ pub fn extract_fee_amount(tx_result: &Value) -> u64 {
         .unwrap_or(0)
 }
 
-pub fn extract_chain_id(tx_result: &Value) -> Option<String> {
-    tx_result
-        .get("body")
-        .and_then(|body| body.get("transactionParameters"))
-        .and_then(|params| params.get("chainId"))
-        .and_then(|chain_id| chain_id.as_str())
-        .map(std::string::ToString::to_string)
-}
-
-pub fn extract_chain_id_from_bytes(tx_bytes: &[u8]) -> Option<String> {
-    match TransactionView::decode(tx_bytes) {
-        Ok(tx_view) => {
-            if let Some(body) = &tx_view.body_view {
-                if let Some(params) = &body.transaction_parameters {
-                    return Some(params.chain_id.clone());
-                }
-            }
-        }
-        Err(_) => {
-            if let Ok(tx) = Transaction::decode(tx_bytes) {
-                if let Some(body) = &tx.body {
-                    if let Some(params) = &body.transaction_parameters {
-                        return Some(params.chain_id.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    None
-}
-
 pub fn decode_transaction(tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
     let start = Instant::now();
     let hash_hex = encode_to_hex(tx_hash);
@@ -178,6 +146,7 @@ pub fn create_transaction_json(
     let json_value = serde_json::Value::Object(tx_json);
     serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
 }
+
 pub async fn insert_transaction(
     dbtx: &mut PgTransaction<'_>,
     meta: TransactionMetadata<'_>,
@@ -192,9 +161,9 @@ pub async fn insert_transaction(
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
     )
-    .bind(meta.tx_hash.as_ref())
-    .fetch_one(dbtx.as_mut())
-    .await?;
+        .bind(meta.tx_hash.as_ref())
+        .fetch_one(dbtx.as_mut())
+        .await?;
 
     if exists {
         sqlx::query(
@@ -210,15 +179,15 @@ pub async fn insert_transaction(
         WHERE tx_hash = $1
         ",
         )
-        .bind(meta.tx_hash.as_ref())
-        .bind(height_i64)
-        .bind(meta.timestamp)
-        .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-        .bind(meta.chain_id)
-        .bind(&meta.tx_bytes_base64)
-        .bind(&meta.decoded_tx_json)
-        .execute(dbtx.as_mut())
-        .await?;
+            .bind(meta.tx_hash.as_ref())
+            .bind(height_i64)
+            .bind(meta.timestamp)
+            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+            .bind(meta.chain_id)
+            .bind(&meta.tx_bytes_base64)
+            .bind(&meta.decoded_tx_json)
+            .execute(dbtx.as_mut())
+            .await?;
     } else {
         sqlx::query(
             r"
@@ -227,20 +196,21 @@ pub async fn insert_transaction(
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         ",
         )
-        .bind(meta.tx_hash.as_ref())
-        .bind(height_i64)
-        .bind(meta.timestamp)
-        .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-        .bind(meta.chain_id)
-        .bind(&meta.tx_bytes_base64)
-        .bind(&meta.decoded_tx_json)
-        .execute(dbtx.as_mut())
-        .await?;
+            .bind(meta.tx_hash.as_ref())
+            .bind(height_i64)
+            .bind(meta.timestamp)
+            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+            .bind(meta.chain_id)
+            .bind(&meta.tx_bytes_base64)
+            .bind(&meta.decoded_tx_json)
+            .execute(dbtx.as_mut())
+            .await?;
     }
 
     Ok(())
 }
 
+// Completely simplified process_transaction that only uses the provided chain_id
 pub async fn process_transaction(
     tx_hash: [u8; 32],
     tx_bytes: &[u8],
@@ -257,11 +227,12 @@ pub async fn process_transaction(
     let parsed_json: Value = serde_json::from_str(&decoded_tx_json)
         .map_err(|e| anyhow::anyhow!("Failed to parse transaction JSON: {}", e))?;
 
+    // Extract fee amount for record-keeping
     let tx_result_decoded = &parsed_json["transaction_view"];
     let fee_amount = extract_fee_amount(tx_result_decoded);
-    let chain_id = extract_chain_id(tx_result_decoded)
-        .or(chain_id_opt)
-        .unwrap_or_else(|| "unknown".to_string());
+
+    // Only use the provided chain_id from Explorer, fall back to "unknown"
+    let chain_id = chain_id_opt.unwrap_or_else(|| "unknown".to_string());
 
     let tx_bytes_base64 = encode_to_base64(tx_bytes);
 
