@@ -96,7 +96,6 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
         if !field_name.is_empty() {
             let mut json_content = attr_str[json_start..].to_string();
 
-            // Fix incomplete JSON objects by adding missing closing braces
             let open_braces = json_content.chars().filter(|&c| c == '{').count();
             let close_braces = json_content.chars().filter(|&c| c == '}').count();
 
