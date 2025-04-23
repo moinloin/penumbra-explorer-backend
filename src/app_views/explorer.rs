@@ -1,4 +1,3 @@
-// app_views/explorer.rs
 use anyhow::Result;
 use cometindex::{
     async_trait,
