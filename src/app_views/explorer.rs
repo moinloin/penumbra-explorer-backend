@@ -312,6 +312,7 @@ impl Explorer {
     }
 
     // Format the transaction JSON according to the desired format
+    // Format the transaction JSON according to the desired format with exact ordering
     fn create_transaction_json(
         tx_hash: [u8; 32],
         tx_bytes: &[u8],
@@ -323,12 +324,12 @@ impl Explorer {
         let mut processed_events = Vec::with_capacity(tx_events.len() + 1);
 
         processed_events.push(json!({
-            "type": "tx",
-            "attributes": [
-                {"key": "hash", "value": encode_to_hex(tx_hash)},
-                {"key": "height", "value": height.to_string()}
-            ]
-        }));
+        "type": "tx",
+        "attributes": [
+            {"key": "hash", "value": encode_to_hex(tx_hash)},
+            {"key": "height", "value": height.to_string()}
+        ]
+    }));
 
         for event in tx_events {
             let attr_capacity = event.event.attributes.len();
@@ -344,43 +345,62 @@ impl Explorer {
                     }
 
                     attributes.push(json!({
-                        "key": key,
-                        "value": value
-                    }));
+                    "key": key,
+                    "value": value
+                }));
                 } else {
                     attributes.push(json!({
-                        "key": attr_str,
-                        "value": "Unknown"
-                    }));
+                    "key": attr_str,
+                    "value": "Unknown"
+                }));
                 }
             }
 
             // Only include events with attributes
             if !attributes.is_empty() {
                 processed_events.push(json!({
-                    "type": event.event.kind,
-                    "attributes": attributes
-                }));
+                "type": event.event.kind,
+                "attributes": attributes
+            }));
             }
         }
 
         let tx_result_decoded = Self::decode_transaction(tx_hash, tx_bytes);
         let tx_hash_hex = encode_to_hex(tx_hash);
 
-        // Format in the desired order according to the example
-        let json_value = json!({
-            "hash": tx_hash_hex,
-            "block_height": height.to_string(),
-            "index": tx_index.to_string(),
-            "timestamp": timestamp.to_rfc3339(),
-            "transaction_view": tx_result_decoded,
-            "events": processed_events
-        });
+        // Manually build the JSON string to ensure exact field order
+        let mut json_str = String::new();
 
-        // Return as a pretty-printed JSON string
-        serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
+        // Start object
+        json_str.push_str("{\n");
+
+        // Order: hash, block_height, index, timestamp, transaction_view, events
+        json_str.push_str(&format!("  \"hash\": \"{}\",\n", tx_hash_hex));
+        json_str.push_str(&format!("  \"block_height\": \"{}\",\n", height));
+        json_str.push_str(&format!("  \"index\": \"{}\",\n", tx_index));
+        json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
+
+        // transaction_view object
+        json_str.push_str("  \"transaction_view\": ");
+        let tx_view_json = serde_json::to_string_pretty(&tx_result_decoded).unwrap_or_else(|_| "{}".to_string());
+        // Indent each line
+        let tx_view_indented = tx_view_json.replace('\n', "\n  ");
+        json_str.push_str(&tx_view_indented);
+        json_str.push_str(",\n");
+
+        // events array
+        json_str.push_str("  \"events\": ");
+        let events_json = serde_json::to_string_pretty(&processed_events).unwrap_or_else(|_| "[]".to_string());
+        // Indent each line
+        let events_indented = events_json.replace('\n', "\n  ");
+        json_str.push_str(&events_indented);
+        json_str.push_str("\n");
+
+        // End object
+        json_str.push_str("}");
+
+        json_str
     }
-
     // Format the block JSON according to the desired format with exact ordering
     fn create_block_json(
         height: u64,
