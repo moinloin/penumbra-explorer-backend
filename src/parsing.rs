@@ -57,7 +57,6 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
         return Some((key, clean_value));
     }
 
-    // Simple key-value pair parsing
     if attr_str.contains("key:") && attr_str.contains("value:") {
         let key_start = attr_str.find("key:").unwrap_or(0) + 4;
         let key_end = attr_str[key_start..]
