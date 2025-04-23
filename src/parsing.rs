@@ -89,7 +89,6 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
         return Some((key, clean_value));
     }
 
-    // JSON content in braces - fix incomplete JSON
     if attr_str.contains('{') {
         let json_start = attr_str.find('{').unwrap_or(0);
         let field_name = attr_str[0..json_start].trim().to_string();
