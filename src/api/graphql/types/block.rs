@@ -72,6 +72,7 @@ impl Block {
             let raw_json_str: String = row.get("raw_json");
 
             if !raw_json_str.is_empty() {
+                // First parse the JSON for metadata extraction, but use the original string for storage
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw_json_str) {
                     let hash = hex::encode_upper(&tx_hash);
                     transactions.push(Transaction {
@@ -83,7 +84,8 @@ impl Block {
                         block: self.clone(),
                         body: crate::api::graphql::types::extract_transaction_body(&json),
                         raw_events: extract_events_from_json(&json),
-                        raw_json: json,
+                        // Store the original string to preserve DB ordering
+                        raw_json: serde_json::Value::String(raw_json_str.clone()),
                     });
                 }
             }
@@ -105,8 +107,18 @@ impl Block {
 
     #[graphql(name = "rawJson")]
     #[allow(clippy::unused_async)]
-    async fn raw_json(&self) -> Result<Option<serde_json::Value>> {
-        Ok(self.raw_json.clone())
+    async fn raw_json(&self) -> Result<Option<String>> {
+        if let Some(json_value) = &self.raw_json {
+            if let Some(raw_str) = json_value.as_str() {
+                // If we have a string value, return it directly
+                Ok(Some(raw_str.to_string()))
+            } else {
+                // Otherwise try to convert it to a string
+                Ok(Some(serde_json::to_string(json_value)?))
+            }
+        } else {
+            Ok(None)
+        }
     }
 }
 
