@@ -221,7 +221,6 @@ mod tests {
 
     #[test]
     fn test_parse_attribute_string() {
-        // Basic attribute parsing
         let attr_with_key_value = "Attribute { key: \"action\", value: \"swap\" }";
         let result = parse_attribute_string(attr_with_key_value);
         assert!(result.is_some());
