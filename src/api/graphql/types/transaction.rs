@@ -70,33 +70,32 @@ impl Transaction {
 
     #[graphql(name = "rawJson")]
     #[allow(clippy::unused_async)]
-    async fn raw_json(&self) -> Result<serde_json::Value> {
-        // Since raw_json might be a string in some resolvers
-        if let Some(json_str) = self.raw_json.as_str() {
-            match serde_json::from_str::<serde_json::Value>(json_str) {
-                Ok(parsed) => Ok(parsed),
-                Err(_) => Ok(self.raw_json.clone()),
-            }
+    async fn raw_json(&self) -> Result<String> {
+        // Return the raw JSON string exactly as stored
+        if let Some(raw_str) = self.raw_json.as_str() {
+            Ok(raw_str.to_string())
         } else {
-            Ok(self.raw_json.clone())
+            Ok(serde_json::to_string(&self.raw_json)?)
         }
     }
 
     #[graphql(name = "formattedRawJson")]
     #[allow(clippy::unused_async)]
     async fn formatted_raw_json(&self) -> Result<String> {
-        let json_value = if let Some(json_str) = self.raw_json.as_str() {
-            match serde_json::from_str::<serde_json::Value>(json_str) {
-                Ok(parsed) => parsed,
-                Err(_) => self.raw_json.clone(),
-            }
+        // Get the raw JSON string
+        let raw_json_str = if let Some(json_str) = self.raw_json.as_str() {
+            json_str.to_string()
         } else {
-            self.raw_json.clone()
+            serde_json::to_string(&self.raw_json).unwrap_or_default()
         };
-
-        match serde_json::to_string_pretty(&json_value) {
-            Ok(formatted) => Ok(formatted),
-            Err(_) => Ok(serde_json::to_string(&self.raw_json).unwrap_or_default()),
+        
+        // Parse and format the JSON
+        match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
+            Ok(parsed) => match serde_json::to_string_pretty(&parsed) {
+                Ok(formatted) => Ok(formatted),
+                Err(_) => Ok(raw_json_str),
+            },
+            Err(_) => Ok(raw_json_str),
         }
     }
 }
@@ -234,10 +233,8 @@ impl DbRawTransaction {
             let json_value = if raw_json_str.is_empty() {
                 None
             } else {
-                match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
-                    Ok(value) => Some(value),
-                    Err(_) => None,
-                }
+                // Store raw JSON string without parsing
+                Some(serde_json::Value::String(raw_json_str))
             };
 
             Ok(Some(Self {
@@ -300,10 +297,8 @@ impl DbRawTransaction {
             let json_value = if raw_json_str.is_empty() {
                 None
             } else {
-                match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
-                    Ok(value) => Some(value),
-                    Err(_) => None,
-                }
+                // Store raw JSON string without parsing
+                Some(serde_json::Value::String(raw_json_str))
             };
 
             transactions.push(Self {
