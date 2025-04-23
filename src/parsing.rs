@@ -245,7 +245,6 @@ mod tests {
         assert_eq!(key, "event_type");
         assert_eq!(value, "{\"timestamp\": 12345, \"block\": 100}");
 
-        // Incomplete JSON
         let incomplete_json = "position {\"closeOnFill\":true";
         let result = parse_attribute_string(incomplete_json);
         assert!(result.is_some());
