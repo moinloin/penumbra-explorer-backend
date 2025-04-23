@@ -169,7 +169,6 @@ pub fn event_to_json(
                 "value": fixed_value
             }));
         } else {
-            // Skip the attribute if we can't parse it properly
             continue;
         }
     }
