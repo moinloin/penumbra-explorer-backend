@@ -49,7 +49,6 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
         // Clean up escaped quotes in the value
         let clean_value = value.replace("\\\"", "\"");
 
-        // Skip empty values or values with empty amounts
         if clean_value == "{\"amount\":{}}" || clean_value.trim().is_empty() {
             return None;
         }
