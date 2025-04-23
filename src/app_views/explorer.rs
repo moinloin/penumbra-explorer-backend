@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
-use penumbra_sdk_proto::event::ProtoEvent; // Added missing import
+use penumbra_sdk_proto::event::ProtoEvent;
 
 use crate::app_views::helpers::{
     block::{create_block_json, fetch_chain_ids_for_blocks, insert_block, BlockMetadata},
