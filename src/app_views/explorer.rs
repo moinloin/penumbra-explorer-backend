@@ -9,7 +9,7 @@ use penumbra_sdk_proto::core::component::sct::v1 as pb;
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use penumbra_sdk_proto::event::ProtoEvent;
 use prost::Message;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use sqlx::postgres::PgPool;
 use sqlx::types::chrono::DateTime;
 use std::collections::HashMap;
@@ -338,6 +338,11 @@ impl Explorer {
                 let attr_str = format!("{attr:?}");
 
                 if let Some((key, value)) = parse_attribute_string(&attr_str) {
+                    // Skip empty values
+                    if value.contains("{\"amount\":{}}") || value.trim().is_empty() {
+                        continue;
+                    }
+
                     attributes.push(json!({
                         "key": key,
                         "value": value
@@ -350,10 +355,13 @@ impl Explorer {
                 }
             }
 
-            processed_events.push(json!({
-                "type": event.event.kind,
-                "attributes": attributes
-            }));
+            // Only include events with attributes
+            if !attributes.is_empty() {
+                processed_events.push(json!({
+                    "type": event.event.kind,
+                    "attributes": attributes
+                }));
+            }
         }
 
         let tx_result_decoded = Self::decode_transaction(tx_hash, tx_bytes);
@@ -373,7 +381,7 @@ impl Explorer {
         serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
     }
 
-    // Format the block JSON according to the desired format
+    // Format the block JSON according to the desired format with exact ordering
     fn create_block_json(
         height: u64,
         chain_id: &str,
@@ -381,17 +389,37 @@ impl Explorer {
         transactions: &[Value],
         events: &[Value],
     ) -> String {
-        // Format in the desired order according to the example
-        let json_value = json!({
-            "height": height,
-            "chain_id": chain_id,
-            "timestamp": timestamp.to_rfc3339(),
-            "transactions": transactions,
-            "events": events
-        });
+        // We need to manually construct the JSON string to ensure the exact desired order
+        let mut json_str = String::new();
 
-        // Return as a pretty-printed JSON string
-        serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string())
+        // Start object
+        json_str.push_str("{\n");
+
+        // Order: height, chain_id, timestamp, transactions, events
+        json_str.push_str(&format!("  \"height\": {},\n", height));
+        json_str.push_str(&format!("  \"chain_id\": \"{}\",\n", chain_id));
+        json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
+
+        // Transactions array
+        json_str.push_str("  \"transactions\": ");
+        let tx_json = serde_json::to_string_pretty(transactions).unwrap_or_else(|_| "[]".to_string());
+        // Indent each line
+        let tx_json_indented = tx_json.replace('\n', "\n  ");
+        json_str.push_str(&tx_json_indented);
+        json_str.push_str(",\n");
+
+        // Events array
+        json_str.push_str("  \"events\": ");
+        let events_json = serde_json::to_string_pretty(events).unwrap_or_else(|_| "[]".to_string());
+        // Indent each line
+        let events_json_indented = events_json.replace('\n', "\n  ");
+        json_str.push_str(&events_json_indented);
+        json_str.push_str("\n");
+
+        // End object
+        json_str.push_str("}");
+
+        json_str
     }
 }
 
@@ -562,7 +590,7 @@ impl AppView for Explorer {
                 height,
                 self.get_chain_id(),
                 ts,
-                &collect_block_transactions(&raw_json),
+                &collect_block_transactions(&raw_json, ts),
                 &collect_block_events(&raw_json),
             );
 
@@ -651,11 +679,21 @@ impl AppView for Explorer {
 }
 
 // Helper functions to extract transactions and events from block JSON
-fn collect_block_transactions(raw_json: &Value) -> Vec<Value> {
+fn collect_block_transactions(raw_json: &Value, timestamp: DateTime<sqlx::types::chrono::Utc>) -> Vec<Value> {
     if let Some(block) = raw_json.get("block") {
         if let Some(txs) = block.get("transactions") {
             if let Some(txs_array) = txs.as_array() {
-                return txs_array.clone();
+                // Transform the transactions to match the desired format in the example
+                return txs_array
+                    .iter()
+                    .map(|tx| {
+                        json!({
+                            "index": tx.get("index").and_then(|v| v.as_u64()).unwrap_or(0),
+                            "hash": tx.get("tx_hash").and_then(|v| v.as_str()).unwrap_or(""),
+                            "timestamp": timestamp.to_rfc3339()
+                        })
+                    })
+                    .collect();
             }
         }
     }
@@ -666,7 +704,57 @@ fn collect_block_events(raw_json: &Value) -> Vec<Value> {
     if let Some(block) = raw_json.get("block") {
         if let Some(events) = block.get("events") {
             if let Some(events_array) = events.as_array() {
-                return events_array.clone();
+                // Transform each event to match the desired format
+                let mut result = Vec::new();
+
+                for event in events_array {
+                    let event_type = event.get("type").and_then(|t| t.as_str()).unwrap_or("unknown");
+
+                    // Extract and properly format the attributes
+                    let mut attributes = Vec::new();
+
+                    if let Some(attrs) = event.get("attributes").and_then(|a| a.as_array()) {
+                        for attr in attrs {
+                            // Parse key and value from the attribute
+                            let key = attr.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                            let value = attr.get("value").and_then(|v| v.as_str()).unwrap_or("Unknown");
+
+                            // Skip empty values
+                            if value.contains("{\"amount\":{}}") || key.trim().is_empty() {
+                                continue;
+                            }
+
+                            // Try to parse with our enhanced attribute string parser
+                            if let Some((parsed_key, parsed_value)) = parse_attribute_string(key) {
+                                // Skip empty values
+                                if parsed_value.contains("{\"amount\":{}}") || parsed_value.trim().is_empty() {
+                                    continue;
+                                }
+
+                                attributes.push(json!({
+                                    "key": parsed_key,
+                                    "value": parsed_value
+                                }));
+                            } else {
+                                // Use the raw values
+                                attributes.push(json!({
+                                    "key": key,
+                                    "value": value
+                                }));
+                            }
+                        }
+                    }
+
+                    // Only include the event if it has attributes
+                    if !attributes.is_empty() {
+                        result.push(json!({
+                            "type": event_type,
+                            "attributes": attributes
+                        }));
+                    }
+                }
+
+                return result;
             }
         }
     }
