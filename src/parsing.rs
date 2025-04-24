@@ -27,7 +27,10 @@ pub fn encode_to_base64<T: AsRef<[u8]>>(data: T) -> String {
 /// Parse attribute string from an event
 #[must_use]
 pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
-    if attr_str.contains("EventAttribute") && attr_str.contains("key:") && attr_str.contains("value:") {
+    if attr_str.contains("EventAttribute")
+        && attr_str.contains("key:")
+        && attr_str.contains("value:")
+    {
         let key_start = attr_str.find("key:").unwrap_or(0) + 5;
         let key_end = attr_str[key_start..]
             .find(',')
@@ -101,10 +104,11 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
 
             let clean_json = json_content.replace("\\\"", "\"").replace("\\\\", "\\");
 
-            if clean_json == "{\"amount\":{}}" ||
-                clean_json.contains("{\"amount\":{}}") ||
-                clean_json.trim().is_empty() ||
-                clean_json.ends_with(":{") {
+            if clean_json == "{\"amount\":{}}"
+                || clean_json.contains("{\"amount\":{}}")
+                || clean_json.trim().is_empty()
+                || clean_json.ends_with(":{")
+            {
                 return None;
             }
 
@@ -129,10 +133,11 @@ pub fn event_to_json(
         let attr_str = format!("{attr:?}");
 
         if let Some((key, value)) = parse_attribute_string(&attr_str) {
-            if value.contains("{\"amount\":{}}") ||
-                value.trim().is_empty() ||
-                value == "{}" ||
-                value.ends_with(":{") {
+            if value.contains("{\"amount\":{}}")
+                || value.trim().is_empty()
+                || value == "{}"
+                || value.ends_with(":{")
+            {
                 continue;
             }
 
@@ -212,7 +217,8 @@ mod tests {
         assert_eq!(key, "action");
         assert!(value.contains("swap"));
 
-        let complex_attr = "V037(EventAttribute { key: \"height\", value: \"82095\", index: false })";
+        let complex_attr =
+            "V037(EventAttribute { key: \"height\", value: \"82095\", index: false })";
         let result = parse_attribute_string(complex_attr);
         assert!(result.is_some());
         let (key, value) = result.unwrap();
