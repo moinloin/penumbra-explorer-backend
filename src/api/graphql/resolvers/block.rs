@@ -9,7 +9,7 @@ use sqlx::Row;
 ///
 /// # Errors
 /// Returns an error if the database query fails
-pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Result<Option<Block>> {
+pub async fn get(ctx: &async_graphql::Context<'_>, height: i32) -> Result<Option<Block>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
     let row = sqlx::query(
         r"
