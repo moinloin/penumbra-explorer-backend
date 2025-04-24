@@ -136,7 +136,7 @@ pub fn event_to_json(
                 continue;
             }
 
-            let fixed_value = if (key == "position" || key == "state") && !value.ends_with("}") {
+            let fixed_value = if (key == "position" || key == "state") && !value.ends_with('}') {
                 let mut fixed = value.clone();
                 let open_braces = fixed.chars().filter(|&c| c == '{').count();
                 let close_braces = fixed.chars().filter(|&c| c == '}').count();
@@ -145,7 +145,7 @@ pub fn event_to_json(
                     fixed.push('}');
                 }
                 fixed
-            } else if key == "gasUsed" && !value.ends_with("\"") {
+            } else if key == "gasUsed" && !value.ends_with('"') {
                 value.to_string() + "\""
             } else {
                 value
@@ -155,8 +155,6 @@ pub fn event_to_json(
                 "key": key,
                 "value": fixed_value
             }));
-        } else {
-            continue;
         }
     }
 
