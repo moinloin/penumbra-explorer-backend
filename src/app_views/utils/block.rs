@@ -1,16 +1,13 @@
 use anyhow::Result;
-use cometindex::{
-    ContextualizedEvent,
-    PgTransaction,
-};
+use cometindex::{ContextualizedEvent, PgTransaction};
 use penumbra_sdk_proto::core::component::sct::v1 as pb;
 use penumbra_sdk_proto::event::ProtoEvent;
 use serde_json::{json, Value};
 use sqlx::types::chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
-use crate::parsing::{encode_to_hex, event_to_json, parse_attribute_string};
 use crate::app_views::utils::transaction;
+use crate::parsing::{encode_to_hex, event_to_json, parse_attribute_string};
 
 pub struct Metadata<'a> {
     pub height: u64,
@@ -22,7 +19,7 @@ pub struct Metadata<'a> {
 }
 
 /// Process batch events to extract block data
-/// 
+///
 /// # Errors
 /// Returns an error if there are issues processing the events
 #[allow(clippy::needless_lifetimes, clippy::unused_async)]
@@ -150,7 +147,10 @@ pub fn create_block_json(
 
     json_str.push_str(&format!("  \"height\": {height},\n"));
     json_str.push_str(&format!("  \"chain_id\": \"{chain_id}\",\n"));
-    json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
+    json_str.push_str(&format!(
+        "  \"timestamp\": \"{}\",\n",
+        timestamp.to_rfc3339()
+    ));
 
     json_str.push_str("  \"transactions\": ");
     let tx_json = serde_json::to_string_pretty(transactions).unwrap_or_else(|_| "[]".to_string());
@@ -170,13 +170,10 @@ pub fn create_block_json(
 }
 
 /// Insert block into database
-/// 
+///
 /// # Errors
 /// Returns an error if the database query fails
-pub async fn insert(
-    dbtx: &mut PgTransaction<'_>,
-    meta: Metadata<'_>,
-) -> Result<(), anyhow::Error> {
+pub async fn insert(dbtx: &mut PgTransaction<'_>, meta: Metadata<'_>) -> Result<(), anyhow::Error> {
     let height_i64 = match i64::try_from(meta.height) {
         Ok(h) => h,
         Err(e) => return Err(anyhow::anyhow!("Height conversion error: {}", e)),
@@ -185,9 +182,9 @@ pub async fn insert(
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM explorer_block_details WHERE height = $1)",
     )
-        .bind(height_i64)
-        .fetch_one(dbtx.as_mut())
-        .await?;
+    .bind(height_i64)
+    .fetch_one(dbtx.as_mut())
+    .await?;
 
     let validator_key = None::<String>;
     let previous_hash = None::<Vec<u8>>;
@@ -206,14 +203,14 @@ pub async fn insert(
         WHERE height = $1
         ",
         )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.raw_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(height_i64)
+        .bind(&meta.root)
+        .bind(meta.timestamp)
+        .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(&meta.raw_json)
+        .execute(dbtx.as_mut())
+        .await?;
 
         tracing::debug!("Updated block {}", meta.height);
     } else {
@@ -225,17 +222,17 @@ pub async fn insert(
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ",
         )
-            .bind(height_i64)
-            .bind(&meta.root)
-            .bind(meta.timestamp)
-            .bind(i32::try_from(meta.tx_count).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(validator_key)
-            .bind(previous_hash)
-            .bind(block_hash)
-            .bind(&meta.raw_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(height_i64)
+        .bind(&meta.root)
+        .bind(meta.timestamp)
+        .bind(i32::try_from(meta.tx_count).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(validator_key)
+        .bind(previous_hash)
+        .bind(block_hash)
+        .bind(&meta.raw_json)
+        .execute(dbtx.as_mut())
+        .await?;
 
         tracing::debug!("Inserted block {}", meta.height);
     }
@@ -274,21 +271,29 @@ pub fn collect_block_events(raw_json: &Value) -> Vec<Value> {
                 let mut result = Vec::new();
 
                 for event in events_array {
-                    let event_type = event.get("type").and_then(|t| t.as_str()).unwrap_or("unknown");
+                    let event_type = event
+                        .get("type")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("unknown");
 
                     let mut attributes = Vec::new();
 
                     if let Some(attrs) = event.get("attributes").and_then(|a| a.as_array()) {
                         for attr in attrs {
                             let key = attr.get("key").and_then(|k| k.as_str()).unwrap_or("");
-                            let value = attr.get("value").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                            let value = attr
+                                .get("value")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Unknown");
 
                             if value.contains("{\"amount\":{}}") || key.trim().is_empty() {
                                 continue;
                             }
 
                             if let Some((parsed_key, parsed_value)) = parse_attribute_string(key) {
-                                if parsed_value.contains("{\"amount\":{}}") || parsed_value.trim().is_empty() {
+                                if parsed_value.contains("{\"amount\":{}}")
+                                    || parsed_value.trim().is_empty()
+                                {
                                     continue;
                                 }
 
