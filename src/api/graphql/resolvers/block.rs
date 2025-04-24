@@ -71,7 +71,6 @@ pub async fn resolve_blocks(
             let raw_json = if raw_json_str.is_empty() {
                 None
             } else {
-                // Store the raw JSON string directly without parsing
                 Some(serde_json::Value::String(raw_json_str))
             };
 
@@ -149,7 +148,6 @@ pub async fn resolve_blocks_collection(
             let raw_json = if raw_json_str.is_empty() {
                 None
             } else {
-                // Store the raw JSON string directly without parsing
                 Some(serde_json::Value::String(raw_json_str))
             };
 
