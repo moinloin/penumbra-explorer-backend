@@ -1,7 +1,4 @@
-use cometindex::{
-    ContextualizedEvent,
-    PgTransaction,
-};
+use cometindex::{ContextualizedEvent, PgTransaction};
 use penumbra_sdk_proto::core::transaction::v1::{Transaction, TransactionView};
 use prost::Message;
 use serde_json::{json, Value};
@@ -21,13 +18,10 @@ pub struct Metadata<'a> {
 }
 
 /// Insert transaction into database
-/// 
+///
 /// # Errors
 /// Returns an error if the database query fails
-pub async fn insert(
-    dbtx: &mut PgTransaction<'_>,
-    meta: Metadata<'_>,
-) -> Result<(), sqlx::Error> {
+pub async fn insert(dbtx: &mut PgTransaction<'_>, meta: Metadata<'_>) -> Result<(), sqlx::Error> {
     let Ok(height_i64) = i64::try_from(meta.height) else {
         return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -38,9 +32,9 @@ pub async fn insert(
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM explorer_transactions WHERE tx_hash = $1)",
     )
-        .bind(meta.tx_hash.as_ref())
-        .fetch_one(dbtx.as_mut())
-        .await?;
+    .bind(meta.tx_hash.as_ref())
+    .fetch_one(dbtx.as_mut())
+    .await?;
 
     if exists {
         sqlx::query(
@@ -56,15 +50,15 @@ pub async fn insert(
         WHERE tx_hash = $1
         ",
         )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&meta.decoded_tx_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(meta.tx_hash.as_ref())
+        .bind(height_i64)
+        .bind(meta.timestamp)
+        .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(&meta.tx_bytes_base64)
+        .bind(&meta.decoded_tx_json)
+        .execute(dbtx.as_mut())
+        .await?;
     } else {
         sqlx::query(
             r"
@@ -73,15 +67,15 @@ pub async fn insert(
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         ",
         )
-            .bind(meta.tx_hash.as_ref())
-            .bind(height_i64)
-            .bind(meta.timestamp)
-            .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
-            .bind(meta.chain_id)
-            .bind(&meta.tx_bytes_base64)
-            .bind(&meta.decoded_tx_json)
-            .execute(dbtx.as_mut())
-            .await?;
+        .bind(meta.tx_hash.as_ref())
+        .bind(height_i64)
+        .bind(meta.timestamp)
+        .bind(i64::try_from(meta.fee_amount).unwrap_or(0))
+        .bind(meta.chain_id)
+        .bind(&meta.tx_bytes_base64)
+        .bind(&meta.decoded_tx_json)
+        .execute(dbtx.as_mut())
+        .await?;
     }
 
     Ok(())
@@ -193,16 +187,21 @@ pub fn create_transaction_json(
     json_str.push_str(&format!("  \"hash\": \"{tx_hash_hex}\",\n"));
     json_str.push_str(&format!("  \"block_height\": \"{height}\",\n"));
     json_str.push_str(&format!("  \"index\": \"{tx_index}\",\n"));
-    json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
+    json_str.push_str(&format!(
+        "  \"timestamp\": \"{}\",\n",
+        timestamp.to_rfc3339()
+    ));
 
     json_str.push_str("  \"transaction_view\": ");
-    let tx_view_json = serde_json::to_string_pretty(&tx_result_decoded).unwrap_or_else(|_| "{}".to_string());
+    let tx_view_json =
+        serde_json::to_string_pretty(&tx_result_decoded).unwrap_or_else(|_| "{}".to_string());
     let tx_view_indented = tx_view_json.replace('\n', "\n  ");
     json_str.push_str(&tx_view_indented);
     json_str.push_str(",\n");
 
     json_str.push_str("  \"events\": ");
-    let events_json = serde_json::to_string_pretty(&processed_events).unwrap_or_else(|_| "[]".to_string());
+    let events_json =
+        serde_json::to_string_pretty(&processed_events).unwrap_or_else(|_| "[]".to_string());
     let events_indented = events_json.replace('\n', "\n  ");
     json_str.push_str(&events_indented);
     json_str.push('\n');
