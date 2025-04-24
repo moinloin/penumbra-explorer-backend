@@ -1,2 +1,4 @@
 pub mod explorer;
-mod utils;
+pub mod utils;
+
+pub use explorer::Explorer;
