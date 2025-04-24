@@ -10,14 +10,20 @@ use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
-use crate::app_views::utils::block::{self, BlockMetadata};
-use crate::app_views::utils::transaction::{self, TransactionMetadata};
+use crate::app_views::utils::block::{self, Metadata as BlockMetadata};
+use crate::app_views::utils::transaction::{self, Metadata as TransactionMetadata};
 use crate::parsing::encode_to_base64;
 
 #[derive(Debug)]
 pub struct Explorer {
     source_pool: Option<Arc<PgPool>>,
     chain_id: Option<String>,
+}
+
+impl Default for Explorer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Explorer {
@@ -43,7 +49,7 @@ impl Explorer {
         self
     }
 
-    /// Attempts to read the chain_id from the genesis.json file
+    /// Attempts to read the `chain_id` from the genesis.json file
     fn read_chain_id_from_genesis() -> Option<String> {
         let file = match File::open("genesis.json") {
             Ok(f) => f,
@@ -257,7 +263,7 @@ impl AppView for Explorer {
                 raw_json: formatted_json,
             };
 
-            block::insert_block(dbtx, meta).await?;
+            block::insert(dbtx, meta).await?;
         }
 
         for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events) in transactions_to_process {
@@ -283,7 +289,7 @@ impl AppView for Explorer {
                 decoded_tx_json: formatted_tx_json,
             };
 
-            if let Err(e) = transaction::insert_transaction(dbtx, meta).await {
+            if let Err(e) = transaction::insert(dbtx, meta).await {
                 let tx_hash_hex = crate::parsing::encode_to_hex(tx_hash);
 
                 let is_fk_error = match e.as_database_error() {
