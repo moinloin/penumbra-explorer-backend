@@ -8,9 +8,9 @@ use serde_json::{json, Value};
 use sqlx::types::chrono::{DateTime, Utc};
 use std::time::Instant;
 
-use crate::parsing::{encode_to_base64, encode_to_hex, parse_attribute_string};
+use crate::parsing::{encode_to_hex, parse_attribute_string};
 
-pub struct TransactionMetadata<'a> {
+pub struct Metadata<'a> {
     pub tx_hash: [u8; 32],
     pub height: u64,
     pub timestamp: DateTime<Utc>,
@@ -21,9 +21,12 @@ pub struct TransactionMetadata<'a> {
 }
 
 /// Insert transaction into database
-pub async fn insert_transaction(
+/// 
+/// # Errors
+/// Returns an error if the database query fails
+pub async fn insert(
     dbtx: &mut PgTransaction<'_>,
-    meta: TransactionMetadata<'_>,
+    meta: Metadata<'_>,
 ) -> Result<(), sqlx::Error> {
     let Ok(height_i64) = i64::try_from(meta.height) else {
         return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
@@ -85,7 +88,8 @@ pub async fn insert_transaction(
 }
 
 /// Decode transaction bytes to JSON
-pub fn decode_transaction(tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
+#[must_use]
+pub fn decode(tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
     let start = Instant::now();
     let hash_hex = encode_to_hex(tx_hash);
 
@@ -128,6 +132,7 @@ pub fn decode_transaction(tx_hash: [u8; 32], tx_bytes: &[u8]) -> Value {
 }
 
 /// Create transaction JSON
+#[must_use]
 pub fn create_transaction_json(
     tx_hash: [u8; 32],
     tx_bytes: &[u8],
@@ -178,16 +183,16 @@ pub fn create_transaction_json(
         }
     }
 
-    let tx_result_decoded = decode_transaction(tx_hash, tx_bytes);
+    let tx_result_decoded = decode(tx_hash, tx_bytes);
     let tx_hash_hex = encode_to_hex(tx_hash);
 
     let mut json_str = String::new();
 
     json_str.push_str("{\n");
 
-    json_str.push_str(&format!("  \"hash\": \"{}\",\n", tx_hash_hex));
-    json_str.push_str(&format!("  \"block_height\": \"{}\",\n", height));
-    json_str.push_str(&format!("  \"index\": \"{}\",\n", tx_index));
+    json_str.push_str(&format!("  \"hash\": \"{tx_hash_hex}\",\n"));
+    json_str.push_str(&format!("  \"block_height\": \"{height}\",\n"));
+    json_str.push_str(&format!("  \"index\": \"{tx_index}\",\n"));
     json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
 
     json_str.push_str("  \"transaction_view\": ");
@@ -200,14 +205,15 @@ pub fn create_transaction_json(
     let events_json = serde_json::to_string_pretty(&processed_events).unwrap_or_else(|_| "[]".to_string());
     let events_indented = events_json.replace('\n', "\n  ");
     json_str.push_str(&events_indented);
-    json_str.push_str("\n");
+    json_str.push('\n');
 
-    json_str.push_str("}");
+    json_str.push('}');
 
     json_str
 }
 
 /// Extract fee amount from transaction result
+#[must_use]
 pub fn extract_fee_amount(tx_result: &Value) -> u64 {
     tx_result
         .get("body")
@@ -231,6 +237,7 @@ pub fn extract_chain_id(tx_result: &Value) -> Option<String> {
 }
 
 /// Extract chain ID from transaction bytes
+#[must_use]
 pub fn extract_chain_id_from_bytes(tx_bytes: &[u8]) -> Option<String> {
     match TransactionView::decode(tx_bytes) {
         Ok(tx_view) => {
