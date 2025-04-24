@@ -99,7 +99,10 @@ impl AppView for Explorer {
         dbtx: &mut PgTransaction,
         _: &serde_json::Value,
     ) -> Result<(), anyhow::Error> {
-        tracing::info!("Initializing Explorer with chain_id = {}", self.get_chain_id());
+        tracing::info!(
+            "Initializing Explorer with chain_id = {}",
+            self.get_chain_id()
+        );
 
         sqlx::query(
             r"
@@ -117,8 +120,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -126,8 +129,8 @@ impl AppView for Explorer {
             ON explorer_block_details(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -135,8 +138,8 @@ impl AppView for Explorer {
             ON explorer_block_details(validator_identity_key)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -153,8 +156,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -162,8 +165,8 @@ impl AppView for Explorer {
             ON explorer_transactions(block_height)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -171,8 +174,8 @@ impl AppView for Explorer {
             ON explorer_transactions(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -191,8 +194,8 @@ impl AppView for Explorer {
                 height DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -210,8 +213,8 @@ impl AppView for Explorer {
                 t.timestamp DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         Ok(())
     }
@@ -242,14 +245,7 @@ impl AppView for Explorer {
             block_data_to_process.push((height, root, ts, tx_count, formatted_block_json));
 
             for (tx_hash, tx_bytes, tx_index, tx_events) in block_txs {
-                transactions_to_process.push((
-                    tx_hash,
-                    tx_bytes,
-                    tx_index,
-                    height,
-                    ts,
-                    tx_events,
-                ));
+                transactions_to_process.push((tx_hash, tx_bytes, tx_index, height, ts, tx_events));
             }
         }
 
@@ -271,11 +267,14 @@ impl AppView for Explorer {
                 tx_hash, &tx_bytes, height, timestamp, tx_index, &tx_events,
             );
 
-            let parsed_json: Value = serde_json::from_str(&formatted_tx_json)
-                .unwrap_or_else(|_| json!({}));
+            let parsed_json: Value =
+                serde_json::from_str(&formatted_tx_json).unwrap_or_else(|_| json!({}));
             let fee_amount = transaction::extract_fee_amount(&parsed_json["transaction_view"]);
 
-            let chain_id = self.chain_id.clone().unwrap_or_else(|| "unknown".to_string());
+            let chain_id = self
+                .chain_id
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
 
             let tx_bytes_base64 = encode_to_base64(&tx_bytes);
 
@@ -294,7 +293,9 @@ impl AppView for Explorer {
 
                 let is_fk_error = match e.as_database_error() {
                     Some(dbe) => {
-                        if let Some(pg_err) = dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
+                        if let Some(pg_err) =
+                            dbe.try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+                        {
                             pg_err.code() == "23503"
                         } else {
                             false
@@ -316,4 +317,5 @@ impl AppView for Explorer {
         }
 
         Ok(())
-    }}
+    }
+}
