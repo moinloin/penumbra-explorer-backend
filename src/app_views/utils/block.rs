@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use crate::parsing::{encode_to_hex, event_to_json, parse_attribute_string};
 use crate::app_views::utils::transaction;
 
-pub struct BlockMetadata<'a> {
+pub struct Metadata<'a> {
     pub height: u64,
     pub root: Vec<u8>,
     pub timestamp: DateTime<Utc>,
@@ -22,6 +22,9 @@ pub struct BlockMetadata<'a> {
 }
 
 /// Process batch events to extract block data
+/// 
+/// # Errors
+/// Returns an error if there are issues processing the events
 #[allow(clippy::needless_lifetimes, clippy::unused_async)]
 pub async fn process_block_events<'a>(
     batch: &'a cometindex::index::EventBatch,
@@ -133,6 +136,7 @@ pub async fn process_block_events<'a>(
 }
 
 /// Create block JSON from block data
+#[must_use]
 pub fn create_block_json(
     height: u64,
     chain_id: &str,
@@ -144,8 +148,8 @@ pub fn create_block_json(
 
     json_str.push_str("{\n");
 
-    json_str.push_str(&format!("  \"height\": {},\n", height));
-    json_str.push_str(&format!("  \"chain_id\": \"{}\",\n", chain_id));
+    json_str.push_str(&format!("  \"height\": {height},\n"));
+    json_str.push_str(&format!("  \"chain_id\": \"{chain_id}\",\n"));
     json_str.push_str(&format!("  \"timestamp\": \"{}\",\n", timestamp.to_rfc3339()));
 
     json_str.push_str("  \"transactions\": ");
@@ -158,17 +162,20 @@ pub fn create_block_json(
     let events_json = serde_json::to_string_pretty(events).unwrap_or_else(|_| "[]".to_string());
     let events_json_indented = events_json.replace('\n', "\n  ");
     json_str.push_str(&events_json_indented);
-    json_str.push_str("\n");
+    json_str.push('\n');
 
-    json_str.push_str("}");
+    json_str.push('}');
 
     json_str
 }
 
 /// Insert block into database
-pub async fn insert_block(
+/// 
+/// # Errors
+/// Returns an error if the database query fails
+pub async fn insert(
     dbtx: &mut PgTransaction<'_>,
-    meta: BlockMetadata<'_>,
+    meta: Metadata<'_>,
 ) -> Result<(), anyhow::Error> {
     let height_i64 = match i64::try_from(meta.height) {
         Ok(h) => h,
@@ -237,6 +244,7 @@ pub async fn insert_block(
 }
 
 /// Collect transactions from block JSON
+#[must_use]
 pub fn collect_block_transactions(raw_json: &Value, timestamp: DateTime<Utc>) -> Vec<Value> {
     if let Some(block) = raw_json.get("block") {
         if let Some(txs) = block.get("transactions") {
@@ -245,7 +253,7 @@ pub fn collect_block_transactions(raw_json: &Value, timestamp: DateTime<Utc>) ->
                     .iter()
                     .map(|tx| {
                         json!({
-                            "index": tx.get("index").and_then(|v| v.as_u64()).unwrap_or(0),
+                            "index": tx.get("index").and_then(Value::as_u64).unwrap_or(0),
                             "hash": tx.get("tx_hash").and_then(|v| v.as_str()).unwrap_or(""),
                             "timestamp": timestamp.to_rfc3339()
                         })
@@ -258,6 +266,7 @@ pub fn collect_block_transactions(raw_json: &Value, timestamp: DateTime<Utc>) ->
 }
 
 /// Collect events from block JSON
+#[must_use]
 pub fn collect_block_events(raw_json: &Value) -> Vec<Value> {
     if let Some(block) = raw_json.get("block") {
         if let Some(events) = block.get("events") {
@@ -312,6 +321,7 @@ pub fn collect_block_events(raw_json: &Value) -> Vec<Value> {
 }
 
 /// Clone a contextualized event to make it have a static lifetime
+#[must_use]
 pub fn clone_event(event: ContextualizedEvent<'_>) -> ContextualizedEvent<'static> {
     let event_clone = event.event.clone();
 
