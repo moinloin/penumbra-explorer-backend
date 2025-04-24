@@ -6,7 +6,7 @@ mod transaction;
 
 use async_graphql::Object;
 
-pub use block::{resolve_block, resolve_blocks, resolve_blocks_collection};
+pub use block::{get as resolve_block, resolve_blocks, resolve_blocks_collection};
 pub use search::resolve_search;
 pub use stats::resolve_stats;
 pub use subscription::Root as SubscriptionRoot;
