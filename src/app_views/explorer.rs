@@ -131,8 +131,8 @@ impl AppView for Explorer {
             ON explorer_block_details(timestamp DESC)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
