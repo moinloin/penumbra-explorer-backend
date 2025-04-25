@@ -2,7 +2,7 @@ use anyhow::Result;
 use cometindex::{
     async_trait,
     index::{EventBatch, EventBatchContext},
-    sqlx, AppView, PgTransaction,
+    sqlx, AppView, PgTransaction, ContextualizedEvent
 };
 use serde_json::{json, Value};
 use sqlx::postgres::PgPool;
