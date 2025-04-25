@@ -5,7 +5,8 @@ use cometindex::{
     sqlx, AppView, PgTransaction, ContextualizedEvent
 };
 use serde_json::{json, Value};
-use sqlx::postgres::PgPool;
+use sqlx::{postgres::PgPool, types::chrono::{DateTime, Utc}};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
