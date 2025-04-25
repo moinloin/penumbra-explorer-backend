@@ -11,8 +11,9 @@ use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
-use crate::app_views::utils::block::{self, Metadata as BlockMetadata};
-use crate::app_views::utils::transaction::{self, Metadata as TransactionMetadata};
+use crate::app_views::utils::{block, ibc, transaction};
+use crate::app_views::utils::block::Metadata as BlockMetadata;
+use crate::app_views::utils::transaction::Metadata as TransactionMetadata;
 use crate::parsing::encode_to_base64;
 
 #[derive(Debug)]
