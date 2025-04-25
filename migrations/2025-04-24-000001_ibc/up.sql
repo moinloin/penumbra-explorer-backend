@@ -1,4 +1,3 @@
--- Drop views first
 DROP VIEW IF EXISTS explorer_recent_blocks;
 DROP VIEW IF EXISTS explorer_transaction_summary;
 DROP VIEW IF EXISTS ibc_client_summary;
