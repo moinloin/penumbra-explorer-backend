@@ -7,7 +7,6 @@ DROP TABLE IF EXISTS ibc_stats;
 DROP TABLE IF EXISTS ibc_channels;
 DROP TABLE IF EXISTS ibc_clients;
 
--- Drop core explorer tables
 DROP TABLE IF EXISTS explorer_transactions;
 DROP TABLE IF EXISTS explorer_block_details;
 DROP TABLE IF EXISTS index_watermarks;
