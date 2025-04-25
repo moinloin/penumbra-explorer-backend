@@ -122,8 +122,8 @@ impl AppView for Explorer {
             )
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
