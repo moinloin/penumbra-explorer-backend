@@ -3,7 +3,6 @@ DROP VIEW IF EXISTS explorer_recent_blocks;
 DROP VIEW IF EXISTS explorer_transaction_summary;
 DROP VIEW IF EXISTS ibc_client_summary;
 
--- Drop IBC-related tables with correct dependency order
 DROP TABLE IF EXISTS ibc_stats;
 DROP TABLE IF EXISTS ibc_channels;
 DROP TABLE IF EXISTS ibc_clients;
