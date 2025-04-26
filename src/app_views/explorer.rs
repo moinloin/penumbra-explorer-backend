@@ -247,7 +247,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create IBC Statistics table
         sqlx::query(
             r"
     CREATE TABLE IF NOT EXISTS ibc_stats (
