@@ -280,7 +280,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create status index on transactions table
         sqlx::query(
             r"
     CREATE INDEX IF NOT EXISTS idx_ibc_transactions_status ON explorer_transactions(ibc_status)
