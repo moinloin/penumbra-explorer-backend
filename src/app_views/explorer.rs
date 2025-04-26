@@ -378,7 +378,7 @@ impl AppView for Explorer {
                 .clone()
                 .unwrap_or_else(|| "unknown".to_string());
 
-            let tx_bytes_base64 = encode_to_base64(&tx_bytes);
+            let tx_bytes_base64 = encode_to_base64(tx_bytes);
 
             let meta = TransactionMetadata {
                 tx_hash: *tx_hash,
