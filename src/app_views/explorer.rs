@@ -208,7 +208,12 @@ impl AppView for Explorer {
                 t.timestamp,
                 t.fee_amount,
                 t.chain_id,
-                t.raw_json
+                t.raw_json,
+                t.ibc_channel_id,
+                t.ibc_client_id,
+                t.ibc_status,
+                t.ibc_direction,
+                t.ibc_sequence
             FROM
                 explorer_transactions t
             ORDER BY
