@@ -418,6 +418,25 @@ impl AppView for Explorer {
             }
         }
 
+        for block_events in batch.events_by_block() {
+            let height = block_events.height();
+            let events: Vec<ContextualizedEvent> = block_events.events().collect();
+
+            let timestamp = *height_to_timestamp.get(&height).unwrap_or(&Utc::now());
+
+            if !events.is_empty() {
+                if let Err(e) = ibc::process_events(dbtx, &events, height, timestamp).await {
+                    tracing::error!("Error processing IBC events for block {}: {:?}", height, e);
+                }
+            }
+        }
+
+        if ctx.is_last() {
+            if let Err(e) = ibc::update_old_pending_transactions(dbtx).await {
+                tracing::error!("Error updating old pending transactions: {:?}", e);
+            }
+        }
+
         Ok(())
     }
 }
