@@ -359,7 +359,13 @@ impl AppView for Explorer {
             block::insert(dbtx, meta).await?;
         }
 
-        for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events) in transactions_to_process {
+        let mut height_to_timestamp: HashMap<u64, DateTime<Utc>> = HashMap::new();
+        for (_, _, _, height, ts, _) in &transactions_to_process {
+            height_to_timestamp.insert(*height, *ts);
+        }
+
+        // Process transactions
+        for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events) in &transactions_to_process {
             let formatted_tx_json = transaction::create_transaction_json(
                 tx_hash, &tx_bytes, height, timestamp, tx_index, &tx_events,
             );
