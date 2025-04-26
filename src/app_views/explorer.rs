@@ -223,6 +223,102 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
+        sqlx::query(
+            r"
+    CREATE TABLE IF NOT EXISTS ibc_clients (
+        client_id TEXT PRIMARY KEY,
+        last_active_height BIGINT,
+        last_active_time TIMESTAMP WITH TIME ZONE
+    )
+    "
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
+        // Create IBC Channels table
+        sqlx::query(
+            r"
+    CREATE TABLE IF NOT EXISTS ibc_channels (
+        channel_id TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL REFERENCES ibc_clients(client_id),
+        connection_id TEXT
+    )
+    "
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
+        // Create IBC Statistics table
+        sqlx::query(
+            r"
+    CREATE TABLE IF NOT EXISTS ibc_stats (
+        client_id TEXT PRIMARY KEY REFERENCES ibc_clients(client_id),
+        shielded_volume BIGINT NOT NULL DEFAULT 0,
+        shielded_tx_count BIGINT NOT NULL DEFAULT 0,
+        unshielded_volume BIGINT NOT NULL DEFAULT 0,
+        unshielded_tx_count BIGINT NOT NULL DEFAULT 0,
+        pending_tx_count BIGINT NOT NULL DEFAULT 0,
+        expired_tx_count BIGINT NOT NULL DEFAULT 0,
+        last_updated TIMESTAMP WITH TIME ZONE
+    )
+    "
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
+        // Create client_id index on transactions table
+        sqlx::query(
+            r"
+    CREATE INDEX IF NOT EXISTS idx_ibc_transactions_client_id ON explorer_transactions(ibc_client_id)
+    "
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
+        // Create channel_id index on transactions table
+        sqlx::query(
+            r"
+    CREATE INDEX IF NOT EXISTS idx_ibc_transactions_channel_id ON explorer_transactions(ibc_channel_id)
+    "
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
+        // Create status index on transactions table
+        sqlx::query(
+            r"
+    CREATE INDEX IF NOT EXISTS idx_ibc_transactions_status ON explorer_transactions(ibc_status)
+    "
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
+        // Create view for IBC client summary
+        sqlx::query(
+            r"
+    CREATE OR REPLACE VIEW ibc_client_summary AS
+    SELECT
+        c.client_id,
+        s.shielded_volume,
+        s.shielded_tx_count,
+        s.unshielded_volume,
+        s.unshielded_tx_count,
+        (s.shielded_volume + s.unshielded_volume) as total_volume,
+        (s.shielded_tx_count + s.unshielded_tx_count) as total_tx_count,
+        s.pending_tx_count,
+        s.expired_tx_count,
+        s.last_updated
+    FROM
+        ibc_clients c
+    JOIN
+        ibc_stats s ON c.client_id = s.client_id
+    ORDER BY
+        (s.shielded_volume + s.unshielded_volume) DESC
+    "
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
         Ok(())
     }
 
