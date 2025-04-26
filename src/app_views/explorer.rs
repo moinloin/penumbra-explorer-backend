@@ -381,9 +381,9 @@ impl AppView for Explorer {
             let tx_bytes_base64 = encode_to_base64(&tx_bytes);
 
             let meta = TransactionMetadata {
-                tx_hash,
-                height,
-                timestamp,
+                tx_hash: *tx_hash,
+                height: *height,
+                timestamp: *timestamp,
                 fee_amount,
                 chain_id: &chain_id,
                 tx_bytes_base64,
