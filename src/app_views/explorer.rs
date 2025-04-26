@@ -321,7 +321,7 @@ impl AppView for Explorer {
         &self,
         dbtx: &mut PgTransaction,
         batch: EventBatch,
-        _ctx: EventBatchContext,
+        ctx: EventBatchContext,
     ) -> Result<(), anyhow::Error> {
         let mut block_data_to_process = Vec::new();
         let mut transactions_to_process = Vec::new();
