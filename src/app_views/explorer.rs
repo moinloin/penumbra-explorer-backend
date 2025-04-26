@@ -391,7 +391,7 @@ impl AppView for Explorer {
             };
 
             if let Err(e) = transaction::insert(dbtx, meta).await {
-                let tx_hash_hex = crate::parsing::encode_to_hex(tx_hash);
+                let tx_hash_hex = crate::parsing::encode_to_hex(*tx_hash);
 
                 let is_fk_error = match e.as_database_error() {
                     Some(dbe) => {
