@@ -288,7 +288,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create view for IBC client summary
         sqlx::query(
             r"
     CREATE OR REPLACE VIEW ibc_client_summary AS
