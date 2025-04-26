@@ -272,7 +272,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create channel_id index on transactions table
         sqlx::query(
             r"
     CREATE INDEX IF NOT EXISTS idx_ibc_transactions_channel_id ON explorer_transactions(ibc_channel_id)
