@@ -220,8 +220,8 @@ impl AppView for Explorer {
                 t.timestamp DESC
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         Ok(())
     }
