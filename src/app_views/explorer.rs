@@ -140,8 +140,8 @@ impl AppView for Explorer {
             ON explorer_block_details(validator_identity_key)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -153,13 +153,19 @@ impl AppView for Explorer {
                 chain_id TEXT,
                 raw_data TEXT,
                 raw_json TEXT,
+                -- IBC fields
+                ibc_channel_id TEXT,
+                ibc_client_id TEXT,
+                ibc_status TEXT,
+                ibc_direction TEXT,
+                ibc_sequence TEXT,
                 FOREIGN KEY (block_height) REFERENCES explorer_block_details(height)
                     DEFERRABLE INITIALLY DEFERRED
             )
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -167,8 +173,8 @@ impl AppView for Explorer {
             ON explorer_transactions(block_height)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -176,8 +182,8 @@ impl AppView for Explorer {
             ON explorer_transactions(timestamp DESC)
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -196,8 +202,8 @@ impl AppView for Explorer {
                 height DESC
             ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
@@ -408,10 +414,10 @@ impl AppView for Explorer {
 
                 if is_fk_error {
                     tracing::warn!(
-                        "Block {} not found for transaction {}. Foreign key constraint failed.",
-                        height,
-                        tx_hash_hex
-                    );
+                    "Block {} not found for transaction {}. Foreign key constraint failed.",
+                    height,
+                    tx_hash_hex
+                );
                 } else {
                     tracing::error!("Error inserting transaction {}: {:?}", tx_hash_hex, e);
                 }
