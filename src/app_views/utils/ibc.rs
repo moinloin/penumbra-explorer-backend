@@ -1129,7 +1129,6 @@ fn extract_error_from_ack(ack_data: &str) -> bool {
         }
     }
 
-    // Try to parse as JSON and look for error fields
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(ack_data) {
         // Check for error field at root level
         if json.get("error").is_some() ||
