@@ -1019,9 +1019,7 @@ pub async fn update_old_pending_transactions(
 
 /// Helper function to find an attribute value in a contextualized event
 fn find_attribute_value<'a>(event: &'a ContextualizedEvent, key: &str) -> Option<&'a str> {
-    // Find the attribute by key in the event attributes
     for attr in &event.event.attributes {
-        // Get the key and value as strings
         if let Ok(attr_key) = attr.key_str() {
             if attr_key == key {
                 if let Ok(attr_value) = attr.value_str() {
