@@ -51,23 +51,36 @@ fn extract_number_from_channel(channel_id: &str) -> Option<u64> {
     None
 }
 
-/// Check if there's a refund event in the event list for a given sequence number
+/// Check if there's a refund event or error in the event list for a given sequence number
 fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool {
     for event in events {
+        // Look for refund events
         if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
             // Check if this refund is for the same sequence number
             if let Some(event_seq) = find_attribute_value(event, "sequence") {
                 if event_seq == sequence {
-                    // Look for reason attribute
-                    if let Some(reason) = find_attribute_value(event, "reason") {
-                        // Check if reason contains "ERROR" or "REASON_ERROR"
-                        if reason.contains("ERROR") || reason.contains("Error") ||
-                            reason.contains("error") || reason.contains("REASON_ERROR") {
+                    tracing::debug!("Found refund event for sequence {}", sequence);
+                    return true;
+                }
+            }
+        }
+
+        // Look for acknowledge_packet events with error acknowledgments
+        if event.event.kind.as_str() == "acknowledge_packet" {
+            if let Some(event_seq) = find_attribute_value(event, "packet_sequence") {
+                if event_seq == sequence {
+                    // Check acknowledgment data for error indicators
+                    if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
+                        // Look for common error patterns in ack data
+                        if ack_data.contains("\"error\"") ||
+                            ack_data.contains("\"Error\"") ||
+                            ack_data.contains("\"ERROR\"") ||
+                            ack_data.contains("failed") ||
+                            ack_data.contains("Failed") ||
+                            ack_data.contains("FAILED") {
+                            tracing::debug!("Found error in ack_data for sequence {}: {}", sequence, ack_data);
                             return true;
                         }
-                    } else {
-                        // If no specific reason is provided, still consider it a refund error
-                        return true;
                     }
                 }
             }
@@ -89,12 +102,29 @@ pub async fn process_events(
     // Track refund events by sequence for later status checks
     let mut refunded_sequences: HashMap<String, bool> = HashMap::new();
 
-    // First pass: identify all refund events to build a lookup map
+    // First pass: identify all refund events and errors to build a lookup map
     for event in events {
         if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
             if let Some(sequence) = find_attribute_value(event, "sequence") {
                 refunded_sequences.insert(sequence.to_string(), true);
                 tracing::debug!("Found refund event for sequence {}", sequence);
+
+                // If there's a reason attribute, log it for debugging
+                if let Some(reason) = find_attribute_value(event, "reason") {
+                    tracing::debug!("Refund reason for sequence {}: {}", sequence, reason);
+                }
+            }
+        }
+        // Also check for error acknowledgments
+        else if event.event.kind.as_str() == "acknowledge_packet" {
+            if let Some(sequence) = find_attribute_value(event, "packet_sequence") {
+                if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
+                    // Look for error patterns in ack data
+                    if extract_error_from_ack(ack_data) {
+                        tracing::debug!("Found error in ack_data for sequence {}: {}", sequence, ack_data);
+                        refunded_sequences.insert(sequence.to_string(), true);
+                    }
+                }
             }
         }
     }
@@ -474,20 +504,33 @@ pub async fn process_events(
                     _ => continue,
                 };
 
-                // Check if there's a refund event for this sequence
-                let has_refund = has_refund_event(events, sequence) ||
-                    refunded_sequences.contains_key(sequence);
+                // Check if there's a refund event for this sequence already identified
+                let has_refund_from_map = refunded_sequences.contains_key(sequence);
 
-                let status = if has_refund {
+                // Check the actual ack data for errors
+                let ack_data = find_attribute_value(event, "packet_ack").unwrap_or_default();
+                let has_error_in_ack = extract_error_from_ack(ack_data);
+
+                // Check for refund events in the entire event list associated with this sequence
+                let has_refund_event_found = has_refund_event(events, sequence);
+
+                let has_error = has_refund_from_map || has_error_in_ack || has_refund_event_found;
+
+                let status = if has_error {
                     IbcTransactionStatus::Error
                 } else {
                     IbcTransactionStatus::Completed
                 };
 
                 tracing::debug!(
-                    "Processing acknowledge_packet for sequence {}: status={} (has_refund={})",
-                    sequence, status, has_refund
+                    "Processing acknowledge_packet for sequence {}: status={} (refund_map={}, error_in_ack={}, refund_event={})",
+                    sequence, status, has_refund_from_map, has_error_in_ack, has_refund_event_found
                 );
+
+                // Log the acknowledgment data for debugging
+                if !ack_data.is_empty() {
+                    tracing::debug!("Ack data for sequence {}: {}", sequence, ack_data);
+                }
 
                 // Update transaction status
                 let updated_rows = sqlx::query(
@@ -534,8 +577,8 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    if has_refund {
-                        debug!("Updated transaction {} to ERROR for client {} (refund found)",
+                    if has_error {
+                        debug!("Updated transaction {} to ERROR for client {} (error found)",
                                tx_hash, client_id);
                     } else {
                         debug!("Updated transaction {} to COMPLETED for client {}",
@@ -1065,4 +1108,43 @@ fn find_attribute_value<'a>(event: &'a ContextualizedEvent, key: &str) -> Option
         }
     }
     None
+}
+
+/// Extract any error information from the acknowledgment packet data
+/// Returns true if an error is detected, false otherwise
+fn extract_error_from_ack(ack_data: &str) -> bool {
+    // Common error patterns in acknowledgments
+    let error_patterns = [
+        "\"error\":", "\"Error\":", "\"ERROR\":",
+        "failed", "Failed", "FAILED",
+        "reject", "Reject", "REJECT",
+        "insufficient", "Insufficient",
+        "invalid", "Invalid", "INVALID",
+        "REASON_ERROR"
+    ];
+
+    for pattern in error_patterns {
+        if ack_data.contains(pattern) {
+            return true;
+        }
+    }
+
+    // Try to parse as JSON and look for error fields
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(ack_data) {
+        // Check for error field at root level
+        if json.get("error").is_some() ||
+            json.get("Error").is_some() ||
+            json.get("ERROR").is_some() {
+            return true;
+        }
+
+        // Check for result.error pattern
+        if let Some(result) = json.get("result") {
+            if result.get("error").is_some() {
+                return true;
+            }
+        }
+    }
+
+    false
 }
