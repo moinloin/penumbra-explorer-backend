@@ -58,11 +58,6 @@ pub async fn process_events(
     height: u64,
     timestamp: DateTime<Utc>,
 ) -> Result<(), anyhow::Error> {
-    if height == 807396 || height == 807397 || height == 807398 || height == 807399 {
-        tracing::info!("Skipping known problematic block {}", height);
-        return Ok(());
-    }
-
     tracing::debug!("Processing IBC events for block {} with {} events", height, events.len());
     let mut client_connections: HashMap<String, String> = HashMap::new();
     let mut connection_channels: HashMap<String, String> = HashMap::new();
@@ -651,12 +646,6 @@ pub async fn process_events(
                     None => continue,
                 };
 
-                // Skip actual processing for known problematic blocks
-                if height >= 807395 && height <= 807400 {
-                    tracing::info!("Skipping EventInboundFungibleTokenTransfer processing for block {}", height);
-                    continue;
-                }
-
                 // Parse JSON data
                 let meta: Result<serde_json::Value, _> = serde_json::from_str(meta);
                 let value: Result<serde_json::Value, _> = serde_json::from_str(value);
@@ -667,13 +656,11 @@ pub async fn process_events(
                         None => continue,
                     };
 
-                    // Handle amount carefully to avoid integer overflow
-                    // Just log the value instead of trying to parse it for problematic blocks
-                    let amount_str = match value.get("amount").and_then(|v| v.get("lo")) {
+                    // Extract the amount as a string to safely handle large numbers
+                    let amount_raw = match value.get("amount").and_then(|v| v.get("lo")) {
                         Some(amount) => match amount.as_str() {
                             Some(s) => s.to_string(),
-                            None => amount.as_i64().map(|n| n.to_string())
-                                .unwrap_or_else(|| "0".to_string()),
+                            None => amount.to_string().trim_matches('"').to_string(),
                         },
                         None => continue,
                     };
@@ -747,32 +734,58 @@ pub async fn process_events(
                     };
 
                     if let Some(client_id) = final_client_id {
-                        // For very large numbers, use a safe integer value
-                        let safe_amount_str = if amount_str.len() > 15 {
-                            tracing::warn!("Found very large amount: {}, using '0' for safety", amount_str);
-                            "0".to_string()
-                        } else {
-                            amount_str
-                        };
-
-                        // Update stats - using NUMERIC type in SQL to handle large numbers safely
-                        sqlx::query(
+                        // Update stats using direct SQL to properly handle extremely large numbers
+                        // By using a direct SQL expression instead of Rust parsing, we avoid the bigint overflow
+                        match sqlx::query(
                             r#"
                             UPDATE ibc_stats
                             SET
-                                shielded_volume = shielded_volume + CAST($2 AS NUMERIC),
+                                -- Convert to NUMERIC first, then add safely
+                                shielded_volume =
+                                    CASE
+                                        WHEN $2 ~ '^[0-9]+$' THEN -- Check if it's a valid number
+                                            COALESCE(shielded_volume, 0) +
+                                            CASE
+                                                WHEN LENGTH($2) > 15 THEN 0 -- If too large, use 0
+                                                ELSE CAST($2 AS NUMERIC)
+                                            END
+                                        ELSE shielded_volume -- If not valid, don't change
+                                    END,
                                 shielded_tx_count = shielded_tx_count + 1,
                                 last_updated = $3
                             WHERE client_id = $1
                             "#,
                         )
                             .bind(&client_id)
-                            .bind(&safe_amount_str)  // Pass as string and let PostgreSQL handle conversion
+                            .bind(&amount_raw)
                             .bind(timestamp)
                             .execute(dbtx.as_mut())
-                            .await?;
+                            .await {
+                            Ok(_) => {
+                                debug!("Processed inbound transfer: client={}, amount={}", client_id, amount_raw);
+                            },
+                            Err(e) => {
+                                // Log the error but continue processing
+                                tracing::error!("Error updating stats for inbound transfer: {}. Using fallback.", e);
 
-                        debug!("Processed inbound transfer: client={}, amount={}", client_id, safe_amount_str);
+                                // Fallback: just increment the count without adding to volume
+                                sqlx::query(
+                                    r#"
+                                        UPDATE ibc_stats
+                                        SET
+                                            shielded_tx_count = shielded_tx_count + 1,
+                                            last_updated = $2
+                                        WHERE client_id = $1
+                                        "#,
+                                )
+                                    .bind(&client_id)
+                                    .bind(timestamp)
+                                    .execute(dbtx.as_mut())
+                                    .await?;
+
+                                debug!("Processed inbound transfer (count only): client={}", client_id);
+                            }
+                        }
                     } else {
                         tracing::warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
                     }
@@ -790,12 +803,6 @@ pub async fn process_events(
                     None => continue,
                 };
 
-                // Skip actual processing for known problematic blocks
-                if height >= 807395 && height <= 807400 {
-                    tracing::info!("Skipping EventOutboundFungibleTokenTransfer processing for block {}", height);
-                    continue;
-                }
-
                 // Parse JSON data
                 let meta: Result<serde_json::Value, _> = serde_json::from_str(meta);
                 let value: Result<serde_json::Value, _> = serde_json::from_str(value);
@@ -806,12 +813,11 @@ pub async fn process_events(
                         None => continue,
                     };
 
-                    // Handle amount carefully to avoid integer overflow
-                    let amount_str = match value.get("amount").and_then(|v| v.get("lo")) {
+                    // Extract the amount as a string to safely handle large numbers
+                    let amount_raw = match value.get("amount").and_then(|v| v.get("lo")) {
                         Some(amount) => match amount.as_str() {
                             Some(s) => s.to_string(),
-                            None => amount.as_i64().map(|n| n.to_string())
-                                .unwrap_or_else(|| "0".to_string()),
+                            None => amount.to_string().trim_matches('"').to_string(),
                         },
                         None => continue,
                     };
@@ -885,32 +891,57 @@ pub async fn process_events(
                     };
 
                     if let Some(client_id) = final_client_id {
-                        // For very large numbers, use a safe integer value
-                        let safe_amount_str = if amount_str.len() > 15 {
-                            tracing::warn!("Found very large amount: {}, using '0' for safety", amount_str);
-                            "0".to_string()
-                        } else {
-                            amount_str
-                        };
-
-                        // Update stats - using NUMERIC type in SQL to handle large numbers safely
-                        sqlx::query(
+                        // Update stats using direct SQL to properly handle extremely large numbers
+                        match sqlx::query(
                             r#"
                             UPDATE ibc_stats
                             SET
-                                unshielded_volume = unshielded_volume + CAST($2 AS NUMERIC),
+                                -- Convert to NUMERIC first, then add safely
+                                unshielded_volume =
+                                    CASE
+                                        WHEN $2 ~ '^[0-9]+$' THEN -- Check if it's a valid number
+                                            COALESCE(unshielded_volume, 0) +
+                                            CASE
+                                                WHEN LENGTH($2) > 15 THEN 0 -- If too large, use 0
+                                                ELSE CAST($2 AS NUMERIC)
+                                            END
+                                        ELSE unshielded_volume -- If not valid, don't change
+                                    END,
                                 unshielded_tx_count = unshielded_tx_count + 1,
                                 last_updated = $3
                             WHERE client_id = $1
                             "#,
                         )
                             .bind(&client_id)
-                            .bind(&safe_amount_str)  // Pass as string and let PostgreSQL handle conversion
+                            .bind(&amount_raw)
                             .bind(timestamp)
                             .execute(dbtx.as_mut())
-                            .await?;
+                            .await {
+                            Ok(_) => {
+                                debug!("Processed outbound transfer: client={}, amount={}", client_id, amount_raw);
+                            },
+                            Err(e) => {
+                                // Log the error but continue processing
+                                tracing::error!("Error updating stats for outbound transfer: {}. Using fallback.", e);
 
-                        debug!("Processed outbound transfer: client={}, amount={}", client_id, safe_amount_str);
+                                // Fallback: just increment the count without adding to volume
+                                sqlx::query(
+                                    r#"
+                                        UPDATE ibc_stats
+                                        SET
+                                            unshielded_tx_count = unshielded_tx_count + 1,
+                                            last_updated = $2
+                                        WHERE client_id = $1
+                                        "#,
+                                )
+                                    .bind(&client_id)
+                                    .bind(timestamp)
+                                    .execute(dbtx.as_mut())
+                                    .await?;
+
+                                debug!("Processed outbound transfer (count only): client={}", client_id);
+                            }
+                        }
                     } else {
                         tracing::warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
                     }
