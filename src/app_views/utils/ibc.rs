@@ -1136,7 +1136,6 @@ fn extract_error_from_ack(ack_data: &str) -> bool {
             return true;
         }
 
-        // Check for result.error pattern
         if let Some(result) = json.get("result") {
             if result.get("error").is_some() {
                 return true;
