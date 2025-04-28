@@ -975,7 +975,6 @@ pub async fn update_old_pending_transactions(
         tracing::info!("Updated {} IBC transactions from pending to error status", updated_count);
     }
 
-    // Update stats
     for row in updated_rows {
         let client_id: String = row.get(0);
 
