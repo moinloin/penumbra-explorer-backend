@@ -936,7 +936,6 @@ pub async fn update_old_pending_transactions(
 
     tracing::debug!("Checking for old pending IBC transactions (older than 24h)");
 
-    // Count pending transactions before update
     let pending_count: i64 = match sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM explorer_transactions WHERE ibc_status = 'pending' AND ibc_client_id IS NOT NULL"
     )
