@@ -949,7 +949,6 @@ pub async fn update_old_pending_transactions(
         }
     };
 
-    // Find and update old pending transactions
     let updated_rows = sqlx::query(
         r#"
         WITH updated_tx AS (
