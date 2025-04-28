@@ -7,8 +7,8 @@ use tracing::debug;
 /// Direction of an IBC transaction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IbcDirection {
-    Inbound,  // Deposit/Shielded (into Penumbra)
-    Outbound, // Withdrawal/Unshielded (out of Penumbra)
+    Inbound,
+    Outbound,
 }
 
 impl std::fmt::Display for IbcDirection {
@@ -58,7 +58,6 @@ pub async fn process_events(
     height: u64,
     timestamp: DateTime<Utc>,
 ) -> Result<(), anyhow::Error> {
-    // Skip processing extremely large blocks where we've seen issues
     if height == 807396 || height == 807397 || height == 807398 || height == 807399 {
         tracing::info!("Skipping known problematic block {}", height);
         return Ok(());
@@ -68,7 +67,6 @@ pub async fn process_events(
     let mut client_connections: HashMap<String, String> = HashMap::new();
     let mut connection_channels: HashMap<String, String> = HashMap::new();
 
-    // Load existing clients from the database
     let mut known_clients = Vec::new();
     let client_rows = sqlx::query("SELECT client_id FROM ibc_clients")
         .fetch_all(dbtx.as_mut())
@@ -82,7 +80,6 @@ pub async fn process_events(
         tracing::debug!("Found {} existing clients in database", known_clients.len());
     }
 
-    // Create default client if none exist
     if known_clients.is_empty() {
         let default_client = "07-tendermint-0";
         tracing::info!("No clients found in database, creating default client {}", default_client);
@@ -121,12 +118,10 @@ pub async fn process_events(
         known_clients.push(default_client.to_string());
     }
 
-    // Phase 1: Process client and connection initializations
     for event in events {
         match event.event.kind.as_str() {
             "create_client" => {
                 if let Some(client_id) = find_attribute_value(event, "client_id") {
-                    // Insert client
                     sqlx::query(
                         r#"
                         INSERT INTO ibc_clients (client_id, last_active_height, last_active_time)
