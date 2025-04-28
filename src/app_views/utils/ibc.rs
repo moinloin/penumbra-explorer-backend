@@ -1113,7 +1113,6 @@ fn find_attribute_value<'a>(event: &'a ContextualizedEvent, key: &str) -> Option
 /// Extract any error information from the acknowledgment packet data
 /// Returns true if an error is detected, false otherwise
 fn extract_error_from_ack(ack_data: &str) -> bool {
-    // Common error patterns in acknowledgments
     let error_patterns = [
         "\"error\":", "\"Error\":", "\"ERROR\":",
         "failed", "Failed", "FAILED",
