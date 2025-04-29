@@ -143,7 +143,6 @@ pub async fn process_events(
                 }
             }
 
-            // Also check for sequence as a direct attribute
             if sequence.is_none() {
                 sequence = find_attribute_value(event, "sequence").map(|s| s.to_string());
             }
