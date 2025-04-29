@@ -2,18 +2,21 @@ use anyhow::Result;
 use cometindex::{
     async_trait,
     index::{EventBatch, EventBatchContext},
-    sqlx, AppView, PgTransaction, ContextualizedEvent
+    sqlx, AppView, ContextualizedEvent, PgTransaction,
 };
 use serde_json::{json, Value};
-use sqlx::{postgres::PgPool, types::chrono::{DateTime, Utc}};
+use sqlx::{
+    postgres::PgPool,
+    types::chrono::{DateTime, Utc},
+};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
-use crate::app_views::utils::{block, ibc, transaction};
 use crate::app_views::utils::block::Metadata as BlockMetadata;
 use crate::app_views::utils::transaction::Metadata as TransactionMetadata;
+use crate::app_views::utils::{block, ibc, transaction};
 use crate::parsing::encode_to_base64;
 
 #[derive(Debug)]
@@ -122,8 +125,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -131,8 +134,8 @@ impl AppView for Explorer {
             ON explorer_block_details(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -140,8 +143,8 @@ impl AppView for Explorer {
             ON explorer_block_details(validator_identity_key)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -164,8 +167,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -173,8 +176,8 @@ impl AppView for Explorer {
             ON explorer_transactions(block_height)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -182,8 +185,8 @@ impl AppView for Explorer {
             ON explorer_transactions(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -202,8 +205,8 @@ impl AppView for Explorer {
                 height DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -226,8 +229,8 @@ impl AppView for Explorer {
                 t.timestamp DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -236,10 +239,10 @@ impl AppView for Explorer {
         last_active_height BIGINT,
         last_active_time TIMESTAMP WITH TIME ZONE
     )
-    "
+    ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -248,10 +251,10 @@ impl AppView for Explorer {
         client_id TEXT NOT NULL REFERENCES ibc_clients(client_id),
         connection_id TEXT
     )
-    "
+    ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -265,10 +268,10 @@ impl AppView for Explorer {
         expired_tx_count BIGINT NOT NULL DEFAULT 0,
         last_updated TIMESTAMP WITH TIME ZONE
     )
-    "
+    ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -289,10 +292,10 @@ impl AppView for Explorer {
         sqlx::query(
             r"
     CREATE INDEX IF NOT EXISTS idx_ibc_transactions_status ON explorer_transactions(ibc_status)
-    "
+    ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -314,10 +317,10 @@ impl AppView for Explorer {
         ibc_stats s ON c.client_id = s.client_id
     ORDER BY
         (s.shielded_volume + s.unshielded_volume) DESC
-    "
+    ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         Ok(())
     }
@@ -370,7 +373,8 @@ impl AppView for Explorer {
             height_to_timestamp.insert(*height, *ts);
         }
 
-        for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events) in &transactions_to_process {
+        for (tx_hash, tx_bytes, tx_index, height, timestamp, tx_events) in &transactions_to_process
+        {
             let formatted_tx_json = transaction::create_transaction_json(
                 *tx_hash, tx_bytes, *height, *timestamp, *tx_index, tx_events,
             );
@@ -414,10 +418,10 @@ impl AppView for Explorer {
 
                 if is_fk_error {
                     tracing::warn!(
-                    "Block {} not found for transaction {}. Foreign key constraint failed.",
-                    height,
-                    tx_hash_hex
-                );
+                        "Block {} not found for transaction {}. Foreign key constraint failed.",
+                        height,
+                        tx_hash_hex
+                    );
                 } else {
                     tracing::error!("Error inserting transaction {}: {:?}", tx_hash_hex, e);
                 }
