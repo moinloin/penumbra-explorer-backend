@@ -236,7 +236,6 @@ pub async fn process_events(
                     find_attribute_value(event, "client_id"),
                     find_attribute_value(event, "connection_id"),
                 ) {
-                    // Store mapping for later use
                     client_connections.insert(connection_id.to_string(), client_id.to_string());
 
                     // Ensure client exists
