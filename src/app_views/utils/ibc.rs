@@ -238,7 +238,6 @@ pub async fn process_events(
                 ) {
                     client_connections.insert(connection_id.to_string(), client_id.to_string());
 
-                    // Ensure client exists
                     sqlx::query(
                         r#"
                         INSERT INTO ibc_clients (client_id, last_active_height, last_active_time)
