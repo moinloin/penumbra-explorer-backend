@@ -1,10 +1,13 @@
 use anyhow::Result;
 use cometindex::{ContextualizedEvent, PgTransaction};
-use sqlx::{Row, types::chrono::{DateTime, Utc}};
-use std::collections::HashMap;
-use tracing::{debug, info, warn, error};
-use serde_json::Value;
 use regex::Regex;
+use serde_json::Value;
+use sqlx::{
+    types::chrono::{DateTime, Utc},
+    Row,
+};
+use std::collections::HashMap;
+use tracing::{debug, error, info, warn};
 
 /// Direction of an IBC transaction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,32 +63,47 @@ fn extract_number_from_channel(channel_id: &str) -> Option<u64> {
 /// 2. Error indicators in the event's reason attribute
 fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool {
     for event in events {
-        if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
+        if event.event.kind.as_str()
+            == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund"
+        {
             if let Some(meta) = find_attribute_value(event, "meta") {
                 if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
                     if let Some(event_seq) = meta_json.get("sequence").and_then(|s| s.as_str()) {
                         if event_seq == sequence {
                             if let Some(reason) = find_attribute_value(event, "reason") {
                                 if reason.contains("ERROR") || reason.contains("REASON_ERROR") {
-                                    debug!("Found refund event with error reason for sequence {}: {}", sequence, reason);
+                                    debug!(
+                                        "Found refund event with error reason for sequence {}: {}",
+                                        sequence, reason
+                                    );
                                     return true;
                                 }
                             } else {
-                                debug!("Found refund event for sequence {} without specific reason", sequence);
+                                debug!(
+                                    "Found refund event for sequence {} without specific reason",
+                                    sequence
+                                );
                                 return true;
                             }
                         }
                     }
-                } else if meta.contains(&format!("\"sequence\":\"{sequence}\",")) ||
-                    meta.contains(&format!("\"sequence\":\"{sequence}\"}}")) {
-                    debug!("Found refund event for sequence {} via string matching", sequence);
+                } else if meta.contains(&format!("\"sequence\":\"{sequence}\","))
+                    || meta.contains(&format!("\"sequence\":\"{sequence}\"}}"))
+                {
+                    debug!(
+                        "Found refund event for sequence {} via string matching",
+                        sequence
+                    );
                     return true;
                 }
             }
 
             if let Some(event_seq) = find_attribute_value(event, "sequence") {
                 if event_seq == sequence {
-                    debug!("Found refund event for sequence {} via direct attribute", sequence);
+                    debug!(
+                        "Found refund event for sequence {} via direct attribute",
+                        sequence
+                    );
                     return true;
                 }
             }
@@ -111,17 +129,25 @@ fn is_error_acknowledgment(event: &ContextualizedEvent<'_>) -> bool {
 }
 
 /// Process IBC events from a block
-/// 
+///
 /// # Errors
 /// Returns an error if database operations fail
-#[allow(clippy::too_many_lines, clippy::cast_possible_wrap, clippy::needless_raw_string_hashes)]
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_wrap,
+    clippy::needless_raw_string_hashes
+)]
 pub async fn process_events(
     dbtx: &mut PgTransaction<'_>,
     events: &[ContextualizedEvent<'_>],
     height: u64,
     timestamp: DateTime<Utc>,
 ) -> Result<(), anyhow::Error> {
-    debug!("Processing IBC events for block {} with {} events", height, events.len());
+    debug!(
+        "Processing IBC events for block {} with {} events",
+        height,
+        events.len()
+    );
     let mut client_connections: HashMap<String, String> = HashMap::new();
     let mut connection_channels: HashMap<String, String> = HashMap::new();
 
@@ -129,12 +155,17 @@ pub async fn process_events(
     let mut error_acknowledgments: HashMap<String, bool> = HashMap::new();
 
     for event in events {
-        if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
+        if event.event.kind.as_str()
+            == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund"
+        {
             let mut sequence = None;
 
             if let Some(meta) = find_attribute_value(event, "meta") {
                 if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
-                    sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(ToString::to_string);
+                    sequence = meta_json
+                        .get("sequence")
+                        .and_then(|s| s.as_str())
+                        .map(ToString::to_string);
                 } else if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
                     if let Some(captures) = re.captures(meta) {
                         if let Some(seq_match) = captures.get(1) {
@@ -159,12 +190,14 @@ pub async fn process_events(
                     }
                 }
             }
-        }
-        else if event.event.kind.as_str() == "acknowledge_packet" {
+        } else if event.event.kind.as_str() == "acknowledge_packet" {
             if let Some(sequence) = find_attribute_value(event, "packet_sequence") {
                 if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
                     if extract_error_from_ack(ack_data) {
-                        debug!("Found error in ack_data for sequence {}: {}", sequence, ack_data);
+                        debug!(
+                            "Found error in ack_data for sequence {}: {}",
+                            sequence, ack_data
+                        );
                         error_acknowledgments.insert(sequence.to_string(), true);
                     }
                 }
@@ -201,11 +234,11 @@ pub async fn process_events(
                             last_active_time = $3
                         ",
                     )
-                        .bind(client_id)
-                        .bind(height as i64)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                    .bind(client_id)
+                    .bind(height as i64)
+                    .bind(timestamp)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
                     sqlx::query(
                         r"
@@ -220,10 +253,10 @@ pub async fn process_events(
                         ON CONFLICT (client_id) DO NOTHING
                         ",
                     )
-                        .bind(client_id)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                    .bind(client_id)
+                    .bind(timestamp)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
                     if !known_clients.contains(&client_id.to_string()) {
                         known_clients.push(client_id.to_string());
@@ -231,7 +264,7 @@ pub async fn process_events(
 
                     debug!("Processed create_client: {}", client_id);
                 }
-            },
+            }
             "connection_open_init" => {
                 if let (Some(client_id), Some(connection_id)) = (
                     find_attribute_value(event, "client_id"),
@@ -246,19 +279,22 @@ pub async fn process_events(
                         ON CONFLICT (client_id) DO NOTHING
                         ",
                     )
-                        .bind(client_id)
-                        .bind(height as i64)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                    .bind(client_id)
+                    .bind(height as i64)
+                    .bind(timestamp)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
                     if !known_clients.contains(&client_id.to_string()) {
                         known_clients.push(client_id.to_string());
                     }
 
-                    debug!("Processed connection_open_init: {} -> {}", connection_id, client_id);
+                    debug!(
+                        "Processed connection_open_init: {} -> {}",
+                        connection_id, client_id
+                    );
                 }
-            },
+            }
             "channel_open_init" => {
                 if let (Some(channel_id), Some(connection_id)) = (
                     find_attribute_value(event, "channel_id"),
@@ -279,18 +315,25 @@ pub async fn process_events(
                                 connection_id = $3
                             ",
                         )
-                            .bind(channel_id)
-                            .bind(&client_id)
-                            .bind(connection_id)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                        .bind(channel_id)
+                        .bind(&client_id)
+                        .bind(connection_id)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
-                        debug!("Processed channel_open_init: {} -> {}", channel_id, client_id);
+                        debug!(
+                            "Processed channel_open_init: {} -> {}",
+                            channel_id, client_id
+                        );
                     } else if let Some(channel_num) = extract_number_from_channel(channel_id) {
                         if known_clients.is_empty() {
-                            warn!("Cannot associate channel {}: no clients available", channel_id);
+                            warn!(
+                                "Cannot associate channel {}: no clients available",
+                                channel_id
+                            );
                         } else {
-                            let idx = usize::try_from(channel_num).unwrap_or(0) % known_clients.len();
+                            let idx =
+                                usize::try_from(channel_num).unwrap_or(0) % known_clients.len();
                             let selected_client = &known_clients[idx];
 
                             sqlx::query(
@@ -303,14 +346,16 @@ pub async fn process_events(
                                     connection_id = $3
                                 ",
                             )
-                                .bind(channel_id)
-                                .bind(selected_client)
-                                .bind(connection_id)
-                                .execute(dbtx.as_mut())
-                                .await?;
+                            .bind(channel_id)
+                            .bind(selected_client)
+                            .bind(connection_id)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
-                            debug!("Associated channel {} with client {} (deterministic mapping)",
-                                  channel_id, selected_client);
+                            debug!(
+                                "Associated channel {} with client {} (deterministic mapping)",
+                                channel_id, selected_client
+                            );
                         }
                     } else if !known_clients.is_empty() {
                         let default_client = &known_clients[0];
@@ -325,18 +370,24 @@ pub async fn process_events(
                                 connection_id = $3
                             ",
                         )
-                            .bind(channel_id)
-                            .bind(default_client)
-                            .bind(connection_id)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                        .bind(channel_id)
+                        .bind(default_client)
+                        .bind(connection_id)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
-                        debug!("Associated channel {} with first available client {}", channel_id, default_client);
+                        debug!(
+                            "Associated channel {} with first available client {}",
+                            channel_id, default_client
+                        );
                     } else {
-                        warn!("Cannot associate channel {}: no clients available", channel_id);
+                        warn!(
+                            "Cannot associate channel {}: no clients available",
+                            channel_id
+                        );
                     }
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -348,7 +399,9 @@ pub async fn process_events(
                     find_attribute_value(event, "packet_src_channel"),
                     find_attribute_value(event, "packet_dst_channel"),
                     find_attribute_value(event, "packet_sequence"),
-                ) else { continue };
+                ) else {
+                    continue;
+                };
 
                 let packet_data = find_attribute_value(event, "packet_data").unwrap_or_default();
 
@@ -368,11 +421,11 @@ pub async fn process_events(
                 let mut final_client_id: Option<String> = None;
 
                 let db_client_id = sqlx::query_scalar::<_, Option<String>>(
-                    "SELECT client_id FROM ibc_channels WHERE channel_id = $1"
+                    "SELECT client_id FROM ibc_channels WHERE channel_id = $1",
                 )
-                    .bind(our_channel)
-                    .fetch_optional(dbtx.as_mut())
-                    .await?;
+                .bind(our_channel)
+                .fetch_optional(dbtx.as_mut())
+                .await?;
 
                 if let Some(client) = db_client_id {
                     final_client_id = client;
@@ -380,44 +433,52 @@ pub async fn process_events(
                     let available_clients: Vec<String> = known_clients.clone();
 
                     if available_clients.is_empty() {
-                        warn!("Cannot associate channel {}: no clients available", our_channel);
+                        warn!(
+                            "Cannot associate channel {}: no clients available",
+                            our_channel
+                        );
                     } else if let Some(channel_num) = extract_number_from_channel(our_channel) {
-                        let idx = usize::try_from(channel_num).unwrap_or(0) % available_clients.len();
+                        let idx =
+                            usize::try_from(channel_num).unwrap_or(0) % available_clients.len();
                         let selected_client = available_clients[idx].clone();
 
-                        info!("Associating channel {} with client {} via deterministic mapping",
-                            our_channel, selected_client);
+                        info!(
+                            "Associating channel {} with client {} via deterministic mapping",
+                            our_channel, selected_client
+                        );
 
                         sqlx::query(
                             r"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                             VALUES ($1, $2, 'auto-connection')
                             ON CONFLICT (channel_id) DO NOTHING
-                            "
+                            ",
                         )
-                            .bind(our_channel)
-                            .bind(&selected_client)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                        .bind(our_channel)
+                        .bind(&selected_client)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
                         final_client_id = Some(selected_client);
                     } else {
                         let selected_client = available_clients[0].clone();
 
-                        info!("Associating unnumbered channel {} with default client {}",
-                            our_channel, selected_client);
+                        info!(
+                            "Associating unnumbered channel {} with default client {}",
+                            our_channel, selected_client
+                        );
 
                         sqlx::query(
                             r"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                             VALUES ($1, $2, 'auto-connection')
                             ON CONFLICT (channel_id) DO NOTHING
-                            "
+                            ",
                         )
-                            .bind(our_channel)
-                            .bind(&selected_client)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                        .bind(our_channel)
+                        .bind(&selected_client)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
                         final_client_id = Some(selected_client);
                     }
@@ -436,14 +497,14 @@ pub async fn process_events(
                         WHERE tx_hash = $1
                         ",
                     )
-                        .bind(tx_hash)
-                        .bind(our_channel)
-                        .bind(&client_id)
-                        .bind(TransactionStatus::Pending.to_string())
-                        .bind(direction.to_string())
-                        .bind(sequence)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                    .bind(tx_hash)
+                    .bind(our_channel)
+                    .bind(&client_id)
+                    .bind(TransactionStatus::Pending.to_string())
+                    .bind(direction.to_string())
+                    .bind(sequence)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
                     sqlx::query(
                         r"
@@ -454,20 +515,25 @@ pub async fn process_events(
                         WHERE client_id = $1
                         ",
                     )
-                        .bind(&client_id)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                    .bind(&client_id)
+                    .bind(timestamp)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
-                    debug!("Processed send_packet for channel {} with client {}", our_channel, client_id);
+                    debug!(
+                        "Processed send_packet for channel {} with client {}",
+                        our_channel, client_id
+                    );
                 }
-            },
+            }
             "acknowledge_packet" => {
                 let (Some(src_channel), Some(dst_channel), Some(sequence)) = (
                     find_attribute_value(event, "packet_src_channel"),
                     find_attribute_value(event, "packet_dst_channel"),
                     find_attribute_value(event, "packet_sequence"),
-                ) else { continue };
+                ) else {
+                    continue;
+                };
 
                 let is_error = if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
                     extract_error_from_ack(ack_data)
@@ -513,12 +579,12 @@ pub async fn process_events(
                     SELECT ibc_client_id, tx_hash FROM updated_tx
                     ",
                 )
-                    .bind(status.to_string())
-                    .bind(sequence)
-                    .bind(dst_channel)
-                    .bind(src_channel)
-                    .fetch_all(dbtx.as_mut())
-                    .await?;
+                .bind(status.to_string())
+                .bind(sequence)
+                .bind(dst_channel)
+                .bind(src_channel)
+                .fetch_all(dbtx.as_mut())
+                .await?;
 
                 for row in updated_rows {
                     let client_id: String = row.get(0);
@@ -533,26 +599,30 @@ pub async fn process_events(
                         WHERE client_id = $1
                         ",
                     )
-                        .bind(&client_id)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                    .bind(&client_id)
+                    .bind(timestamp)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
                     if status == TransactionStatus::Error {
                         debug!("Updated transaction {} to ERROR for client {} (error indicators found)",
                                tx_hash, client_id);
                     } else {
-                        debug!("Updated transaction {} to COMPLETED for client {}",
-                               tx_hash, client_id);
+                        debug!(
+                            "Updated transaction {} to COMPLETED for client {}",
+                            tx_hash, client_id
+                        );
                     }
                 }
-            },
+            }
             "timeout_packet" => {
                 let (Some(src_channel), Some(dst_channel), Some(sequence)) = (
                     find_attribute_value(event, "packet_src_channel"),
                     find_attribute_value(event, "packet_dst_channel"),
                     find_attribute_value(event, "packet_sequence"),
-                ) else { continue };
+                ) else {
+                    continue;
+                };
 
                 let updated_rows = sqlx::query(
                     r"
@@ -571,12 +641,12 @@ pub async fn process_events(
                     SELECT ibc_client_id FROM updated_tx
                     ",
                 )
-                    .bind(TransactionStatus::Expired.to_string())
-                    .bind(sequence)
-                    .bind(dst_channel)
-                    .bind(src_channel)
-                    .fetch_all(dbtx.as_mut())
-                    .await?;
+                .bind(TransactionStatus::Expired.to_string())
+                .bind(sequence)
+                .bind(dst_channel)
+                .bind(src_channel)
+                .fetch_all(dbtx.as_mut())
+                .await?;
 
                 for row in updated_rows {
                     let client_id: String = row.get(0);
@@ -591,20 +661,23 @@ pub async fn process_events(
                         WHERE client_id = $1
                         ",
                     )
-                        .bind(&client_id)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                    .bind(&client_id)
+                    .bind(timestamp)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
                     debug!("Updated transaction to expired for client {}", client_id);
                 }
-            },
+            }
             "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" => {
                 let mut sequence = None;
 
                 if let Some(meta) = find_attribute_value(event, "meta") {
                     if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
-                        sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(ToString::to_string);
+                        sequence = meta_json
+                            .get("sequence")
+                            .and_then(|s| s.as_str())
+                            .map(ToString::to_string);
                     } else if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
                         if let Some(captures) = re.captures(meta) {
                             if let Some(seq_match) = captures.get(1) {
@@ -638,10 +711,10 @@ pub async fn process_events(
                             SELECT ibc_client_id, tx_hash, ibc_status FROM updated_tx
                             ",
                         )
-                            .bind(TransactionStatus::Error.to_string())
-                            .bind(&seq)
-                            .fetch_all(dbtx.as_mut())
-                            .await?;
+                        .bind(TransactionStatus::Error.to_string())
+                        .bind(&seq)
+                        .fetch_all(dbtx.as_mut())
+                        .await?;
 
                         for row in updated_rows {
                             let client_id: String = row.get(0);
@@ -658,10 +731,10 @@ pub async fn process_events(
                                     WHERE client_id = $1
                                     ",
                                 )
-                                    .bind(&client_id)
-                                    .bind(timestamp)
-                                    .execute(dbtx.as_mut())
-                                    .await?;
+                                .bind(&client_id)
+                                .bind(timestamp)
+                                .execute(dbtx.as_mut())
+                                .await?;
                             }
 
                             debug!(
@@ -671,17 +744,23 @@ pub async fn process_events(
                         }
                     }
                 }
-            },
+            }
             "penumbra.core.component.shielded_pool.v1.EventInboundFungibleTokenTransfer" => {
-                let Some(meta) = find_attribute_value(event, "meta") else { continue };
+                let Some(meta) = find_attribute_value(event, "meta") else {
+                    continue;
+                };
 
-                let Some(value) = find_attribute_value(event, "value") else { continue };
+                let Some(value) = find_attribute_value(event, "value") else {
+                    continue;
+                };
 
                 let meta: Result<serde_json::Value, _> = serde_json::from_str(meta);
                 let value: Result<serde_json::Value, _> = serde_json::from_str(value);
 
                 if let (Ok(meta), Ok(value)) = (meta, value) {
-                    let Some(channel_id) = meta.get("channel").and_then(|v| v.as_str()) else { continue };
+                    let Some(channel_id) = meta.get("channel").and_then(|v| v.as_str()) else {
+                        continue;
+                    };
 
                     let amount_raw = match value.get("amount").and_then(|v| v.get("lo")) {
                         Some(amount) => match amount.as_str() {
@@ -694,11 +773,11 @@ pub async fn process_events(
                     let mut resolved_client_id: Option<String> = None;
 
                     let db_client_id = sqlx::query_scalar::<_, Option<String>>(
-                        "SELECT client_id FROM ibc_channels WHERE channel_id = $1"
+                        "SELECT client_id FROM ibc_channels WHERE channel_id = $1",
                     )
-                        .bind(channel_id)
-                        .fetch_optional(dbtx.as_mut())
-                        .await?;
+                    .bind(channel_id)
+                    .fetch_optional(dbtx.as_mut())
+                    .await?;
 
                     if let Some(client) = db_client_id {
                         resolved_client_id = client;
@@ -709,44 +788,51 @@ pub async fn process_events(
                             let idx = usize::try_from(channel_num).unwrap_or(0) % all_clients.len();
                             let selected_client = all_clients[idx].clone();
 
-                            info!("Associating channel {} with client {} via deterministic mapping",
-                                channel_id, selected_client);
+                            info!(
+                                "Associating channel {} with client {} via deterministic mapping",
+                                channel_id, selected_client
+                            );
 
                             sqlx::query(
                                 r"
                                 INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                                 VALUES ($1, $2, 'auto-connection')
                                 ON CONFLICT (channel_id) DO NOTHING
-                                "
+                                ",
                             )
-                                .bind(channel_id)
-                                .bind(&selected_client)
-                                .execute(dbtx.as_mut())
-                                .await?;
+                            .bind(channel_id)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                             resolved_client_id = Some(selected_client);
                         }
                     } else if !known_clients.is_empty() {
                         let selected_client = known_clients[0].clone();
 
-                        info!("Associating unnumbered channel {} with first available client {}",
-                            channel_id, selected_client);
+                        info!(
+                            "Associating unnumbered channel {} with first available client {}",
+                            channel_id, selected_client
+                        );
 
                         sqlx::query(
                             r"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                             VALUES ($1, $2, 'auto-connection')
                             ON CONFLICT (channel_id) DO NOTHING
-                            "
+                            ",
                         )
-                            .bind(channel_id)
-                            .bind(&selected_client)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                        .bind(channel_id)
+                        .bind(&selected_client)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
                         resolved_client_id = Some(selected_client);
                     } else {
-                        warn!("Cannot associate channel {}: no clients available", channel_id);
+                        warn!(
+                            "Cannot associate channel {}: no clients available",
+                            channel_id
+                        );
                     }
 
                     if let Some(client_id) = resolved_client_id {
@@ -770,14 +856,18 @@ pub async fn process_events(
                             WHERE client_id = $1
                             ",
                         )
-                            .bind(&client_id)
-                            .bind(&amount_raw)
-                            .bind(timestamp)
-                            .execute(dbtx.as_mut())
-                            .await {
+                        .bind(&client_id)
+                        .bind(&amount_raw)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await
+                        {
                             Ok(_) => {
-                                debug!("Processed inbound transfer: client={}, amount={}", client_id, amount_raw);
-                            },
+                                debug!(
+                                    "Processed inbound transfer: client={}, amount={}",
+                                    client_id, amount_raw
+                                );
+                            }
                             Err(e) => {
                                 error!("Error updating stats for inbound transfer: {}. Using fallback.", e);
 
@@ -790,29 +880,41 @@ pub async fn process_events(
                                         WHERE client_id = $1
                                         ",
                                 )
-                                    .bind(&client_id)
-                                    .bind(timestamp)
-                                    .execute(dbtx.as_mut())
-                                    .await?;
+                                .bind(&client_id)
+                                .bind(timestamp)
+                                .execute(dbtx.as_mut())
+                                .await?;
 
-                                debug!("Processed inbound transfer (count only): client={}", client_id);
+                                debug!(
+                                    "Processed inbound transfer (count only): client={}",
+                                    client_id
+                                );
                             }
                         }
                     } else {
-                        warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
+                        warn!(
+                            "Cannot attribute transfer: no client found for channel {}",
+                            channel_id
+                        );
                     }
                 }
-            },
+            }
             "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenTransfer" => {
-                let Some(meta) = find_attribute_value(event, "meta") else { continue };
+                let Some(meta) = find_attribute_value(event, "meta") else {
+                    continue;
+                };
 
-                let Some(value) = find_attribute_value(event, "value") else { continue };
+                let Some(value) = find_attribute_value(event, "value") else {
+                    continue;
+                };
 
                 let meta: Result<serde_json::Value, _> = serde_json::from_str(meta);
                 let value: Result<serde_json::Value, _> = serde_json::from_str(value);
 
                 if let (Ok(meta), Ok(value)) = (meta, value) {
-                    let Some(channel_id) = meta.get("channel").and_then(|v| v.as_str()) else { continue };
+                    let Some(channel_id) = meta.get("channel").and_then(|v| v.as_str()) else {
+                        continue;
+                    };
 
                     let amount_raw = match value.get("amount").and_then(|v| v.get("lo")) {
                         Some(amount) => match amount.as_str() {
@@ -825,11 +927,11 @@ pub async fn process_events(
                     let mut resolved_client_id: Option<String> = None;
 
                     let db_client_id = sqlx::query_scalar::<_, Option<String>>(
-                        "SELECT client_id FROM ibc_channels WHERE channel_id = $1"
+                        "SELECT client_id FROM ibc_channels WHERE channel_id = $1",
                     )
-                        .bind(channel_id)
-                        .fetch_optional(dbtx.as_mut())
-                        .await?;
+                    .bind(channel_id)
+                    .fetch_optional(dbtx.as_mut())
+                    .await?;
 
                     if let Some(client) = db_client_id {
                         resolved_client_id = client;
@@ -840,44 +942,51 @@ pub async fn process_events(
                             let idx = usize::try_from(channel_num).unwrap_or(0) % all_clients.len();
                             let selected_client = all_clients[idx].clone();
 
-                            info!("Associating channel {} with client {} via deterministic mapping",
-                                channel_id, selected_client);
+                            info!(
+                                "Associating channel {} with client {} via deterministic mapping",
+                                channel_id, selected_client
+                            );
 
                             sqlx::query(
                                 r"
                                 INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                                 VALUES ($1, $2, 'auto-connection')
                                 ON CONFLICT (channel_id) DO NOTHING
-                                "
+                                ",
                             )
-                                .bind(channel_id)
-                                .bind(&selected_client)
-                                .execute(dbtx.as_mut())
-                                .await?;
+                            .bind(channel_id)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                             resolved_client_id = Some(selected_client);
                         }
                     } else if !known_clients.is_empty() {
                         let selected_client = known_clients[0].clone();
 
-                        info!("Associating unnumbered channel {} with first available client {}",
-                            channel_id, selected_client);
+                        info!(
+                            "Associating unnumbered channel {} with first available client {}",
+                            channel_id, selected_client
+                        );
 
                         sqlx::query(
                             r"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                             VALUES ($1, $2, 'auto-connection')
                             ON CONFLICT (channel_id) DO NOTHING
-                            "
+                            ",
                         )
-                            .bind(channel_id)
-                            .bind(&selected_client)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                        .bind(channel_id)
+                        .bind(&selected_client)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
                         resolved_client_id = Some(selected_client);
                     } else {
-                        warn!("Cannot associate channel {}: no clients available", channel_id);
+                        warn!(
+                            "Cannot associate channel {}: no clients available",
+                            channel_id
+                        );
                     }
 
                     if let Some(client_id) = resolved_client_id {
@@ -901,14 +1010,18 @@ pub async fn process_events(
                             WHERE client_id = $1
                             "#,
                         )
-                            .bind(&client_id)
-                            .bind(&amount_raw)
-                            .bind(timestamp)
-                            .execute(dbtx.as_mut())
-                            .await {
+                        .bind(&client_id)
+                        .bind(&amount_raw)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await
+                        {
                             Ok(_) => {
-                                debug!("Processed outbound transfer: client={}, amount={}", client_id, amount_raw);
-                            },
+                                debug!(
+                                    "Processed outbound transfer: client={}, amount={}",
+                                    client_id, amount_raw
+                                );
+                            }
                             Err(e) => {
                                 error!("Error updating stats for outbound transfer: {}. Using fallback.", e);
 
@@ -921,19 +1034,25 @@ pub async fn process_events(
                                         WHERE client_id = $1
                                         ",
                                 )
-                                    .bind(&client_id)
-                                    .bind(timestamp)
-                                    .execute(dbtx.as_mut())
-                                    .await?;
+                                .bind(&client_id)
+                                .bind(timestamp)
+                                .execute(dbtx.as_mut())
+                                .await?;
 
-                                debug!("Processed outbound transfer (count only): client={}", client_id);
+                                debug!(
+                                    "Processed outbound transfer (count only): client={}",
+                                    client_id
+                                );
                             }
                         }
                     } else {
-                        warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
+                        warn!(
+                            "Cannot attribute transfer: no client found for channel {}",
+                            channel_id
+                        );
                     }
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -942,11 +1061,11 @@ pub async fn process_events(
 }
 
 /// Update old pending transactions to error status
-/// 
+///
 /// # Errors
 /// Returns an error if database operations fail
 pub async fn update_old_pending_transactions(
-    dbtx: &mut PgTransaction<'_>
+    dbtx: &mut PgTransaction<'_>,
 ) -> Result<(), anyhow::Error> {
     let day_ago = Utc::now() - chrono::Duration::hours(24);
 
@@ -979,14 +1098,17 @@ pub async fn update_old_pending_transactions(
         WHERE ibc_client_id IS NOT NULL
         ",
     )
-        .bind(TransactionStatus::Error.to_string())
-        .bind(day_ago)
-        .fetch_all(dbtx.as_mut())
-        .await?;
+    .bind(TransactionStatus::Error.to_string())
+    .bind(day_ago)
+    .fetch_all(dbtx.as_mut())
+    .await?;
 
     let updated_count = updated_rows.len();
     if updated_count > 0 {
-        info!("Updated {} IBC transactions from pending to error status", updated_count);
+        info!(
+            "Updated {} IBC transactions from pending to error status",
+            updated_count
+        );
     }
 
     for row in updated_rows {
@@ -1001,10 +1123,10 @@ pub async fn update_old_pending_transactions(
             WHERE client_id = $2
             ",
         )
-            .bind(Utc::now())
-            .bind(&client_id)
-            .execute(dbtx.as_mut())
-            .await;
+        .bind(Utc::now())
+        .bind(&client_id)
+        .execute(dbtx.as_mut())
+        .await;
 
         if let Err(e) = result {
             warn!("Failed to update stats for client {}: {}", client_id, e);
@@ -1023,8 +1145,10 @@ pub async fn update_old_pending_transactions(
         }
     };
 
-    debug!("IBC transactions: {} were pending, {} updated to error, {} still pending",
-        pending_count, updated_count, remaining_pending);
+    debug!(
+        "IBC transactions: {} were pending, {} updated to error, {} still pending",
+        pending_count, updated_count, remaining_pending
+    );
 
     Ok(())
 }
@@ -1047,13 +1171,26 @@ fn find_attribute_value<'a>(event: &'a ContextualizedEvent, key: &str) -> Option
 /// Returns true if an error is detected, false otherwise
 fn extract_error_from_ack(ack_data: &str) -> bool {
     let error_patterns = [
-        "\"error\":", "\"Error\":", "\"ERROR\":",
-        "failed", "Failed", "FAILED",
-        "reject", "Reject", "REJECT",
-        "insufficient", "Insufficient",
-        "invalid", "Invalid", "INVALID",
-        "REASON_ERROR", "reason error", "Reason Error",
-        "timeout", "Timeout", "TIMEOUT"
+        "\"error\":",
+        "\"Error\":",
+        "\"ERROR\":",
+        "failed",
+        "Failed",
+        "FAILED",
+        "reject",
+        "Reject",
+        "REJECT",
+        "insufficient",
+        "Insufficient",
+        "invalid",
+        "Invalid",
+        "INVALID",
+        "REASON_ERROR",
+        "reason error",
+        "Reason Error",
+        "timeout",
+        "Timeout",
+        "TIMEOUT",
     ];
 
     for pattern in error_patterns {
@@ -1063,15 +1200,15 @@ fn extract_error_from_ack(ack_data: &str) -> bool {
     }
 
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(ack_data) {
-        if json.get("error").is_some() ||
-            json.get("Error").is_some() ||
-            json.get("ERROR").is_some() {
+        if json.get("error").is_some() || json.get("Error").is_some() || json.get("ERROR").is_some()
+        {
             return true;
         }
 
         if let Some(result) = json.get("result") {
-            if result.get("error").is_some() ||
-                result.is_string() && result.as_str().unwrap_or("").contains("error") {
+            if result.get("error").is_some()
+                || result.is_string() && result.as_str().unwrap_or("").contains("error")
+            {
                 return true;
             }
         }
