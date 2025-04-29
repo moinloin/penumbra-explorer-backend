@@ -268,7 +268,6 @@ pub async fn process_events(
                     let client_id = client_connections.get(connection_id).cloned();
 
                     if let Some(client_id) = client_id {
-                        // Insert channel with known client
                         sqlx::query(
                             r#"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id)
