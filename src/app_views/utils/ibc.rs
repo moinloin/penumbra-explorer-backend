@@ -153,7 +153,6 @@ pub async fn process_events(
 
                 if let Some(reason) = find_attribute_value(event, "reason") {
                     debug!("Refund reason for sequence {}: {}", seq, reason);
-                    // Mark as definite error if reason contains ERROR
                     if reason.contains("ERROR") || reason.contains("REASON_ERROR") {
                         debug!("Confirmed error via reason attribute for sequence {}", seq);
                     }
