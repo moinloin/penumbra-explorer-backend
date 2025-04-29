@@ -768,7 +768,6 @@ pub async fn process_events(
                         None => continue,
                     };
 
-                    // Extract the amount as a string to safely handle large numbers
                     let amount_raw = match value.get("amount").and_then(|v| v.get("lo")) {
                         Some(amount) => match amount.as_str() {
                             Some(s) => s.to_string(),
