@@ -65,7 +65,6 @@ fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool 
                 if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
                     if let Some(event_seq) = meta_json.get("sequence").and_then(|s| s.as_str()) {
                         if event_seq == sequence {
-                            // If we have a reason attribute, check if it indicates an error
                             if let Some(reason) = find_attribute_value(event, "reason") {
                                 if reason.contains("ERROR") || reason.contains("REASON_ERROR") {
                                     debug!("Found refund event with error reason for sequence {}: {}", sequence, reason);
