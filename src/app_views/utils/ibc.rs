@@ -792,7 +792,6 @@ pub async fn process_events(
                         resolved_client_id = client;
                     } else {
                         if let Some(channel_num) = extract_number_from_channel(channel_id) {
-                            // Get all available clients
                             let all_clients: Vec<String> = known_clients.clone();
 
                             if !all_clients.is_empty() {
