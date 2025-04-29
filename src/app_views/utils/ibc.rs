@@ -206,7 +206,6 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    // Initialize stats record
                     sqlx::query(
                         r#"
                         INSERT INTO ibc_stats (
