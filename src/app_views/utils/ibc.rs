@@ -265,8 +265,6 @@ pub async fn process_events(
                 ) {
                     connection_channels.insert(connection_id.to_string(), channel_id.to_string());
 
-                    // Try to find client_id for this connection
-                    // 1. First check in-memory map from current batch
                     let client_id = client_connections.get(connection_id).cloned();
 
                     if let Some(client_id) = client_id {
