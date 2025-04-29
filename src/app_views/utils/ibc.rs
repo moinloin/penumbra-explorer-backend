@@ -61,7 +61,6 @@ fn extract_number_from_channel(channel_id: &str) -> Option<u64> {
 fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool {
     for event in events {
         if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
-            // If we have a meta attribute, check if it contains the matching sequence
             if let Some(meta) = find_attribute_value(event, "meta") {
                 // Try to parse the meta as JSON to extract channel and sequence
                 if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
