@@ -77,7 +77,6 @@ fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool 
                         }
                     }
                 } else {
-                    // Direct sequence check in meta string if JSON parsing fails
                     if meta.contains(&format!("\"sequence\":\"{}\",", sequence)) ||
                         meta.contains(&format!("\"sequence\":\"{}\"}}", sequence)) {
                         debug!("Found refund event for sequence {} via string matching", sequence);
