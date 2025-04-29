@@ -759,7 +759,6 @@ pub async fn process_events(
                     None => continue,
                 };
 
-                // Parse JSON data
                 let meta: Result<serde_json::Value, _> = serde_json::from_str(meta);
                 let value: Result<serde_json::Value, _> = serde_json::from_str(value);
 
