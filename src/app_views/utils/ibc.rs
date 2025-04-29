@@ -2,7 +2,9 @@ use anyhow::Result;
 use cometindex::{ContextualizedEvent, PgTransaction};
 use sqlx::{Row, types::chrono::{DateTime, Utc}};
 use std::collections::HashMap;
-use tracing::debug;
+use tracing::{debug, info, warn, error};
+use serde_json::Value;
+use regex::Regex;
 
 /// Direction of an IBC transaction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,41 +53,67 @@ fn extract_number_from_channel(channel_id: &str) -> Option<u64> {
     None
 }
 
-/// Check if there's a refund event or error in the event list for a given sequence number
+/// Checks if a specific sequence has a refund event in the event list
+///
+/// This function looks for:
+/// 1. EventOutboundFungibleTokenRefund events for the specific sequence
+/// 2. Error indicators in the event's reason attribute
 fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool {
     for event in events {
-        // Look for refund events
         if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
-            // Check if this refund is for the same sequence number
+            // If we have a meta attribute, check if it contains the matching sequence
+            if let Some(meta) = find_attribute_value(event, "meta") {
+                // Try to parse the meta as JSON to extract channel and sequence
+                if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
+                    if let Some(event_seq) = meta_json.get("sequence").and_then(|s| s.as_str()) {
+                        if event_seq == sequence {
+                            // If we have a reason attribute, check if it indicates an error
+                            if let Some(reason) = find_attribute_value(event, "reason") {
+                                if reason.contains("ERROR") || reason.contains("REASON_ERROR") {
+                                    debug!("Found refund event with error reason for sequence {}: {}", sequence, reason);
+                                    return true;
+                                }
+                            } else {
+                                // Even without a reason, a refund event for this sequence is a good error indicator
+                                debug!("Found refund event for sequence {} without specific reason", sequence);
+                                return true;
+                            }
+                        }
+                    }
+                } else {
+                    // Direct sequence check in meta string if JSON parsing fails
+                    if meta.contains(&format!("\"sequence\":\"{}\",", sequence)) ||
+                        meta.contains(&format!("\"sequence\":\"{}\"}}", sequence)) {
+                        debug!("Found refund event for sequence {} via string matching", sequence);
+                        return true;
+                    }
+                }
+            }
+
+            // Direct sequence check if available as an attribute
             if let Some(event_seq) = find_attribute_value(event, "sequence") {
                 if event_seq == sequence {
-                    tracing::debug!("Found refund event for sequence {}", sequence);
+                    debug!("Found refund event for sequence {} via direct attribute", sequence);
                     return true;
                 }
             }
         }
-
-        // Look for acknowledge_packet events with error acknowledgments
-        if event.event.kind.as_str() == "acknowledge_packet" {
-            if let Some(event_seq) = find_attribute_value(event, "packet_sequence") {
-                if event_seq == sequence {
-                    // Check acknowledgment data for error indicators
-                    if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
-                        // Look for common error patterns in ack data
-                        if ack_data.contains("\"error\"") ||
-                            ack_data.contains("\"Error\"") ||
-                            ack_data.contains("\"ERROR\"") ||
-                            ack_data.contains("failed") ||
-                            ack_data.contains("Failed") ||
-                            ack_data.contains("FAILED") {
-                            tracing::debug!("Found error in ack_data for sequence {}: {}", sequence, ack_data);
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
     }
+
+    false
+}
+
+/// Helper function to determine if an acknowledge_packet contains an error
+/// by analyzing its packet_ack data
+fn is_error_acknowledgment(event: &ContextualizedEvent<'_>) -> bool {
+    if event.event.kind.as_str() != "acknowledge_packet" {
+        return false;
+    }
+
+    if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
+        return extract_error_from_ack(ack_data);
+    }
+
     false
 }
 
@@ -96,33 +124,62 @@ pub async fn process_events(
     height: u64,
     timestamp: DateTime<Utc>,
 ) -> Result<(), anyhow::Error> {
-    tracing::debug!("Processing IBC events for block {} with {} events", height, events.len());
+    debug!("Processing IBC events for block {} with {} events", height, events.len());
     let mut client_connections: HashMap<String, String> = HashMap::new();
     let mut connection_channels: HashMap<String, String> = HashMap::new();
-    // Track refund events by sequence for later status checks
+
+    // First pass: identify all refund events and error sequences to build lookup maps
     let mut refunded_sequences: HashMap<String, bool> = HashMap::new();
+    let mut error_acknowledgments: HashMap<String, bool> = HashMap::new();
 
-    // First pass: identify all refund events and errors to build a lookup map
+    // Build error indicators map first for more efficient lookup
     for event in events {
+        // Check for EventOutboundFungibleTokenRefund events indicating errors
         if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
-            if let Some(sequence) = find_attribute_value(event, "sequence") {
-                refunded_sequences.insert(sequence.to_string(), true);
-                tracing::debug!("Found refund event for sequence {}", sequence);
+            let mut sequence = None;
 
-                // If there's a reason attribute, log it for debugging
+            // Try to find sequence in meta attribute (JSON)
+            if let Some(meta) = find_attribute_value(event, "meta") {
+                if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
+                    sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(|s| s.to_string());
+                } else {
+                    // Try regex/string matching if JSON parsing fails
+                    if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
+                        if let Some(captures) = re.captures(meta) {
+                            if let Some(seq_match) = captures.get(1) {
+                                sequence = Some(seq_match.as_str().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Also check for sequence as a direct attribute
+            if sequence.is_none() {
+                sequence = find_attribute_value(event, "sequence").map(|s| s.to_string());
+            }
+
+            if let Some(seq) = sequence {
+                refunded_sequences.insert(seq.clone(), true);
+                debug!("Found refund event for sequence {}", seq);
+
+                // Check if there's an error reason
                 if let Some(reason) = find_attribute_value(event, "reason") {
-                    tracing::debug!("Refund reason for sequence {}: {}", sequence, reason);
+                    debug!("Refund reason for sequence {}: {}", seq, reason);
+                    // Mark as definite error if reason contains ERROR
+                    if reason.contains("ERROR") || reason.contains("REASON_ERROR") {
+                        debug!("Confirmed error via reason attribute for sequence {}", seq);
+                    }
                 }
             }
         }
-        // Also check for error acknowledgments
+        // Check for error acknowledgments
         else if event.event.kind.as_str() == "acknowledge_packet" {
             if let Some(sequence) = find_attribute_value(event, "packet_sequence") {
                 if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
-                    // Look for error patterns in ack data
                     if extract_error_from_ack(ack_data) {
-                        tracing::debug!("Found error in ack_data for sequence {}: {}", sequence, ack_data);
-                        refunded_sequences.insert(sequence.to_string(), true);
+                        debug!("Found error in ack_data for sequence {}: {}", sequence, ack_data);
+                        error_acknowledgments.insert(sequence.to_string(), true);
                     }
                 }
             }
@@ -139,11 +196,12 @@ pub async fn process_events(
     }
 
     if !known_clients.is_empty() {
-        tracing::debug!("Found {} existing clients in database", known_clients.len());
+        debug!("Found {} existing clients in database", known_clients.len());
     } else {
-        tracing::info!("No clients found in database");
+        info!("No clients found in database");
     }
 
+    // First phase: Process connection and channel mappings
     for event in events {
         match event.event.kind.as_str() {
             "create_client" => {
@@ -280,7 +338,7 @@ pub async fn process_events(
                                 debug!("Associated channel {} with client {} (deterministic mapping)",
                                       channel_id, selected_client);
                             } else {
-                                tracing::warn!("Cannot associate channel {}: no clients available", channel_id);
+                                warn!("Cannot associate channel {}: no clients available", channel_id);
                             }
                         } else if !known_clients.is_empty() {
                             // Fallback for channels without numbers
@@ -304,7 +362,7 @@ pub async fn process_events(
 
                             debug!("Associated channel {} with first available client {}", channel_id, default_client);
                         } else {
-                            tracing::warn!("Cannot associate channel {}: no clients available", channel_id);
+                            warn!("Cannot associate channel {}: no clients available", channel_id);
                         }
                     }
                 }
@@ -344,17 +402,21 @@ pub async fn process_events(
                 };
 
                 // Find client_id for this channel
-                let client_id = sqlx::query_scalar::<_, Option<String>>(
+                let mut final_client_id: Option<String> = None;
+
+                // First try to get the client from the database
+                let db_client_id = sqlx::query_scalar::<_, Option<String>>(
                     "SELECT client_id FROM ibc_channels WHERE channel_id = $1"
                 )
                     .bind(our_channel)
                     .fetch_optional(dbtx.as_mut())
                     .await?;
 
-                // If client_id is None but we have a channel, let's try to insert the channel with a known client_id
-                if client_id.is_none() && (our_channel.starts_with("channel-")) {
-                    // Instead of trying to guess the association, use a round-robin approach to distribute channels
-                    // across all available clients
+                if let Some(client) = db_client_id {
+                    // We found a client in the database
+                    final_client_id = client;
+                } else if our_channel.starts_with("channel-") {
+                    // No client found, try to assign one deterministically
                     let available_clients: Vec<String> = known_clients.clone();
 
                     if !available_clients.is_empty() {
@@ -362,9 +424,9 @@ pub async fn process_events(
                         if let Some(channel_num) = extract_number_from_channel(our_channel) {
                             // Choose client based on modulo to ensure consistent mapping
                             let idx = (channel_num as usize) % available_clients.len();
-                            let selected_client = &available_clients[idx];
+                            let selected_client = available_clients[idx].clone();
 
-                            tracing::info!("Associating channel {} with client {} via deterministic mapping",
+                            info!("Associating channel {} with client {} via deterministic mapping",
                                 our_channel, selected_client);
 
                             sqlx::query(
@@ -375,14 +437,16 @@ pub async fn process_events(
                                 "#
                             )
                                 .bind(our_channel)
-                                .bind(selected_client)
+                                .bind(&selected_client)
                                 .execute(dbtx.as_mut())
                                 .await?;
+
+                            final_client_id = Some(selected_client);
                         } else {
                             // For channels without a number, use first client
-                            let selected_client = &available_clients[0];
+                            let selected_client = available_clients[0].clone();
 
-                            tracing::info!("Associating unnumbered channel {} with default client {}",
+                            info!("Associating unnumbered channel {} with default client {}",
                                 our_channel, selected_client);
 
                             sqlx::query(
@@ -393,67 +457,18 @@ pub async fn process_events(
                                 "#
                             )
                                 .bind(our_channel)
-                                .bind(selected_client)
+                                .bind(&selected_client)
                                 .execute(dbtx.as_mut())
                                 .await?;
+
+                            final_client_id = Some(selected_client);
                         }
                     } else {
-                        tracing::warn!("Cannot associate channel {}: no clients available", our_channel);
+                        warn!("Cannot associate channel {}: no clients available", our_channel);
                     }
+                }
 
-                    // Try to get client_id one more time after possible auto-insertion
-                    let client_id_retry = sqlx::query_scalar::<_, Option<String>>(
-                        "SELECT client_id FROM ibc_channels WHERE channel_id = $1"
-                    )
-                        .bind(our_channel)
-                        .fetch_optional(dbtx.as_mut())
-                        .await?;
-
-                    if let Some(tx_hash) = event.tx_hash() {
-                        if let Some(client_id) = client_id_retry {
-                            // Update transaction with the newly found client_id
-                            sqlx::query(
-                                r#"
-                                UPDATE explorer_transactions
-                                SET
-                                    ibc_channel_id = $2,
-                                    ibc_client_id = $3,
-                                    ibc_status = $4,
-                                    ibc_direction = $5,
-                                    ibc_sequence = $6
-                                WHERE tx_hash = $1
-                                "#,
-                            )
-                                .bind(tx_hash)
-                                .bind(our_channel)
-                                .bind(&client_id)
-                                .bind(IbcTransactionStatus::Pending.to_string())
-                                .bind(direction.to_string())
-                                .bind(sequence)
-                                .execute(dbtx.as_mut())
-                                .await?;
-
-                            // Update pending count
-                            sqlx::query(
-                                r#"
-                                UPDATE ibc_stats
-                                SET
-                                    pending_tx_count = pending_tx_count + 1,
-                                    last_updated = $2
-                                WHERE client_id = $1
-                                "#,
-                            )
-                                .bind(&client_id)
-                                .bind(timestamp)
-                                .execute(dbtx.as_mut())
-                                .await?;
-
-                            tracing::debug!("Processed send_packet for channel {} with client {:?}", our_channel, client_id);
-                        } else {
-                            tracing::warn!("Cannot process IBC packet: no client found for channel {}", our_channel);
-                        }
-                    }
-                } else if let (Some(client_id), Some(tx_hash)) = (client_id, event.tx_hash()) {
+                if let (Some(client_id), Some(tx_hash)) = (final_client_id, event.tx_hash()) {
                     // Update transaction
                     sqlx::query(
                         r#"
@@ -491,7 +506,7 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    debug!("Processed send_packet for channel {}", our_channel);
+                    debug!("Processed send_packet for channel {} with client {}", our_channel, client_id);
                 }
             },
             "acknowledge_packet" => {
@@ -504,32 +519,36 @@ pub async fn process_events(
                     _ => continue,
                 };
 
-                // Check if there's a refund event for this sequence already identified
-                let has_refund_from_map = refunded_sequences.contains_key(sequence);
+                // Check if this is an error acknowledgment by examining the contents
+                let is_error = if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
+                    extract_error_from_ack(ack_data)
+                } else {
+                    false
+                };
 
-                // Check the actual ack data for errors
-                let ack_data = find_attribute_value(event, "packet_ack").unwrap_or_default();
-                let has_error_in_ack = extract_error_from_ack(ack_data);
+                // Check if there's a refund event for this sequence based on our previous mapping
+                let has_refund = refunded_sequences.contains_key(sequence);
 
-                // Check for refund events in the entire event list associated with this sequence
-                let has_refund_event_found = has_refund_event(events, sequence);
+                // Check for direct refund events targeting this sequence
+                let has_direct_refund = has_refund_event(events, sequence);
 
-                let has_error = has_refund_from_map || has_error_in_ack || has_refund_event_found;
-
-                let status = if has_error {
+                // Determine status based on error indicators (multiple sources)
+                let status = if is_error || has_refund || has_direct_refund {
                     IbcTransactionStatus::Error
                 } else {
                     IbcTransactionStatus::Completed
                 };
 
-                tracing::debug!(
-                    "Processing acknowledge_packet for sequence {}: status={} (refund_map={}, error_in_ack={}, refund_event={})",
-                    sequence, status, has_refund_from_map, has_error_in_ack, has_refund_event_found
+                debug!(
+                    "Processing acknowledge_packet for sequence {}: status={} (is_error={}, has_refund={}, has_direct_refund={})",
+                    sequence, status, is_error, has_refund, has_direct_refund
                 );
 
-                // Log the acknowledgment data for debugging
-                if !ack_data.is_empty() {
-                    tracing::debug!("Ack data for sequence {}: {}", sequence, ack_data);
+                // Log the acknowledgment data for debugging if it exists
+                if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
+                    if !ack_data.is_empty() {
+                        debug!("Ack data for sequence {}: {}", sequence, ack_data);
+                    }
                 }
 
                 // Update transaction status
@@ -577,8 +596,8 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    if has_error {
-                        debug!("Updated transaction {} to ERROR for client {} (error found)",
+                    if status == IbcTransactionStatus::Error {
+                        debug!("Updated transaction {} to ERROR for client {} (error indicators found)",
                                tx_hash, client_id);
                     } else {
                         debug!("Updated transaction {} to COMPLETED for client {}",
@@ -644,50 +663,87 @@ pub async fn process_events(
                 }
             },
             "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" => {
-                // Mark this sequence for direct lookup
-                if let Some(sequence) = find_attribute_value(event, "sequence") {
-                    // If we find a transaction by this sequence that's currently pending, update it to error
-                    let updated_rows = sqlx::query(
-                        r#"
-                        WITH updated_tx AS (
-                            UPDATE explorer_transactions
-                            SET ibc_status = $1
-                            WHERE ibc_sequence = $2
-                            AND ibc_status = 'pending'
-                            RETURNING ibc_client_id, tx_hash
-                        )
-                        SELECT ibc_client_id, tx_hash FROM updated_tx
-                        "#,
-                    )
-                        .bind(IbcTransactionStatus::Error.to_string())
-                        .bind(sequence)
-                        .fetch_all(dbtx.as_mut())
-                        .await?;
+                // Extract sequence from meta or direct attribute
+                let mut sequence = None;
 
-                    // Update stats for affected clients
-                    for row in updated_rows {
-                        let client_id: String = row.get(0);
-                        let tx_hash: String = row.try_get(1).unwrap_or_default();
+                // Try to find sequence in meta attribute (JSON)
+                if let Some(meta) = find_attribute_value(event, "meta") {
+                    if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
+                        sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(|s| s.to_string());
+                    } else {
+                        // Try regex/string matching if JSON parsing fails
+                        if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
+                            if let Some(captures) = re.captures(meta) {
+                                if let Some(seq_match) = captures.get(1) {
+                                    sequence = Some(seq_match.as_str().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
 
-                        // Update stats - decrease pending count
-                        sqlx::query(
+                // Also check for sequence as a direct attribute
+                if sequence.is_none() {
+                    sequence = find_attribute_value(event, "sequence").map(|s| s.to_string());
+                }
+
+                if let Some(seq) = sequence {
+                    // Check if there's an error reason
+                    let is_error = if let Some(reason) = find_attribute_value(event, "reason") {
+                        debug!("Refund reason for sequence {}: {}", seq, reason);
+                        // If reason contains ERROR, it's definitely an error
+                        reason.contains("ERROR") || reason.contains("REASON_ERROR")
+                    } else {
+                        // Without specific reason, we still consider it an error
+                        true
+                    };
+
+                    if is_error {
+                        // If we find transactions by this sequence that are in any state, update them to error
+                        let updated_rows = sqlx::query(
                             r#"
-                            UPDATE ibc_stats
-                            SET
-                                pending_tx_count = GREATEST(0, pending_tx_count - 1),
-                                last_updated = $2
-                            WHERE client_id = $1
+                            WITH updated_tx AS (
+                                UPDATE explorer_transactions
+                                SET ibc_status = $1
+                                WHERE ibc_sequence = $2
+                                RETURNING ibc_client_id, tx_hash, ibc_status
+                            )
+                            SELECT ibc_client_id, tx_hash, ibc_status FROM updated_tx
                             "#,
                         )
-                            .bind(&client_id)
-                            .bind(timestamp)
-                            .execute(dbtx.as_mut())
+                            .bind(IbcTransactionStatus::Error.to_string())
+                            .bind(&seq)
+                            .fetch_all(dbtx.as_mut())
                             .await?;
 
-                        tracing::debug!(
-                            "Set transaction {} to ERROR due to direct refund event (sequence {})",
-                            tx_hash, sequence
-                        );
+                        // Update stats for affected clients
+                        for row in updated_rows {
+                            let client_id: String = row.get(0);
+                            let tx_hash: String = row.try_get(1).unwrap_or_default();
+                            let previous_status: String = row.try_get(2).unwrap_or_default();
+
+                            // Only decrement pending count if it was previously pending
+                            if previous_status == "pending" {
+                                sqlx::query(
+                                    r#"
+                                    UPDATE ibc_stats
+                                    SET
+                                        pending_tx_count = GREATEST(0, pending_tx_count - 1),
+                                        last_updated = $2
+                                    WHERE client_id = $1
+                                    "#,
+                                )
+                                    .bind(&client_id)
+                                    .bind(timestamp)
+                                    .execute(dbtx.as_mut())
+                                    .await?;
+                            }
+
+                            debug!(
+                                "Set transaction {} to ERROR due to direct refund event with REASON_ERROR (sequence {})",
+                                tx_hash, seq
+                            );
+                        }
                     }
                 }
             },
@@ -723,16 +779,20 @@ pub async fn process_events(
                     };
 
                     // First try to get client for this channel
-                    let client_id: Option<String> = sqlx::query_scalar(
+                    let mut resolved_client_id: Option<String> = None;
+
+                    let db_client_id = sqlx::query_scalar::<_, Option<String>>(
                         "SELECT client_id FROM ibc_channels WHERE channel_id = $1"
                     )
                         .bind(channel_id)
                         .fetch_optional(dbtx.as_mut())
                         .await?;
 
-                    // If channel is not associated with any client, add it to our database using deterministic mapping
-                    let final_client_id = if client_id.is_none() {
-                        // Try to deterministically assign based on channel number
+                    if let Some(client) = db_client_id {
+                        // We found a client in the database
+                        resolved_client_id = client;
+                    } else {
+                        // No client found, try to assign one deterministically
                         if let Some(channel_num) = extract_number_from_channel(channel_id) {
                             // Get all available clients
                             let all_clients: Vec<String> = known_clients.clone();
@@ -742,7 +802,7 @@ pub async fn process_events(
                                 let idx = (channel_num as usize) % all_clients.len();
                                 let selected_client = all_clients[idx].clone();
 
-                                tracing::info!("Associating channel {} with client {} via deterministic mapping",
+                                info!("Associating channel {} with client {} via deterministic mapping",
                                     channel_id, selected_client);
 
                                 sqlx::query(
@@ -757,16 +817,13 @@ pub async fn process_events(
                                     .execute(dbtx.as_mut())
                                     .await?;
 
-                                Some(selected_client)
-                            } else {
-                                tracing::warn!("Cannot associate channel {}: no clients available", channel_id);
-                                None
+                                resolved_client_id = Some(selected_client);
                             }
                         } else if !known_clients.is_empty() {
                             // For channels without a number, use first client
                             let selected_client = known_clients[0].clone();
 
-                            tracing::info!("Associating unnumbered channel {} with first available client {}",
+                            info!("Associating unnumbered channel {} with first available client {}",
                                 channel_id, selected_client);
 
                             sqlx::query(
@@ -781,16 +838,13 @@ pub async fn process_events(
                                 .execute(dbtx.as_mut())
                                 .await?;
 
-                            Some(selected_client)
+                            resolved_client_id = Some(selected_client);
                         } else {
-                            tracing::warn!("Cannot associate channel {}: no clients available", channel_id);
-                            None
+                            warn!("Cannot associate channel {}: no clients available", channel_id);
                         }
-                    } else {
-                        client_id
-                    };
+                    }
 
-                    if let Some(client_id) = final_client_id {
+                    if let Some(client_id) = resolved_client_id {
                         // Update stats using direct SQL to properly handle extremely large numbers
                         match sqlx::query(
                             r#"
@@ -822,7 +876,7 @@ pub async fn process_events(
                             },
                             Err(e) => {
                                 // Log the error but continue processing
-                                tracing::error!("Error updating stats for inbound transfer: {}. Using fallback.", e);
+                                error!("Error updating stats for inbound transfer: {}. Using fallback.", e);
 
                                 // Fallback: just increment the count without adding to volume
                                 sqlx::query(
@@ -843,7 +897,7 @@ pub async fn process_events(
                             }
                         }
                     } else {
-                        tracing::warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
+                        warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
                     }
                 }
             },
@@ -879,16 +933,20 @@ pub async fn process_events(
                     };
 
                     // First try to get client for this channel
-                    let client_id: Option<String> = sqlx::query_scalar(
+                    let mut resolved_client_id: Option<String> = None;
+
+                    let db_client_id = sqlx::query_scalar::<_, Option<String>>(
                         "SELECT client_id FROM ibc_channels WHERE channel_id = $1"
                     )
                         .bind(channel_id)
                         .fetch_optional(dbtx.as_mut())
                         .await?;
 
-                    // If channel is not associated with any client, add it to our database using deterministic mapping
-                    let final_client_id = if client_id.is_none() {
-                        // Try to deterministically assign based on channel number
+                    if let Some(client) = db_client_id {
+                        // We found a client in the database
+                        resolved_client_id = client;
+                    } else {
+                        // No client found, try to assign one deterministically
                         if let Some(channel_num) = extract_number_from_channel(channel_id) {
                             // Get all available clients
                             let all_clients: Vec<String> = known_clients.clone();
@@ -898,7 +956,7 @@ pub async fn process_events(
                                 let idx = (channel_num as usize) % all_clients.len();
                                 let selected_client = all_clients[idx].clone();
 
-                                tracing::info!("Associating channel {} with client {} via deterministic mapping",
+                                info!("Associating channel {} with client {} via deterministic mapping",
                                     channel_id, selected_client);
 
                                 sqlx::query(
@@ -913,16 +971,13 @@ pub async fn process_events(
                                     .execute(dbtx.as_mut())
                                     .await?;
 
-                                Some(selected_client)
-                            } else {
-                                tracing::warn!("Cannot associate channel {}: no clients available", channel_id);
-                                None
+                                resolved_client_id = Some(selected_client);
                             }
                         } else if !known_clients.is_empty() {
                             // For channels without a number, use first client
                             let selected_client = known_clients[0].clone();
 
-                            tracing::info!("Associating unnumbered channel {} with first available client {}",
+                            info!("Associating unnumbered channel {} with first available client {}",
                                 channel_id, selected_client);
 
                             sqlx::query(
@@ -937,16 +992,13 @@ pub async fn process_events(
                                 .execute(dbtx.as_mut())
                                 .await?;
 
-                            Some(selected_client)
+                            resolved_client_id = Some(selected_client);
                         } else {
-                            tracing::warn!("Cannot associate channel {}: no clients available", channel_id);
-                            None
+                            warn!("Cannot associate channel {}: no clients available", channel_id);
                         }
-                    } else {
-                        client_id
-                    };
+                    }
 
-                    if let Some(client_id) = final_client_id {
+                    if let Some(client_id) = resolved_client_id {
                         // Update stats using direct SQL to properly handle extremely large numbers
                         match sqlx::query(
                             r#"
@@ -978,7 +1030,7 @@ pub async fn process_events(
                             },
                             Err(e) => {
                                 // Log the error but continue processing
-                                tracing::error!("Error updating stats for outbound transfer: {}. Using fallback.", e);
+                                error!("Error updating stats for outbound transfer: {}. Using fallback.", e);
 
                                 // Fallback: just increment the count without adding to volume
                                 sqlx::query(
@@ -999,7 +1051,7 @@ pub async fn process_events(
                             }
                         }
                     } else {
-                        tracing::warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
+                        warn!("Cannot attribute transfer: no client found for channel {}", channel_id);
                     }
                 }
             },
@@ -1016,7 +1068,7 @@ pub async fn update_old_pending_transactions(
 ) -> Result<(), anyhow::Error> {
     let day_ago = Utc::now() - chrono::Duration::hours(24);
 
-    tracing::debug!("Checking for old pending IBC transactions (older than 24h)");
+    debug!("Checking for old pending IBC transactions (older than 24h)");
 
     let pending_count: i64 = match sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM explorer_transactions WHERE ibc_status = 'pending' AND ibc_client_id IS NOT NULL"
@@ -1025,7 +1077,7 @@ pub async fn update_old_pending_transactions(
         .await {
         Ok(count) => count,
         Err(e) => {
-            tracing::warn!("Failed to count pending transactions: {}", e);
+            warn!("Failed to count pending transactions: {}", e);
             0
         }
     };
@@ -1052,7 +1104,7 @@ pub async fn update_old_pending_transactions(
 
     let updated_count = updated_rows.len();
     if updated_count > 0 {
-        tracing::info!("Updated {} IBC transactions from pending to error status", updated_count);
+        info!("Updated {} IBC transactions from pending to error status", updated_count);
     }
 
     for row in updated_rows {
@@ -1073,7 +1125,7 @@ pub async fn update_old_pending_transactions(
             .await;
 
         if let Err(e) = result {
-            tracing::warn!("Failed to update stats for client {}: {}", client_id, e);
+            warn!("Failed to update stats for client {}: {}", client_id, e);
         }
     }
 
@@ -1085,12 +1137,12 @@ pub async fn update_old_pending_transactions(
         .await {
         Ok(count) => count,
         Err(e) => {
-            tracing::warn!("Failed to count remaining pending transactions: {}", e);
+            warn!("Failed to count remaining pending transactions: {}", e);
             0
         }
     };
 
-    tracing::debug!("IBC transactions: {} were pending, {} updated to error, {} still pending",
+    debug!("IBC transactions: {} were pending, {} updated to error, {} still pending",
         pending_count, updated_count, remaining_pending);
 
     Ok(())
@@ -1113,31 +1165,47 @@ fn find_attribute_value<'a>(event: &'a ContextualizedEvent, key: &str) -> Option
 /// Extract any error information from the acknowledgment packet data
 /// Returns true if an error is detected, false otherwise
 fn extract_error_from_ack(ack_data: &str) -> bool {
+    // Common error patterns to look for in acknowledgments
     let error_patterns = [
         "\"error\":", "\"Error\":", "\"ERROR\":",
         "failed", "Failed", "FAILED",
         "reject", "Reject", "REJECT",
         "insufficient", "Insufficient",
         "invalid", "Invalid", "INVALID",
-        "REASON_ERROR"
+        "REASON_ERROR", "reason error", "Reason Error",
+        "timeout", "Timeout", "TIMEOUT"
     ];
 
+    // Check for simple string patterns first (faster)
     for pattern in error_patterns {
         if ack_data.contains(pattern) {
             return true;
         }
     }
 
+    // Try to parse as JSON for more complex error patterns
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(ack_data) {
+        // Check for error fields at root level
         if json.get("error").is_some() ||
             json.get("Error").is_some() ||
             json.get("ERROR").is_some() {
             return true;
         }
 
+        // Check for error inside result field
         if let Some(result) = json.get("result") {
-            if result.get("error").is_some() {
+            if result.get("error").is_some() ||
+                result.is_string() && result.as_str().unwrap_or("").contains("error") {
                 return true;
+            }
+        }
+
+        // Check for code field with non-zero values
+        if let Some(code) = json.get("code") {
+            if let Some(code_num) = code.as_u64() {
+                if code_num != 0 {
+                    return true;
+                }
             }
         }
     }
