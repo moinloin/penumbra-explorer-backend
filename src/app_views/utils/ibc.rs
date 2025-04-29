@@ -129,7 +129,6 @@ pub async fn process_events(
         if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
             let mut sequence = None;
 
-            // Try to find sequence in meta attribute (JSON)
             if let Some(meta) = find_attribute_value(event, "meta") {
                 if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
                     sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(|s| s.to_string());
