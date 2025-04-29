@@ -122,7 +122,6 @@ pub async fn process_events(
     let mut client_connections: HashMap<String, String> = HashMap::new();
     let mut connection_channels: HashMap<String, String> = HashMap::new();
 
-    // First pass: identify all refund events and error sequences to build lookup maps
     let mut refunded_sequences: HashMap<String, bool> = HashMap::new();
     let mut error_acknowledgments: HashMap<String, bool> = HashMap::new();
 
