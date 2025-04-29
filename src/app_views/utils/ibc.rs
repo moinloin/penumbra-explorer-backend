@@ -159,7 +159,6 @@ pub async fn process_events(
                 }
             }
         }
-        // Check for error acknowledgments
         else if event.event.kind.as_str() == "acknowledge_packet" {
             if let Some(sequence) = find_attribute_value(event, "packet_sequence") {
                 if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
