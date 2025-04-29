@@ -133,7 +133,6 @@ pub async fn process_events(
                 if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
                     sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(|s| s.to_string());
                 } else {
-                    // Try regex/string matching if JSON parsing fails
                     if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
                         if let Some(captures) = re.captures(meta) {
                             if let Some(seq_match) = captures.get(1) {
