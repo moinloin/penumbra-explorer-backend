@@ -789,7 +789,6 @@ pub async fn process_events(
                         .await?;
 
                     if let Some(client) = db_client_id {
-                        // We found a client in the database
                         resolved_client_id = client;
                     } else {
                         // No client found, try to assign one deterministically
