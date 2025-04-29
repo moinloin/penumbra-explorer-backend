@@ -85,7 +85,6 @@ fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool 
                 }
             }
 
-            // Direct sequence check if available as an attribute
             if let Some(event_seq) = find_attribute_value(event, "sequence") {
                 if event_seq == sequence {
                     debug!("Found refund event for sequence {} via direct attribute", sequence);
