@@ -71,7 +71,6 @@ fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool 
                                     return true;
                                 }
                             } else {
-                                // Even without a reason, a refund event for this sequence is a good error indicator
                                 debug!("Found refund event for sequence {} without specific reason", sequence);
                                 return true;
                             }
