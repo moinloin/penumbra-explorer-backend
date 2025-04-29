@@ -263,7 +263,6 @@ pub async fn process_events(
                     find_attribute_value(event, "channel_id"),
                     find_attribute_value(event, "connection_id"),
                 ) {
-                    // Store for later use
                     connection_channels.insert(connection_id.to_string(), channel_id.to_string());
 
                     // Try to find client_id for this connection
