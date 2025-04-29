@@ -791,7 +791,6 @@ pub async fn process_events(
                     if let Some(client) = db_client_id {
                         resolved_client_id = client;
                     } else {
-                        // No client found, try to assign one deterministically
                         if let Some(channel_num) = extract_number_from_channel(channel_id) {
                             // Get all available clients
                             let all_clients: Vec<String> = known_clients.clone();
