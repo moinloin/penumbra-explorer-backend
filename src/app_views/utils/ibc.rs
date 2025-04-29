@@ -126,7 +126,6 @@ pub async fn process_events(
     let mut error_acknowledgments: HashMap<String, bool> = HashMap::new();
 
     for event in events {
-        // Check for EventOutboundFungibleTokenRefund events indicating errors
         if event.event.kind.as_str() == "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenRefund" {
             let mut sequence = None;
 
