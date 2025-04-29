@@ -286,7 +286,6 @@ pub async fn process_events(
 
                         debug!("Processed channel_open_init: {} -> {}", channel_id, client_id);
                     } else {
-                        // If no client_id in memory, use deterministic round-robin assignment
                         if let Some(channel_num) = extract_number_from_channel(channel_id) {
                             // Use deterministic round-robin assignment based on channel number
                             // This ensures the same channel always gets assigned to the same client
