@@ -151,7 +151,6 @@ pub async fn process_events(
                 refunded_sequences.insert(seq.clone(), true);
                 debug!("Found refund event for sequence {}", seq);
 
-                // Check if there's an error reason
                 if let Some(reason) = find_attribute_value(event, "reason") {
                     debug!("Refund reason for sequence {}: {}", seq, reason);
                     // Mark as definite error if reason contains ERROR
