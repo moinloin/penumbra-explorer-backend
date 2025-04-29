@@ -186,7 +186,6 @@ pub async fn process_events(
         info!("No clients found in database");
     }
 
-    // First phase: Process connection and channel mappings
     for event in events {
         match event.event.kind.as_str() {
             "create_client" => {
