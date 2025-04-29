@@ -796,7 +796,6 @@ pub async fn process_events(
                             let all_clients: Vec<String> = known_clients.clone();
 
                             if !all_clients.is_empty() {
-                                // Use modulo for deterministic mapping
                                 let idx = (channel_num as usize) % all_clients.len();
                                 let selected_client = all_clients[idx].clone();
 
