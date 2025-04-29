@@ -1,8 +1,9 @@
 name: Rust CI/CD Pipeline (Production)
 
 on:
-  release:
-    types: [published]
+  pull_request:
+    branches:
+      - stage
   workflow_dispatch:
 
 env:
@@ -70,7 +71,6 @@ jobs:
     name: Deploy to Hetzner (Production)
     runs-on: ubuntu-latest
     needs: [code-quality, test]
-    if: github.event_name == 'release' && github.event.release.target_commitish == 'main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -89,7 +89,7 @@ jobs:
       - name: Install SSH key
         uses: shimataro/ssh-key-action@v2
         with:
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key: ${{ secrets.DEPLOY_SSH_KEY_STAGE }}
           known_hosts: unnecessary
 
       - name: Add server to known hosts
