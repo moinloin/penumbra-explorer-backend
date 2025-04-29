@@ -8,36 +8,36 @@ use regex::Regex;
 
 /// Direction of an IBC transaction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IbcDirection {
+pub enum Direction {
     Inbound,
     Outbound,
 }
 
-impl std::fmt::Display for IbcDirection {
+impl std::fmt::Display for Direction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IbcDirection::Inbound => write!(f, "inbound"),
-            IbcDirection::Outbound => write!(f, "outbound"),
+            Direction::Inbound => write!(f, "inbound"),
+            Direction::Outbound => write!(f, "outbound"),
         }
     }
 }
 
 /// Status of an IBC transaction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IbcTransactionStatus {
+pub enum TransactionStatus {
     Pending,
     Completed,
     Expired,
     Error,
 }
 
-impl std::fmt::Display for IbcTransactionStatus {
+impl std::fmt::Display for TransactionStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IbcTransactionStatus::Pending => write!(f, "pending"),
-            IbcTransactionStatus::Completed => write!(f, "completed"),
-            IbcTransactionStatus::Expired => write!(f, "expired"),
-            IbcTransactionStatus::Error => write!(f, "error"),
+            TransactionStatus::Pending => write!(f, "pending"),
+            TransactionStatus::Completed => write!(f, "completed"),
+            TransactionStatus::Expired => write!(f, "expired"),
+            TransactionStatus::Error => write!(f, "error"),
         }
     }
 }
@@ -56,7 +56,7 @@ fn extract_number_from_channel(channel_id: &str) -> Option<u64> {
 /// Checks if a specific sequence has a refund event in the event list
 ///
 /// This function looks for:
-/// 1. EventOutboundFungibleTokenRefund events for the specific sequence
+/// 1. `EventOutboundFungibleTokenRefund` events for the specific sequence
 /// 2. Error indicators in the event's reason attribute
 fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool {
     for event in events {
@@ -76,12 +76,10 @@ fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool 
                             }
                         }
                     }
-                } else {
-                    if meta.contains(&format!("\"sequence\":\"{}\",", sequence)) ||
-                        meta.contains(&format!("\"sequence\":\"{}\"}}", sequence)) {
-                        debug!("Found refund event for sequence {} via string matching", sequence);
-                        return true;
-                    }
+                } else if meta.contains(&format!("\"sequence\":\"{sequence}\",")) ||
+                    meta.contains(&format!("\"sequence\":\"{sequence}\"}}")) {
+                    debug!("Found refund event for sequence {} via string matching", sequence);
+                    return true;
                 }
             }
 
@@ -97,8 +95,9 @@ fn has_refund_event(events: &[ContextualizedEvent<'_>], sequence: &str) -> bool 
     false
 }
 
-/// Helper function to determine if an acknowledge_packet contains an error
-/// by analyzing its packet_ack data
+/// Helper function to determine if an `acknowledge_packet` contains an error
+/// by analyzing its `packet_ack` data
+#[allow(dead_code)]
 fn is_error_acknowledgment(event: &ContextualizedEvent<'_>) -> bool {
     if event.event.kind.as_str() != "acknowledge_packet" {
         return false;
@@ -112,6 +111,10 @@ fn is_error_acknowledgment(event: &ContextualizedEvent<'_>) -> bool {
 }
 
 /// Process IBC events from a block
+/// 
+/// # Errors
+/// Returns an error if database operations fail
+#[allow(clippy::too_many_lines, clippy::cast_possible_wrap, clippy::needless_raw_string_hashes)]
 pub async fn process_events(
     dbtx: &mut PgTransaction<'_>,
     events: &[ContextualizedEvent<'_>],
@@ -131,20 +134,18 @@ pub async fn process_events(
 
             if let Some(meta) = find_attribute_value(event, "meta") {
                 if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
-                    sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(|s| s.to_string());
-                } else {
-                    if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
-                        if let Some(captures) = re.captures(meta) {
-                            if let Some(seq_match) = captures.get(1) {
-                                sequence = Some(seq_match.as_str().to_string());
-                            }
+                    sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(ToString::to_string);
+                } else if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
+                    if let Some(captures) = re.captures(meta) {
+                        if let Some(seq_match) = captures.get(1) {
+                            sequence = Some(seq_match.as_str().to_string());
                         }
                     }
                 }
             }
 
             if sequence.is_none() {
-                sequence = find_attribute_value(event, "sequence").map(|s| s.to_string());
+                sequence = find_attribute_value(event, "sequence").map(ToString::to_string);
             }
 
             if let Some(seq) = sequence {
@@ -180,10 +181,10 @@ pub async fn process_events(
         known_clients.push(client_id);
     }
 
-    if !known_clients.is_empty() {
-        debug!("Found {} existing clients in database", known_clients.len());
-    } else {
+    if known_clients.is_empty() {
         info!("No clients found in database");
+    } else {
+        debug!("Found {} existing clients in database", known_clients.len());
     }
 
     for event in events {
@@ -191,14 +192,14 @@ pub async fn process_events(
             "create_client" => {
                 if let Some(client_id) = find_attribute_value(event, "client_id") {
                     sqlx::query(
-                        r#"
+                        r"
                         INSERT INTO ibc_clients (client_id, last_active_height, last_active_time)
                         VALUES ($1, $2, $3)
                         ON CONFLICT (client_id)
                         DO UPDATE SET
                             last_active_height = $2,
                             last_active_time = $3
-                        "#,
+                        ",
                     )
                         .bind(client_id)
                         .bind(height as i64)
@@ -207,7 +208,7 @@ pub async fn process_events(
                         .await?;
 
                     sqlx::query(
-                        r#"
+                        r"
                         INSERT INTO ibc_stats (
                             client_id,
                             shielded_volume, shielded_tx_count,
@@ -217,7 +218,7 @@ pub async fn process_events(
                         )
                         VALUES ($1, 0, 0, 0, 0, 0, 0, $2)
                         ON CONFLICT (client_id) DO NOTHING
-                        "#,
+                        ",
                     )
                         .bind(client_id)
                         .bind(timestamp)
@@ -239,11 +240,11 @@ pub async fn process_events(
                     client_connections.insert(connection_id.to_string(), client_id.to_string());
 
                     sqlx::query(
-                        r#"
+                        r"
                         INSERT INTO ibc_clients (client_id, last_active_height, last_active_time)
                         VALUES ($1, $2, $3)
                         ON CONFLICT (client_id) DO NOTHING
-                        "#,
+                        ",
                     )
                         .bind(client_id)
                         .bind(height as i64)
@@ -269,14 +270,14 @@ pub async fn process_events(
 
                     if let Some(client_id) = client_id {
                         sqlx::query(
-                            r#"
+                            r"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                             VALUES ($1, $2, $3)
                             ON CONFLICT (channel_id)
                             DO UPDATE SET
                                 client_id = $2,
                                 connection_id = $3
-                            "#,
+                            ",
                         )
                             .bind(channel_id)
                             .bind(&client_id)
@@ -285,56 +286,54 @@ pub async fn process_events(
                             .await?;
 
                         debug!("Processed channel_open_init: {} -> {}", channel_id, client_id);
-                    } else {
-                        if let Some(channel_num) = extract_number_from_channel(channel_id) {
-                            if !known_clients.is_empty() {
-                                let idx = (channel_num as usize) % known_clients.len();
-                                let selected_client = &known_clients[idx];
-
-                                sqlx::query(
-                                    r#"
-                                    INSERT INTO ibc_channels (channel_id, client_id, connection_id)
-                                    VALUES ($1, $2, $3)
-                                    ON CONFLICT (channel_id)
-                                    DO UPDATE SET
-                                        client_id = $2,
-                                        connection_id = $3
-                                    "#,
-                                )
-                                    .bind(channel_id)
-                                    .bind(selected_client)
-                                    .bind(connection_id)
-                                    .execute(dbtx.as_mut())
-                                    .await?;
-
-                                debug!("Associated channel {} with client {} (deterministic mapping)",
-                                      channel_id, selected_client);
-                            } else {
-                                warn!("Cannot associate channel {}: no clients available", channel_id);
-                            }
-                        } else if !known_clients.is_empty() {
-                            let default_client = &known_clients[0];
+                    } else if let Some(channel_num) = extract_number_from_channel(channel_id) {
+                        if known_clients.is_empty() {
+                            warn!("Cannot associate channel {}: no clients available", channel_id);
+                        } else {
+                            let idx = usize::try_from(channel_num).unwrap_or(0) % known_clients.len();
+                            let selected_client = &known_clients[idx];
 
                             sqlx::query(
-                                r#"
+                                r"
                                 INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                                 VALUES ($1, $2, $3)
                                 ON CONFLICT (channel_id)
                                 DO UPDATE SET
                                     client_id = $2,
                                     connection_id = $3
-                                "#,
+                                ",
                             )
                                 .bind(channel_id)
-                                .bind(default_client)
+                                .bind(selected_client)
                                 .bind(connection_id)
                                 .execute(dbtx.as_mut())
                                 .await?;
 
-                            debug!("Associated channel {} with first available client {}", channel_id, default_client);
-                        } else {
-                            warn!("Cannot associate channel {}: no clients available", channel_id);
+                            debug!("Associated channel {} with client {} (deterministic mapping)",
+                                  channel_id, selected_client);
                         }
+                    } else if !known_clients.is_empty() {
+                        let default_client = &known_clients[0];
+
+                        sqlx::query(
+                            r"
+                            INSERT INTO ibc_channels (channel_id, client_id, connection_id)
+                            VALUES ($1, $2, $3)
+                            ON CONFLICT (channel_id)
+                            DO UPDATE SET
+                                client_id = $2,
+                                connection_id = $3
+                            ",
+                        )
+                            .bind(channel_id)
+                            .bind(default_client)
+                            .bind(connection_id)
+                            .execute(dbtx.as_mut())
+                            .await?;
+
+                        debug!("Associated channel {} with first available client {}", channel_id, default_client);
+                    } else {
+                        warn!("Cannot associate channel {}: no clients available", channel_id);
                     }
                 }
             },
@@ -345,28 +344,25 @@ pub async fn process_events(
     for event in events {
         match event.event.kind.as_str() {
             "send_packet" => {
-                let (src_channel, dst_channel, sequence) = match (
+                let (Some(src_channel), Some(dst_channel), Some(sequence)) = (
                     find_attribute_value(event, "packet_src_channel"),
                     find_attribute_value(event, "packet_dst_channel"),
                     find_attribute_value(event, "packet_sequence"),
-                ) {
-                    (Some(src), Some(dst), Some(seq)) => (src, dst, seq),
-                    _ => continue,
-                };
+                ) else { continue };
 
                 let packet_data = find_attribute_value(event, "packet_data").unwrap_or_default();
 
                 let direction = if packet_data.contains("\"receiver\":\"penumbra") {
-                    IbcDirection::Inbound
+                    Direction::Inbound
                 } else if packet_data.contains("\"sender\":\"penumbra") {
-                    IbcDirection::Outbound
+                    Direction::Outbound
                 } else {
                     continue;
                 };
 
                 let our_channel = match direction {
-                    IbcDirection::Inbound => dst_channel,
-                    IbcDirection::Outbound => src_channel,
+                    Direction::Inbound => dst_channel,
+                    Direction::Outbound => src_channel,
                 };
 
                 let mut final_client_id: Option<String> = None;
@@ -383,55 +379,53 @@ pub async fn process_events(
                 } else if our_channel.starts_with("channel-") {
                     let available_clients: Vec<String> = known_clients.clone();
 
-                    if !available_clients.is_empty() {
-                        if let Some(channel_num) = extract_number_from_channel(our_channel) {
-                            let idx = (channel_num as usize) % available_clients.len();
-                            let selected_client = available_clients[idx].clone();
-
-                            info!("Associating channel {} with client {} via deterministic mapping",
-                                our_channel, selected_client);
-
-                            sqlx::query(
-                                r#"
-                                INSERT INTO ibc_channels (channel_id, client_id, connection_id)
-                                VALUES ($1, $2, 'auto-connection')
-                                ON CONFLICT (channel_id) DO NOTHING
-                                "#
-                            )
-                                .bind(our_channel)
-                                .bind(&selected_client)
-                                .execute(dbtx.as_mut())
-                                .await?;
-
-                            final_client_id = Some(selected_client);
-                        } else {
-                            let selected_client = available_clients[0].clone();
-
-                            info!("Associating unnumbered channel {} with default client {}",
-                                our_channel, selected_client);
-
-                            sqlx::query(
-                                r#"
-                                INSERT INTO ibc_channels (channel_id, client_id, connection_id)
-                                VALUES ($1, $2, 'auto-connection')
-                                ON CONFLICT (channel_id) DO NOTHING
-                                "#
-                            )
-                                .bind(our_channel)
-                                .bind(&selected_client)
-                                .execute(dbtx.as_mut())
-                                .await?;
-
-                            final_client_id = Some(selected_client);
-                        }
-                    } else {
+                    if available_clients.is_empty() {
                         warn!("Cannot associate channel {}: no clients available", our_channel);
+                    } else if let Some(channel_num) = extract_number_from_channel(our_channel) {
+                        let idx = usize::try_from(channel_num).unwrap_or(0) % available_clients.len();
+                        let selected_client = available_clients[idx].clone();
+
+                        info!("Associating channel {} with client {} via deterministic mapping",
+                            our_channel, selected_client);
+
+                        sqlx::query(
+                            r"
+                            INSERT INTO ibc_channels (channel_id, client_id, connection_id)
+                            VALUES ($1, $2, 'auto-connection')
+                            ON CONFLICT (channel_id) DO NOTHING
+                            "
+                        )
+                            .bind(our_channel)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
+
+                        final_client_id = Some(selected_client);
+                    } else {
+                        let selected_client = available_clients[0].clone();
+
+                        info!("Associating unnumbered channel {} with default client {}",
+                            our_channel, selected_client);
+
+                        sqlx::query(
+                            r"
+                            INSERT INTO ibc_channels (channel_id, client_id, connection_id)
+                            VALUES ($1, $2, 'auto-connection')
+                            ON CONFLICT (channel_id) DO NOTHING
+                            "
+                        )
+                            .bind(our_channel)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
+
+                        final_client_id = Some(selected_client);
                     }
                 }
 
                 if let (Some(client_id), Some(tx_hash)) = (final_client_id, event.tx_hash()) {
                     sqlx::query(
-                        r#"
+                        r"
                         UPDATE explorer_transactions
                         SET
                             ibc_channel_id = $2,
@@ -440,25 +434,25 @@ pub async fn process_events(
                             ibc_direction = $5,
                             ibc_sequence = $6
                         WHERE tx_hash = $1
-                        "#,
+                        ",
                     )
                         .bind(tx_hash)
                         .bind(our_channel)
                         .bind(&client_id)
-                        .bind(IbcTransactionStatus::Pending.to_string())
+                        .bind(TransactionStatus::Pending.to_string())
                         .bind(direction.to_string())
                         .bind(sequence)
                         .execute(dbtx.as_mut())
                         .await?;
 
                     sqlx::query(
-                        r#"
+                        r"
                         UPDATE ibc_stats
                         SET
                             pending_tx_count = pending_tx_count + 1,
                             last_updated = $2
                         WHERE client_id = $1
-                        "#,
+                        ",
                     )
                         .bind(&client_id)
                         .bind(timestamp)
@@ -469,14 +463,11 @@ pub async fn process_events(
                 }
             },
             "acknowledge_packet" => {
-                let (src_channel, dst_channel, sequence) = match (
+                let (Some(src_channel), Some(dst_channel), Some(sequence)) = (
                     find_attribute_value(event, "packet_src_channel"),
                     find_attribute_value(event, "packet_dst_channel"),
                     find_attribute_value(event, "packet_sequence"),
-                ) {
-                    (Some(src), Some(dst), Some(seq)) => (src, dst, seq),
-                    _ => continue,
-                };
+                ) else { continue };
 
                 let is_error = if let Some(ack_data) = find_attribute_value(event, "packet_ack") {
                     extract_error_from_ack(ack_data)
@@ -489,9 +480,9 @@ pub async fn process_events(
                 let has_direct_refund = has_refund_event(events, sequence);
 
                 let status = if is_error || has_refund || has_direct_refund {
-                    IbcTransactionStatus::Error
+                    TransactionStatus::Error
                 } else {
-                    IbcTransactionStatus::Completed
+                    TransactionStatus::Completed
                 };
 
                 debug!(
@@ -506,7 +497,7 @@ pub async fn process_events(
                 }
 
                 let updated_rows = sqlx::query(
-                    r#"
+                    r"
                     WITH updated_tx AS (
                         UPDATE explorer_transactions
                         SET ibc_status = $1
@@ -520,7 +511,7 @@ pub async fn process_events(
                         RETURNING ibc_client_id, tx_hash
                     )
                     SELECT ibc_client_id, tx_hash FROM updated_tx
-                    "#,
+                    ",
                 )
                     .bind(status.to_string())
                     .bind(sequence)
@@ -534,20 +525,20 @@ pub async fn process_events(
                     let tx_hash: String = row.try_get(1).unwrap_or_default();
 
                     sqlx::query(
-                        r#"
+                        r"
                         UPDATE ibc_stats
                         SET
                             pending_tx_count = GREATEST(0, pending_tx_count - 1),
                             last_updated = $2
                         WHERE client_id = $1
-                        "#,
+                        ",
                     )
                         .bind(&client_id)
                         .bind(timestamp)
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    if status == IbcTransactionStatus::Error {
+                    if status == TransactionStatus::Error {
                         debug!("Updated transaction {} to ERROR for client {} (error indicators found)",
                                tx_hash, client_id);
                     } else {
@@ -557,17 +548,14 @@ pub async fn process_events(
                 }
             },
             "timeout_packet" => {
-                let (src_channel, dst_channel, sequence) = match (
+                let (Some(src_channel), Some(dst_channel), Some(sequence)) = (
                     find_attribute_value(event, "packet_src_channel"),
                     find_attribute_value(event, "packet_dst_channel"),
                     find_attribute_value(event, "packet_sequence"),
-                ) {
-                    (Some(src), Some(dst), Some(seq)) => (src, dst, seq),
-                    _ => continue,
-                };
+                ) else { continue };
 
                 let updated_rows = sqlx::query(
-                    r#"
+                    r"
                     WITH updated_tx AS (
                         UPDATE explorer_transactions
                         SET ibc_status = $1
@@ -581,9 +569,9 @@ pub async fn process_events(
                         RETURNING ibc_client_id
                     )
                     SELECT ibc_client_id FROM updated_tx
-                    "#,
+                    ",
                 )
-                    .bind(IbcTransactionStatus::Expired.to_string())
+                    .bind(TransactionStatus::Expired.to_string())
                     .bind(sequence)
                     .bind(dst_channel)
                     .bind(src_channel)
@@ -594,14 +582,14 @@ pub async fn process_events(
                     let client_id: String = row.get(0);
 
                     sqlx::query(
-                        r#"
+                        r"
                         UPDATE ibc_stats
                         SET
                             pending_tx_count = GREATEST(0, pending_tx_count - 1),
                             expired_tx_count = expired_tx_count + 1,
                             last_updated = $2
                         WHERE client_id = $1
-                        "#,
+                        ",
                     )
                         .bind(&client_id)
                         .bind(timestamp)
@@ -616,20 +604,18 @@ pub async fn process_events(
 
                 if let Some(meta) = find_attribute_value(event, "meta") {
                     if let Ok(meta_json) = serde_json::from_str::<Value>(meta) {
-                        sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(|s| s.to_string());
-                    } else {
-                        if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
-                            if let Some(captures) = re.captures(meta) {
-                                if let Some(seq_match) = captures.get(1) {
-                                    sequence = Some(seq_match.as_str().to_string());
-                                }
+                        sequence = meta_json.get("sequence").and_then(|s| s.as_str()).map(ToString::to_string);
+                    } else if let Ok(re) = Regex::new(r#""sequence":"([^"]+)""#) {
+                        if let Some(captures) = re.captures(meta) {
+                            if let Some(seq_match) = captures.get(1) {
+                                sequence = Some(seq_match.as_str().to_string());
                             }
                         }
                     }
                 }
 
                 if sequence.is_none() {
-                    sequence = find_attribute_value(event, "sequence").map(|s| s.to_string());
+                    sequence = find_attribute_value(event, "sequence").map(ToString::to_string);
                 }
 
                 if let Some(seq) = sequence {
@@ -642,7 +628,7 @@ pub async fn process_events(
 
                     if is_error {
                         let updated_rows = sqlx::query(
-                            r#"
+                            r"
                             WITH updated_tx AS (
                                 UPDATE explorer_transactions
                                 SET ibc_status = $1
@@ -650,9 +636,9 @@ pub async fn process_events(
                                 RETURNING ibc_client_id, tx_hash, ibc_status
                             )
                             SELECT ibc_client_id, tx_hash, ibc_status FROM updated_tx
-                            "#,
+                            ",
                         )
-                            .bind(IbcTransactionStatus::Error.to_string())
+                            .bind(TransactionStatus::Error.to_string())
                             .bind(&seq)
                             .fetch_all(dbtx.as_mut())
                             .await?;
@@ -664,13 +650,13 @@ pub async fn process_events(
 
                             if previous_status == "pending" {
                                 sqlx::query(
-                                    r#"
+                                    r"
                                     UPDATE ibc_stats
                                     SET
                                         pending_tx_count = GREATEST(0, pending_tx_count - 1),
                                         last_updated = $2
                                     WHERE client_id = $1
-                                    "#,
+                                    ",
                                 )
                                     .bind(&client_id)
                                     .bind(timestamp)
@@ -687,24 +673,15 @@ pub async fn process_events(
                 }
             },
             "penumbra.core.component.shielded_pool.v1.EventInboundFungibleTokenTransfer" => {
-                let meta = match find_attribute_value(event, "meta") {
-                    Some(m) => m,
-                    None => continue,
-                };
+                let Some(meta) = find_attribute_value(event, "meta") else { continue };
 
-                let value = match find_attribute_value(event, "value") {
-                    Some(v) => v,
-                    None => continue,
-                };
+                let Some(value) = find_attribute_value(event, "value") else { continue };
 
                 let meta: Result<serde_json::Value, _> = serde_json::from_str(meta);
                 let value: Result<serde_json::Value, _> = serde_json::from_str(value);
 
                 if let (Ok(meta), Ok(value)) = (meta, value) {
-                    let channel_id = match meta.get("channel").and_then(|v| v.as_str()) {
-                        Some(ch) => ch,
-                        None => continue,
-                    };
+                    let Some(channel_id) = meta.get("channel").and_then(|v| v.as_str()) else { continue };
 
                     let amount_raw = match value.get("amount").and_then(|v| v.get("lo")) {
                         Some(amount) => match amount.as_str() {
@@ -725,43 +702,22 @@ pub async fn process_events(
 
                     if let Some(client) = db_client_id {
                         resolved_client_id = client;
-                    } else {
-                        if let Some(channel_num) = extract_number_from_channel(channel_id) {
-                            let all_clients: Vec<String> = known_clients.clone();
+                    } else if let Some(channel_num) = extract_number_from_channel(channel_id) {
+                        let all_clients: Vec<String> = known_clients.clone();
 
-                            if !all_clients.is_empty() {
-                                let idx = (channel_num as usize) % all_clients.len();
-                                let selected_client = all_clients[idx].clone();
+                        if !all_clients.is_empty() {
+                            let idx = usize::try_from(channel_num).unwrap_or(0) % all_clients.len();
+                            let selected_client = all_clients[idx].clone();
 
-                                info!("Associating channel {} with client {} via deterministic mapping",
-                                    channel_id, selected_client);
-
-                                sqlx::query(
-                                    r#"
-                                    INSERT INTO ibc_channels (channel_id, client_id, connection_id)
-                                    VALUES ($1, $2, 'auto-connection')
-                                    ON CONFLICT (channel_id) DO NOTHING
-                                    "#
-                                )
-                                    .bind(channel_id)
-                                    .bind(&selected_client)
-                                    .execute(dbtx.as_mut())
-                                    .await?;
-
-                                resolved_client_id = Some(selected_client);
-                            }
-                        } else if !known_clients.is_empty() {
-                            let selected_client = known_clients[0].clone();
-
-                            info!("Associating unnumbered channel {} with first available client {}",
+                            info!("Associating channel {} with client {} via deterministic mapping",
                                 channel_id, selected_client);
 
                             sqlx::query(
-                                r#"
+                                r"
                                 INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                                 VALUES ($1, $2, 'auto-connection')
                                 ON CONFLICT (channel_id) DO NOTHING
-                                "#
+                                "
                             )
                                 .bind(channel_id)
                                 .bind(&selected_client)
@@ -769,14 +725,33 @@ pub async fn process_events(
                                 .await?;
 
                             resolved_client_id = Some(selected_client);
-                        } else {
-                            warn!("Cannot associate channel {}: no clients available", channel_id);
                         }
+                    } else if !known_clients.is_empty() {
+                        let selected_client = known_clients[0].clone();
+
+                        info!("Associating unnumbered channel {} with first available client {}",
+                            channel_id, selected_client);
+
+                        sqlx::query(
+                            r"
+                            INSERT INTO ibc_channels (channel_id, client_id, connection_id)
+                            VALUES ($1, $2, 'auto-connection')
+                            ON CONFLICT (channel_id) DO NOTHING
+                            "
+                        )
+                            .bind(channel_id)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
+
+                        resolved_client_id = Some(selected_client);
+                    } else {
+                        warn!("Cannot associate channel {}: no clients available", channel_id);
                     }
 
                     if let Some(client_id) = resolved_client_id {
                         match sqlx::query(
-                            r#"
+                            r"
                             UPDATE ibc_stats
                             SET
                                 -- Convert to NUMERIC first, then add safely
@@ -793,7 +768,7 @@ pub async fn process_events(
                                 shielded_tx_count = shielded_tx_count + 1,
                                 last_updated = $3
                             WHERE client_id = $1
-                            "#,
+                            ",
                         )
                             .bind(&client_id)
                             .bind(&amount_raw)
@@ -807,13 +782,13 @@ pub async fn process_events(
                                 error!("Error updating stats for inbound transfer: {}. Using fallback.", e);
 
                                 sqlx::query(
-                                    r#"
+                                    r"
                                         UPDATE ibc_stats
                                         SET
                                             shielded_tx_count = shielded_tx_count + 1,
                                             last_updated = $2
                                         WHERE client_id = $1
-                                        "#,
+                                        ",
                                 )
                                     .bind(&client_id)
                                     .bind(timestamp)
@@ -829,24 +804,15 @@ pub async fn process_events(
                 }
             },
             "penumbra.core.component.shielded_pool.v1.EventOutboundFungibleTokenTransfer" => {
-                let meta = match find_attribute_value(event, "meta") {
-                    Some(m) => m,
-                    None => continue,
-                };
+                let Some(meta) = find_attribute_value(event, "meta") else { continue };
 
-                let value = match find_attribute_value(event, "value") {
-                    Some(v) => v,
-                    None => continue,
-                };
+                let Some(value) = find_attribute_value(event, "value") else { continue };
 
                 let meta: Result<serde_json::Value, _> = serde_json::from_str(meta);
                 let value: Result<serde_json::Value, _> = serde_json::from_str(value);
 
                 if let (Ok(meta), Ok(value)) = (meta, value) {
-                    let channel_id = match meta.get("channel").and_then(|v| v.as_str()) {
-                        Some(ch) => ch,
-                        None => continue,
-                    };
+                    let Some(channel_id) = meta.get("channel").and_then(|v| v.as_str()) else { continue };
 
                     let amount_raw = match value.get("amount").and_then(|v| v.get("lo")) {
                         Some(amount) => match amount.as_str() {
@@ -867,43 +833,22 @@ pub async fn process_events(
 
                     if let Some(client) = db_client_id {
                         resolved_client_id = client;
-                    } else {
-                        if let Some(channel_num) = extract_number_from_channel(channel_id) {
-                            let all_clients: Vec<String> = known_clients.clone();
+                    } else if let Some(channel_num) = extract_number_from_channel(channel_id) {
+                        let all_clients: Vec<String> = known_clients.clone();
 
-                            if !all_clients.is_empty() {
-                                let idx = (channel_num as usize) % all_clients.len();
-                                let selected_client = all_clients[idx].clone();
+                        if !all_clients.is_empty() {
+                            let idx = usize::try_from(channel_num).unwrap_or(0) % all_clients.len();
+                            let selected_client = all_clients[idx].clone();
 
-                                info!("Associating channel {} with client {} via deterministic mapping",
-                                    channel_id, selected_client);
-
-                                sqlx::query(
-                                    r#"
-                                    INSERT INTO ibc_channels (channel_id, client_id, connection_id)
-                                    VALUES ($1, $2, 'auto-connection')
-                                    ON CONFLICT (channel_id) DO NOTHING
-                                    "#
-                                )
-                                    .bind(channel_id)
-                                    .bind(&selected_client)
-                                    .execute(dbtx.as_mut())
-                                    .await?;
-
-                                resolved_client_id = Some(selected_client);
-                            }
-                        } else if !known_clients.is_empty() {
-                            let selected_client = known_clients[0].clone();
-
-                            info!("Associating unnumbered channel {} with first available client {}",
+                            info!("Associating channel {} with client {} via deterministic mapping",
                                 channel_id, selected_client);
 
                             sqlx::query(
-                                r#"
+                                r"
                                 INSERT INTO ibc_channels (channel_id, client_id, connection_id)
                                 VALUES ($1, $2, 'auto-connection')
                                 ON CONFLICT (channel_id) DO NOTHING
-                                "#
+                                "
                             )
                                 .bind(channel_id)
                                 .bind(&selected_client)
@@ -911,9 +856,28 @@ pub async fn process_events(
                                 .await?;
 
                             resolved_client_id = Some(selected_client);
-                        } else {
-                            warn!("Cannot associate channel {}: no clients available", channel_id);
                         }
+                    } else if !known_clients.is_empty() {
+                        let selected_client = known_clients[0].clone();
+
+                        info!("Associating unnumbered channel {} with first available client {}",
+                            channel_id, selected_client);
+
+                        sqlx::query(
+                            r"
+                            INSERT INTO ibc_channels (channel_id, client_id, connection_id)
+                            VALUES ($1, $2, 'auto-connection')
+                            ON CONFLICT (channel_id) DO NOTHING
+                            "
+                        )
+                            .bind(channel_id)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
+
+                        resolved_client_id = Some(selected_client);
+                    } else {
+                        warn!("Cannot associate channel {}: no clients available", channel_id);
                     }
 
                     if let Some(client_id) = resolved_client_id {
@@ -949,13 +913,13 @@ pub async fn process_events(
                                 error!("Error updating stats for outbound transfer: {}. Using fallback.", e);
 
                                 sqlx::query(
-                                    r#"
+                                    r"
                                         UPDATE ibc_stats
                                         SET
                                             unshielded_tx_count = unshielded_tx_count + 1,
                                             last_updated = $2
                                         WHERE client_id = $1
-                                        "#,
+                                        ",
                                 )
                                     .bind(&client_id)
                                     .bind(timestamp)
@@ -978,6 +942,9 @@ pub async fn process_events(
 }
 
 /// Update old pending transactions to error status
+/// 
+/// # Errors
+/// Returns an error if database operations fail
 pub async fn update_old_pending_transactions(
     dbtx: &mut PgTransaction<'_>
 ) -> Result<(), anyhow::Error> {
@@ -998,7 +965,7 @@ pub async fn update_old_pending_transactions(
     };
 
     let updated_rows = sqlx::query(
-        r#"
+        r"
         WITH updated_tx AS (
             UPDATE explorer_transactions tx
             SET ibc_status = $1
@@ -1010,9 +977,9 @@ pub async fn update_old_pending_transactions(
         )
         SELECT ibc_client_id FROM updated_tx
         WHERE ibc_client_id IS NOT NULL
-        "#,
+        ",
     )
-        .bind(IbcTransactionStatus::Error.to_string())
+        .bind(TransactionStatus::Error.to_string())
         .bind(day_ago)
         .fetch_all(dbtx.as_mut())
         .await?;
@@ -1026,13 +993,13 @@ pub async fn update_old_pending_transactions(
         let client_id: String = row.get(0);
 
         let result = sqlx::query(
-            r#"
+            r"
             UPDATE ibc_stats
             SET
                 pending_tx_count = GREATEST(0, pending_tx_count - 1),
                 last_updated = $1
             WHERE client_id = $2
-            "#,
+            ",
         )
             .bind(Utc::now())
             .bind(&client_id)
