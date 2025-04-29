@@ -251,7 +251,6 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    // Add to known clients if not already there
                     if !known_clients.contains(&client_id.to_string()) {
                         known_clients.push(client_id.to_string());
                     }
