@@ -60,29 +60,37 @@ impl Block {
         .bind(i64::from(self.height))
         .fetch_all(db)
         .await?;
+
         let mut transactions = Vec::with_capacity(rows.len());
+
         for row in rows {
             let tx_hash: Vec<u8> = row.get("tx_hash");
             let _block_height: i64 = row.get("block_height");
             let _timestamp: chrono::DateTime<chrono::Utc> = row.get("timestamp");
             let _fee_amount_str: String = row.get("fee_amount_str");
             let raw_data: String = row.get("raw_data");
-            let raw_json: Option<serde_json::Value> = row.get("raw_json");
-            if let Some(json) = raw_json {
-                let hash = hex::encode_upper(&tx_hash);
-                transactions.push(Transaction {
-                    hash: hash.clone(),
-                    anchor: String::new(),
-                    binding_sig: String::new(),
-                    index: extract_index_from_json(&json).unwrap_or(0),
-                    raw: raw_data.clone(),
-                    block: self.clone(),
-                    body: crate::api::graphql::types::extract_transaction_body(&json),
-                    raw_events: extract_events_from_json(&json),
-                    raw_json: json,
-                });
+            let raw_json_str: String = row.get("raw_json");
+
+            if !raw_json_str.is_empty() {
+                // First parse the JSON for metadata extraction, but use the original string for storage
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw_json_str) {
+                    let hash = hex::encode_upper(&tx_hash);
+                    transactions.push(Transaction {
+                        hash: hash.clone(),
+                        anchor: String::new(),
+                        binding_sig: String::new(),
+                        index: extract_index_from_json(&json).unwrap_or(0),
+                        raw: raw_data.clone(),
+                        block: self.clone(),
+                        body: crate::api::graphql::types::extract_transaction_body(&json),
+                        raw_events: extract_events_from_json(&json),
+                        // Store the original string to preserve DB ordering
+                        raw_json: serde_json::Value::String(raw_json_str.clone()),
+                    });
+                }
             }
         }
+
         Ok(transactions)
     }
 
@@ -98,8 +106,29 @@ impl Block {
     }
 
     #[graphql(name = "rawJson")]
-    async fn raw_json(&self) -> Option<&serde_json::Value> {
-        self.raw_json.as_ref()
+    #[allow(clippy::unused_async)]
+    async fn raw_json(&self) -> Result<Option<String>> {
+        if let Some(json_value) = &self.raw_json {
+            if let Some(raw_str) = json_value.as_str() {
+                Ok(Some(raw_str.to_string()))
+            } else {
+                Ok(Some(serde_json::to_string(json_value)?))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[graphql(name = "chainId")]
+    async fn chain_id(&self, ctx: &Context<'_>) -> Result<Option<String>> {
+        let db = &ctx.data_unchecked::<ApiContext>().db;
+        let chain_id = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT chain_id FROM explorer_block_details WHERE height = $1",
+        )
+        .bind(i64::from(self.height))
+        .fetch_one(db)
+        .await?;
+        Ok(chain_id)
     }
 }
 

@@ -27,6 +27,37 @@ pub fn encode_to_base64<T: AsRef<[u8]>>(data: T) -> String {
 /// Parse attribute string from an event
 #[must_use]
 pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
+    if attr_str.contains("EventAttribute")
+        && attr_str.contains("key:")
+        && attr_str.contains("value:")
+    {
+        let key_start = attr_str.find("key:").unwrap_or(0) + 5;
+        let key_end = attr_str[key_start..]
+            .find(',')
+            .map_or(attr_str.len(), |pos| key_start + pos);
+        let key = attr_str[key_start..key_end]
+            .trim()
+            .trim_matches('"')
+            .to_string();
+
+        let value_start = attr_str.find("value:").unwrap_or(0) + 7;
+        let value_end = attr_str[value_start..]
+            .find(',')
+            .map_or(attr_str.len(), |pos| value_start + pos);
+        let value = attr_str[value_start..value_end]
+            .trim()
+            .trim_matches('"')
+            .to_string();
+
+        let clean_value = value.replace("\\\"", "\"");
+
+        if clean_value == "{\"amount\":{}}" || clean_value.trim().is_empty() {
+            return None;
+        }
+
+        return Some((key, clean_value));
+    }
+
     if attr_str.contains("key:") && attr_str.contains("value:") {
         let key_start = attr_str.find("key:").unwrap_or(0) + 4;
         let key_end = attr_str[key_start..]
@@ -46,16 +77,42 @@ pub fn parse_attribute_string(attr_str: &str) -> Option<(String, String)> {
             .trim_matches('"')
             .to_string();
 
-        return Some((key, value));
+        let clean_value = value.replace("\\\"", "\"");
+
+        if clean_value == "{\"amount\":{}}" || clean_value.trim().is_empty() {
+            return None;
+        }
+
+        return Some((key, clean_value));
     }
 
-    if attr_str.contains('{') && attr_str.contains('}') {
+    if attr_str.contains('{') {
         let json_start = attr_str.find('{').unwrap_or(0);
         let field_name = attr_str[0..json_start].trim().to_string();
 
         if !field_name.is_empty() {
-            let json_content = &attr_str[json_start..];
-            return Some((field_name, json_content.to_string()));
+            let mut json_content = attr_str[json_start..].to_string();
+
+            let open_braces = json_content.chars().filter(|&c| c == '{').count();
+            let close_braces = json_content.chars().filter(|&c| c == '}').count();
+
+            if open_braces > close_braces {
+                for _ in 0..(open_braces - close_braces) {
+                    json_content.push('}');
+                }
+            }
+
+            let clean_json = json_content.replace("\\\"", "\"").replace("\\\\", "\\");
+
+            if clean_json == "{\"amount\":{}}"
+                || clean_json.contains("{\"amount\":{}}")
+                || clean_json.trim().is_empty()
+                || clean_json.ends_with(":{")
+            {
+                return None;
+            }
+
+            return Some((field_name, clean_json));
         }
     }
 
@@ -75,11 +132,35 @@ pub fn event_to_json(
     for attr in &event.event.attributes {
         let attr_str = format!("{attr:?}");
 
-        attributes.push(json!({
-            "key": attr_str.clone(),
-            "composite_key": format!("{}.{}", event.event.kind, attr_str),
-            "value": "Unknown"
-        }));
+        if let Some((key, value)) = parse_attribute_string(&attr_str) {
+            if value.contains("{\"amount\":{}}")
+                || value.trim().is_empty()
+                || value == "{}"
+                || value.ends_with(":{")
+            {
+                continue;
+            }
+
+            let fixed_value = if (key == "position" || key == "state") && !value.ends_with('}') {
+                let mut fixed = value.clone();
+                let open_braces = fixed.chars().filter(|&c| c == '{').count();
+                let close_braces = fixed.chars().filter(|&c| c == '}').count();
+
+                for _ in 0..(open_braces - close_braces) {
+                    fixed.push('}');
+                }
+                fixed
+            } else if key == "gasUsed" && !value.ends_with('"') {
+                value.to_string() + "\""
+            } else {
+                value
+            };
+
+            attributes.push(json!({
+                "key": key,
+                "value": fixed_value
+            }));
+        }
     }
 
     let json_event = json!({
@@ -136,12 +217,31 @@ mod tests {
         assert_eq!(key, "action");
         assert!(value.contains("swap"));
 
+        let complex_attr =
+            "V037(EventAttribute { key: \"height\", value: \"82095\", index: false })";
+        let result = parse_attribute_string(complex_attr);
+        assert!(result.is_some());
+        let (key, value) = result.unwrap();
+        assert_eq!(key, "height");
+        assert_eq!(value, "82095");
+
         let attr_with_json = "event_type {\"timestamp\": 12345, \"block\": 100}";
         let result = parse_attribute_string(attr_with_json);
         assert!(result.is_some());
         let (key, value) = result.unwrap();
         assert_eq!(key, "event_type");
         assert_eq!(value, "{\"timestamp\": 12345, \"block\": 100}");
+
+        let incomplete_json = "position {\"closeOnFill\":true";
+        let result = parse_attribute_string(incomplete_json);
+        assert!(result.is_some());
+        let (key, value) = result.unwrap();
+        assert_eq!(key, "position");
+        assert_eq!(value, "{\"closeOnFill\":true}");
+
+        let empty_amount = "swappedFeeTotal {\"amount\":{}}";
+        let result = parse_attribute_string(empty_amount);
+        assert!(result.is_none());
 
         let invalid_attr = "Something without key or value";
         let result = parse_attribute_string(invalid_attr);

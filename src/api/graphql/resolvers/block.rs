@@ -9,8 +9,7 @@ use sqlx::Row;
 ///
 /// # Errors
 /// Returns an error if the database query fails
-#[allow(clippy::module_name_repetitions)]
-pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Result<Option<Block>> {
+pub async fn get(ctx: &async_graphql::Context<'_>, height: i32) -> Result<Option<Block>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
     let row = sqlx::query(
         r"
@@ -27,11 +26,21 @@ pub async fn resolve_block(ctx: &async_graphql::Context<'_>, height: i32) -> Res
     .bind(i64::from(height))
     .fetch_optional(db)
     .await?;
+
     Ok(row.map(|r| {
+        let raw_json_str: String = r.get("raw_json");
+        // Pass the raw JSON string directly without parsing
+        let raw_json = if raw_json_str.is_empty() {
+            None
+        } else {
+            // Store the raw JSON string in a serde_json::Value
+            Some(serde_json::Value::String(raw_json_str))
+        };
+
         Block::new(
             i32::try_from(r.get::<i64, _>("height")).unwrap_or_default(),
             r.get("timestamp"),
-            r.get("raw_json"),
+            raw_json,
         )
     }))
 }
@@ -58,10 +67,17 @@ pub async fn resolve_blocks(
     let blocks = rows
         .into_iter()
         .map(|row| {
+            let raw_json_str: String = row.get("raw_json");
+            let raw_json = if raw_json_str.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::String(raw_json_str))
+            };
+
             Block::new(
                 i32::try_from(row.get::<i64, _>("height")).unwrap_or_default(),
                 row.get("timestamp"),
-                row.get("raw_json"),
+                raw_json,
             )
         })
         .collect();
@@ -128,10 +144,17 @@ pub async fn resolve_blocks_collection(
     let blocks = rows
         .into_iter()
         .map(|row| {
+            let raw_json_str: String = row.get("raw_json");
+            let raw_json = if raw_json_str.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::String(raw_json_str))
+            };
+
             Block::new(
                 i32::try_from(row.get::<i64, _>("height")).unwrap_or_default(),
                 row.get("timestamp"),
-                row.get("raw_json"),
+                raw_json,
             )
         })
         .collect();

@@ -1,4 +1,4 @@
-name: Rust CI/CD Pipeline (Stage)
+name: Rust CI/CD Pipeline (Production)
 
 on:
   pull_request:
@@ -8,8 +8,8 @@ on:
 
 env:
   APP_NAME: penumbra-explorer
-  SERVER_USER: deploy-penumbra-explorer-stage
-  SERVER_HOST: ${{ secrets.SERVER_HOST_STAGE }}
+  SERVER_USER: deploy-penumbra-explorer
+  SERVER_HOST: ${{ secrets.SERVER_HOST }}
 
 jobs:
   code-quality:
@@ -68,7 +68,7 @@ jobs:
         run: cargo test --all
 
   deploy:
-    name: Deploy to Staging
+    name: Deploy to Hetzner (Production)
     runs-on: ubuntu-latest
     needs: [code-quality, test]
     steps:
@@ -97,7 +97,7 @@ jobs:
 
       - name: Transfer Docker image
         run: |
-          scp /tmp/${{ env.APP_NAME }}.tar "${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:~/deployments/"
+          scp /tmp/${{ env.APP_NAME }}.tar ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:~/deployments/
 
       - name: Deploy with Blue-Green mechanism
         run: |

@@ -53,29 +53,31 @@ pub async fn resolve_transaction(
         let _fee_amount_str: String = r.get("fee_amount_str");
         let _chain_id: Option<String> = r.get("chain_id");
         let raw_data: String = r.get("raw_data");
-        let raw_json: Option<serde_json::Value> = r.get("raw_json");
+        let raw_json_str: String = r.get("raw_json");
 
-        if let Some(json) = raw_json {
-            let hash = hex::encode_upper(&tx_hash);
+        // Parse the JSON string
+        let json_value = match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
+            Ok(value) => value,
+            Err(_) => serde_json::json!({}),
+        };
 
-            Ok(Some(Transaction {
-                hash,
-                anchor: String::new(),
-                binding_sig: String::new(),
-                index: extract_index_from_json(&json).unwrap_or(0),
-                raw: raw_data.clone(),
-                block: Block::new(
-                    i32::try_from(block_height).unwrap_or_default(),
-                    timestamp,
-                    None,
-                ),
-                body: crate::api::graphql::types::extract_transaction_body(&json),
-                raw_events: extract_events_from_json(&json),
-                raw_json: json,
-            }))
-        } else {
-            Ok(None)
-        }
+        let hash = hex::encode_upper(&tx_hash);
+
+        Ok(Some(Transaction {
+            hash,
+            anchor: String::new(),
+            binding_sig: String::new(),
+            index: extract_index_from_json(&json_value).unwrap_or(0),
+            raw: raw_data.clone(),
+            block: Block::new(
+                i32::try_from(block_height).unwrap_or_default(),
+                timestamp,
+                None,
+            ),
+            body: crate::api::graphql::types::extract_transaction_body(&json_value),
+            raw_events: extract_events_from_json(&json_value),
+            raw_json: json_value,
+        }))
     } else {
         Ok(None)
     }
@@ -151,7 +153,6 @@ pub async fn resolve_transactions_collection(
 ) -> Result<TransactionCollection> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
-    // Get the total count
     let mut count_query = String::from("SELECT COUNT(*) FROM explorer_transactions");
 
     if let Some(filter) = &filter {
@@ -185,7 +186,6 @@ pub async fn resolve_transactions_collection(
         sqlx::query_scalar(&count_query).fetch_one(db).await?
     };
 
-    // Build the main query
     let base_query = r"
         SELECT
             t.tx_hash,
@@ -250,25 +250,33 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
         let block_height: i64 = row.get("block_height");
         let timestamp: chrono::DateTime<chrono::Utc> = row.get("block_timestamp");
         let raw_data: String = row.get("raw_data");
-        let raw_json: Option<serde_json::Value> = row.get("raw_json");
+        let raw_json_str: String = row.get("raw_json");
 
-        if let Some(json) = raw_json {
+        if !raw_json_str.is_empty() {
+            let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&raw_json_str) else {
+                tracing::warn!(
+                    "Failed to parse JSON for transaction: {}",
+                    hex::encode_upper(&tx_hash)
+                );
+                continue;
+            };
+
             let hash = hex::encode_upper(&tx_hash);
 
             transactions.push(Transaction {
                 hash,
                 anchor: String::new(),
                 binding_sig: String::new(),
-                index: extract_index_from_json(&json).unwrap_or(0),
+                index: extract_index_from_json(&json_value).unwrap_or(0),
                 raw: raw_data.clone(),
                 block: Block::new(
                     i32::try_from(block_height).unwrap_or_default(),
                     timestamp,
                     None,
                 ),
-                body: crate::api::graphql::types::extract_transaction_body(&json),
-                raw_events: extract_events_from_json(&json),
-                raw_json: json,
+                body: crate::api::graphql::types::extract_transaction_body(&json_value),
+                raw_events: extract_events_from_json(&json_value),
+                raw_json: json_value,
             });
         }
     }
