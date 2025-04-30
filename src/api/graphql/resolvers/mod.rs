@@ -134,6 +134,6 @@ impl QueryRoot {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> async_graphql::Result<Vec<crate::api::graphql::types::DbRawTransaction>> {
-        crate::api::graphql::types::DbRawTransaction::get_all(ctx, limit, offset).await
+        crate::api::graphql::types::DbRawTransaction::get_all(ctx, limit, offset, None).await
     }
 }
