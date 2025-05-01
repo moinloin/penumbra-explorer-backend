@@ -1,8 +1,8 @@
 use crate::api::graphql::{
     context::ApiContext,
     types::{
-        Block, CollectionLimit, Event, RangeDirection, Transaction, TransactionCollection,
-        TransactionFilter, TransactionsSelector, string_to_ibc_status,
+        string_to_ibc_status, Block, CollectionLimit, Event, RangeDirection, Transaction,
+        TransactionCollection, TransactionFilter, TransactionsSelector,
     },
 };
 use async_graphql::Result;
@@ -44,9 +44,9 @@ pub async fn resolve_transaction(
             t.tx_hash = $1
         ",
     )
-        .bind(hash_bytes.as_slice())
-        .fetch_optional(db)
-        .await?;
+    .bind(hash_bytes.as_slice())
+    .fetch_optional(db)
+    .await?;
 
     if let Some(r) = row {
         let tx_hash: Vec<u8> = r.get("tx_hash");
@@ -158,10 +158,7 @@ pub async fn resolve_transactions(
     } else {
         // Handle client_id filter if present
         if let Some(client_id) = &selector.client_id {
-            sqlx::query(&query)
-                .bind(client_id)
-                .fetch_all(db)
-                .await?
+            sqlx::query(&query).bind(client_id).fetch_all(db).await?
         } else {
             sqlx::query(&query).fetch_all(db).await?
         }
@@ -378,11 +375,15 @@ fn build_transactions_query(selector: &TransactionsSelector, base: &str) -> (Str
         match range.direction {
             RangeDirection::Next => {
                 where_clauses.push(format!("((t.timestamp < {formatted_ref_query})"));
-                where_clauses.push(format!("OR (t.timestamp = {formatted_ref_query} AND t.tx_hash > ${param_pos}))"));
+                where_clauses.push(format!(
+                    "OR (t.timestamp = {formatted_ref_query} AND t.tx_hash > ${param_pos}))"
+                ));
             }
             RangeDirection::Previous => {
                 where_clauses.push(format!("((t.timestamp > {formatted_ref_query})"));
-                where_clauses.push(format!("OR (t.timestamp = {formatted_ref_query} AND t.tx_hash < ${param_pos}))"));
+                where_clauses.push(format!(
+                    "OR (t.timestamp = {formatted_ref_query} AND t.tx_hash < ${param_pos}))"
+                ));
             }
         }
     }
