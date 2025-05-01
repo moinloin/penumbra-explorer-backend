@@ -295,6 +295,29 @@ pub async fn process_events(
                     );
                 }
             }
+            "channel_open_ack" => {
+                if let (Some(channel_id), Some(counterparty_channel_id)) = (
+                    find_attribute_value(event, "channel_id"),
+                    find_attribute_value(event, "counterparty_channel_id"),
+                ) {
+                    debug!(
+                        "Found channel_open_ack for channel {} with counterparty channel {}",
+                        channel_id, counterparty_channel_id
+                    );
+                    
+                    sqlx::query(
+                        r"
+                        UPDATE ibc_channels 
+                        SET counterparty_channel_id = $2
+                        WHERE channel_id = $1
+                        ",
+                    )
+                    .bind(channel_id)
+                    .bind(counterparty_channel_id)
+                    .execute(dbtx.as_mut())
+                    .await?;
+                }
+            },
             "channel_open_init" => {
                 if let (Some(channel_id), Some(connection_id)) = (
                     find_attribute_value(event, "channel_id"),
@@ -320,6 +343,8 @@ pub async fn process_events(
                         .bind(connection_id)
                         .execute(dbtx.as_mut())
                         .await?;
+                        
+                        // Counterparty channel will be updated later when we see it in ack events
 
                         debug!(
                             "Processed channel_open_init: {} -> {}",
@@ -417,6 +442,27 @@ pub async fn process_events(
                     Direction::Inbound => dst_channel,
                     Direction::Outbound => src_channel,
                 };
+                
+                // The counterparty channel is the opposite of our channel
+                let counterparty_channel = match direction {
+                    Direction::Inbound => src_channel,
+                    Direction::Outbound => dst_channel,
+                };
+
+                // Update the counterparty channel if it's not already set
+                // This serves as a fallback in case we missed the channel_open_ack event
+                sqlx::query(
+                    r"
+                    UPDATE ibc_channels 
+                    SET counterparty_channel_id = $2
+                    WHERE channel_id = $1
+                    AND (counterparty_channel_id IS NULL OR counterparty_channel_id = '')
+                    ",
+                )
+                .bind(our_channel)
+                .bind(counterparty_channel)
+                .execute(dbtx.as_mut())
+                .await?;
 
                 let mut final_client_id: Option<String> = None;
 
@@ -449,13 +495,16 @@ pub async fn process_events(
 
                         sqlx::query(
                             r"
-                            INSERT INTO ibc_channels (channel_id, client_id, connection_id)
-                            VALUES ($1, $2, 'auto-connection')
-                            ON CONFLICT (channel_id) DO NOTHING
+                            INSERT INTO ibc_channels (channel_id, client_id, connection_id, counterparty_channel_id)
+                            VALUES ($1, $2, 'auto-connection', $3)
+                            ON CONFLICT (channel_id) 
+                            DO UPDATE SET
+                                counterparty_channel_id = $3
                             ",
                         )
                         .bind(our_channel)
                         .bind(&selected_client)
+                        .bind(counterparty_channel)
                         .execute(dbtx.as_mut())
                         .await?;
 
@@ -470,13 +519,16 @@ pub async fn process_events(
 
                         sqlx::query(
                             r"
-                            INSERT INTO ibc_channels (channel_id, client_id, connection_id)
-                            VALUES ($1, $2, 'auto-connection')
-                            ON CONFLICT (channel_id) DO NOTHING
+                            INSERT INTO ibc_channels (channel_id, client_id, connection_id, counterparty_channel_id)
+                            VALUES ($1, $2, 'auto-connection', $3)
+                            ON CONFLICT (channel_id) 
+                            DO UPDATE SET
+                                counterparty_channel_id = $3
                             ",
                         )
                         .bind(our_channel)
                         .bind(&selected_client)
+                        .bind(counterparty_channel)
                         .execute(dbtx.as_mut())
                         .await?;
 
@@ -804,6 +856,8 @@ pub async fn process_events(
                             .bind(&selected_client)
                             .execute(dbtx.as_mut())
                             .await?;
+                            
+                            // Note: Counterparty channel will be updated when processing packet events
 
                             resolved_client_id = Some(selected_client);
                         }
@@ -826,6 +880,8 @@ pub async fn process_events(
                         .bind(&selected_client)
                         .execute(dbtx.as_mut())
                         .await?;
+                        
+                        // Note: Counterparty channel will be updated when processing packet events
 
                         resolved_client_id = Some(selected_client);
                     } else {
@@ -958,6 +1014,8 @@ pub async fn process_events(
                             .bind(&selected_client)
                             .execute(dbtx.as_mut())
                             .await?;
+                            
+                            // Note: Counterparty channel will be updated when processing packet events
 
                             resolved_client_id = Some(selected_client);
                         }
@@ -980,6 +1038,8 @@ pub async fn process_events(
                         .bind(&selected_client)
                         .execute(dbtx.as_mut())
                         .await?;
+                        
+                        // Note: Counterparty channel will be updated when processing packet events
 
                         resolved_client_id = Some(selected_client);
                     } else {
