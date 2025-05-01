@@ -1,4 +1,4 @@
-use crate::api::graphql::types::ibc::{Stats, ChannelPair};
+use crate::api::graphql::types::ibc::{ChannelPair, Stats};
 use async_graphql::{Context, Result};
 
 /// Resolves IBC stats with optional filtering
