@@ -549,7 +549,6 @@ pub async fn process_events(
                     UPDATE ibc_channels
                     SET counterparty_channel_id = $2
                     WHERE channel_id = $1
-                    AND (counterparty_channel_id IS NULL OR counterparty_channel_id = '')
                     ",
                 )
                 .bind(our_channel)
