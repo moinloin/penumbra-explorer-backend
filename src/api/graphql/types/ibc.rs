@@ -1,7 +1,6 @@
 use crate::api::graphql::scalars::DateTime;
 use async_graphql::{Context, Result, SimpleObject};
 use sqlx::Row;
-use std::fmt;
 
 #[derive(SimpleObject)]
 #[graphql(name = "IbcStats")]
