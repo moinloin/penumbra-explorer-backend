@@ -21,7 +21,6 @@ impl Default for RangeDirection {
     }
 }
 
-// Updated IBC status enum to match the actual database values
 #[derive(Enum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IbcStatus {
     #[graphql(name = "PENDING")]
@@ -46,15 +45,12 @@ impl Default for IbcStatus {
     }
 }
 
-// Updated helper function to correctly convert database values to enum values
 pub fn string_to_ibc_status(status: Option<&str>) -> IbcStatus {
     match status.map(str::to_lowercase).as_deref() {
         Some("pending") => IbcStatus::Pending,
-        Some("completed") => IbcStatus::Completed,
-        Some("complete") => IbcStatus::Completed,  // Handle possible variation
+        Some("completed" | "complete") => IbcStatus::Completed,
         Some("expired") => IbcStatus::Expired,
-        Some("error") => IbcStatus::Error,
-        Some("failed") => IbcStatus::Error, // Map "failed" to Error as well
+        Some("error" | "failed") => IbcStatus::Error,
         _ => IbcStatus::Unknown,
     }
 }
@@ -369,7 +365,6 @@ impl DbRawTransaction {
             let json_value = if raw_json_str.is_empty() {
                 None
             } else {
-                // Store raw JSON string without parsing
                 Some(serde_json::Value::String(raw_json_str))
             };
 
