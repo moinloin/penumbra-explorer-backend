@@ -3,10 +3,10 @@ use sqlx::{Pool, Postgres};
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
-mod triggers;
-pub mod ibc; // Only define the module once, and make it public
-pub use triggers::start;
+pub mod ibc;
+mod triggers; // Only define the module once, and make it public
 use ibc::IbcTransactionEvent;
+pub use triggers::start;
 
 #[derive(Clone)]
 pub struct PubSub {
