@@ -286,12 +286,12 @@ impl TotalShieldedVolume {
             .db;
 
         let total = sqlx::query_scalar::<_, String>(
-            r#"
+            r"
             SELECT
                 COALESCE(SUM(shielded_volume), '0')::TEXT
             FROM
                 ibc_client_summary
-            "#
+            "
         )
             .fetch_one(db)
             .await?;
