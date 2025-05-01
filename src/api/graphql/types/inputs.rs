@@ -34,7 +34,7 @@ pub struct TransactionRange {
 pub struct TransactionsSelector {
     pub latest: Option<LatestTransactions>,
     pub range: Option<TransactionRange>,
-    pub client_id: Option<String>, // Added client_id filter
+    pub client_id: Option<String>,
 }
 
 #[derive(InputObject)]
@@ -51,11 +51,18 @@ pub struct BlockFilter {
 #[derive(InputObject)]
 pub struct TransactionFilter {
     pub hash: Option<String>,
-    pub client_id: Option<String>, // Keep client_id filter
+    pub client_id: Option<String>,
 }
 
 #[derive(InputObject)]
 pub struct IbcStatsFilter {
     pub client_id: Option<String>,
-    pub time_period: Option<String>, // Options: "24h", "30d", "all" (default)
+    pub time_period: Option<String>,
+}
+
+#[derive(InputObject, Default)]
+pub struct IbcChannelFilter {
+    pub client_id: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
