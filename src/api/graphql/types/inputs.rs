@@ -57,4 +57,5 @@ pub struct TransactionFilter {
 #[derive(InputObject)]
 pub struct IbcStatsFilter {
     pub client_id: Option<String>,
+    pub time_period: Option<String>, // Options: "24h", "30d", "all" (default)
 }

@@ -234,94 +234,357 @@ impl AppView for Explorer {
 
         sqlx::query(
             r"
-    CREATE TABLE IF NOT EXISTS ibc_clients (
-        client_id TEXT PRIMARY KEY,
-        last_active_height BIGINT,
-        last_active_time TIMESTAMP WITH TIME ZONE
-    )
-    ",
+            CREATE TABLE IF NOT EXISTS ibc_clients (
+                client_id TEXT PRIMARY KEY,
+                last_active_height BIGINT,
+                last_active_time TIMESTAMP WITH TIME ZONE
+            )
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
 
         sqlx::query(
             r"
-    CREATE TABLE IF NOT EXISTS ibc_channels (
-        channel_id TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS ibc_channels (
+                channel_id TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL REFERENCES ibc_clients(client_id),
+                connection_id TEXT,
+                counterparty_channel_id TEXT
+            )
+            ",
+        )
+        .execute(dbtx.as_mut())
+        .await?;
+
+        sqlx::query(
+            r"
+    CREATE TABLE IF NOT EXISTS ibc_transfers (
+        id SERIAL PRIMARY KEY,
         client_id TEXT NOT NULL REFERENCES ibc_clients(client_id),
-        connection_id TEXT,
-        counterparty_channel_id TEXT
+        channel_id TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        amount NUMERIC NOT NULL DEFAULT 0,
+        timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+        tx_hash BYTEA,
+        status TEXT
     )
     ",
         )
         .execute(dbtx.as_mut())
         .await?;
 
+        // Create indices for efficient querying
         sqlx::query(
             r"
-    CREATE TABLE IF NOT EXISTS ibc_stats (
-        client_id TEXT PRIMARY KEY REFERENCES ibc_clients(client_id),
-        shielded_volume BIGINT NOT NULL DEFAULT 0,
-        shielded_tx_count BIGINT NOT NULL DEFAULT 0,
-        unshielded_volume BIGINT NOT NULL DEFAULT 0,
-        unshielded_tx_count BIGINT NOT NULL DEFAULT 0,
-        pending_tx_count BIGINT NOT NULL DEFAULT 0,
-        expired_tx_count BIGINT NOT NULL DEFAULT 0,
-        last_updated TIMESTAMP WITH TIME ZONE
-    )
-    ",
+            CREATE INDEX IF NOT EXISTS idx_ibc_transfers_client_id
+            ON ibc_transfers(client_id)
+            ",
         )
         .execute(dbtx.as_mut())
         .await?;
 
         sqlx::query(
             r"
-    CREATE INDEX IF NOT EXISTS idx_ibc_transactions_client_id ON explorer_transactions(ibc_client_id)
-    "
+            CREATE INDEX IF NOT EXISTS idx_ibc_transfers_timestamp
+            ON ibc_transfers(timestamp DESC)
+            ",
+        )
+        .execute(dbtx.as_mut())
+        .await?;
+
+        sqlx::query(
+            r"
+            CREATE INDEX IF NOT EXISTS idx_ibc_transfers_direction
+            ON ibc_transfers(direction)
+            ",
+        )
+        .execute(dbtx.as_mut())
+        .await?;
+
+        sqlx::query(
+            r"
+            CREATE INDEX IF NOT EXISTS idx_ibc_transfers_status
+            ON ibc_transfers(status)
+            ",
+        )
+        .execute(dbtx.as_mut())
+        .await?;
+
+        // Keep the legacy tables for backward compatibility
+        sqlx::query(
+            r"
+            CREATE TABLE IF NOT EXISTS ibc_stats (
+                client_id TEXT PRIMARY KEY REFERENCES ibc_clients(client_id),
+                shielded_volume BIGINT NOT NULL DEFAULT 0,
+                shielded_tx_count BIGINT NOT NULL DEFAULT 0,
+                unshielded_volume BIGINT NOT NULL DEFAULT 0,
+                unshielded_tx_count BIGINT NOT NULL DEFAULT 0,
+                pending_tx_count BIGINT NOT NULL DEFAULT 0,
+                expired_tx_count BIGINT NOT NULL DEFAULT 0,
+                last_updated TIMESTAMP WITH TIME ZONE
+            )
+            ",
+        )
+        .execute(dbtx.as_mut())
+        .await?;
+
+        sqlx::query(
+            r"
+            CREATE INDEX IF NOT EXISTS idx_ibc_transactions_client_id ON explorer_transactions(ibc_client_id)
+            "
         )
             .execute(dbtx.as_mut())
             .await?;
 
         sqlx::query(
             r"
-    CREATE INDEX IF NOT EXISTS idx_ibc_transactions_channel_id ON explorer_transactions(ibc_channel_id)
-    "
+            CREATE INDEX IF NOT EXISTS idx_ibc_transactions_channel_id ON explorer_transactions(ibc_channel_id)
+            "
         )
             .execute(dbtx.as_mut())
             .await?;
 
         sqlx::query(
             r"
-    CREATE INDEX IF NOT EXISTS idx_ibc_transactions_status ON explorer_transactions(ibc_status)
-    ",
+            CREATE INDEX IF NOT EXISTS idx_ibc_transactions_status ON explorer_transactions(ibc_status)
+            ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
+
+        // Create a view that shows all time stats calculated from ibc_transfers
+        sqlx::query(
+            r"
+            CREATE OR REPLACE VIEW ibc_client_summary AS
+            WITH client_stats AS (
+                SELECT
+                    client_id,
+                    SUM(CASE WHEN direction = 'inbound' THEN amount ELSE 0 END) as shielded_volume,
+                    COUNT(CASE WHEN direction = 'inbound' THEN 1 ELSE NULL END) as shielded_tx_count,
+                    SUM(CASE WHEN direction = 'outbound' THEN amount ELSE 0 END) as unshielded_volume,
+                    COUNT(CASE WHEN direction = 'outbound' THEN 1 ELSE NULL END) as unshielded_tx_count,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 ELSE NULL END) as pending_tx_count,
+                    COUNT(CASE WHEN status = 'expired' THEN 1 ELSE NULL END) as expired_tx_count,
+                    MAX(timestamp) as last_updated
+                FROM
+                    ibc_transfers
+                GROUP BY
+                    client_id
+            )
+            SELECT
+                c.client_id,
+                COALESCE(s.shielded_volume, 0) as shielded_volume,
+                COALESCE(s.shielded_tx_count, 0) as shielded_tx_count,
+                COALESCE(s.unshielded_volume, 0) as unshielded_volume,
+                COALESCE(s.unshielded_tx_count, 0) as unshielded_tx_count,
+                (COALESCE(s.shielded_volume, 0) + COALESCE(s.unshielded_volume, 0)) as total_volume,
+                (COALESCE(s.shielded_tx_count, 0) + COALESCE(s.unshielded_tx_count, 0)) as total_tx_count,
+                COALESCE(s.pending_tx_count, 0) as pending_tx_count,
+                COALESCE(s.expired_tx_count, 0) as expired_tx_count,
+                s.last_updated
+            FROM
+                ibc_clients c
+            LEFT JOIN
+                client_stats s ON c.client_id = s.client_id
+            ORDER BY
+                total_volume DESC
+            ",
+        )
+            .execute(dbtx.as_mut())
+            .await?;
 
         sqlx::query(
             r"
-    CREATE OR REPLACE VIEW ibc_client_summary AS
-    SELECT
-        c.client_id,
-        s.shielded_volume,
-        s.shielded_tx_count,
-        s.unshielded_volume,
-        s.unshielded_tx_count,
-        (s.shielded_volume + s.unshielded_volume) as total_volume,
-        (s.shielded_tx_count + s.unshielded_tx_count) as total_tx_count,
-        s.pending_tx_count,
-        s.expired_tx_count,
-        s.last_updated
-    FROM
-        ibc_clients c
-    JOIN
-        ibc_stats s ON c.client_id = s.client_id
-    ORDER BY
-        (s.shielded_volume + s.unshielded_volume) DESC
-    ",
+            CREATE OR REPLACE VIEW ibc_client_summary_24h AS
+            WITH client_stats AS (
+                SELECT
+                    client_id,
+                    SUM(CASE WHEN direction = 'inbound' THEN amount ELSE 0 END) as shielded_volume,
+                    COUNT(CASE WHEN direction = 'inbound' THEN 1 ELSE NULL END) as shielded_tx_count,
+                    SUM(CASE WHEN direction = 'outbound' THEN amount ELSE 0 END) as unshielded_volume,
+                    COUNT(CASE WHEN direction = 'outbound' THEN 1 ELSE NULL END) as unshielded_tx_count,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 ELSE NULL END) as pending_tx_count,
+                    COUNT(CASE WHEN status = 'expired' THEN 1 ELSE NULL END) as expired_tx_count,
+                    MAX(timestamp) as last_updated
+                FROM
+                    ibc_transfers
+                WHERE
+                    timestamp > NOW() - INTERVAL '24 hours'
+                GROUP BY
+                    client_id
+            )
+            SELECT
+                c.client_id,
+                COALESCE(s.shielded_volume, 0) as shielded_volume,
+                COALESCE(s.shielded_tx_count, 0) as shielded_tx_count,
+                COALESCE(s.unshielded_volume, 0) as unshielded_volume,
+                COALESCE(s.unshielded_tx_count, 0) as unshielded_tx_count,
+                (COALESCE(s.shielded_volume, 0) + COALESCE(s.unshielded_volume, 0)) as total_volume,
+                (COALESCE(s.shielded_tx_count, 0) + COALESCE(s.unshielded_tx_count, 0)) as total_tx_count,
+                COALESCE(s.pending_tx_count, 0) as pending_tx_count,
+                COALESCE(s.expired_tx_count, 0) as expired_tx_count,
+                s.last_updated
+            FROM
+                ibc_clients c
+            LEFT JOIN
+                client_stats s ON c.client_id = s.client_id
+            ORDER BY
+                total_volume DESC
+            ",
         )
-        .execute(dbtx.as_mut())
-        .await?;
+            .execute(dbtx.as_mut())
+            .await?;
+
+        sqlx::query(
+            r"
+            CREATE OR REPLACE VIEW ibc_client_summary_30d AS
+            WITH client_stats AS (
+                SELECT
+                    client_id,
+                    SUM(CASE WHEN direction = 'inbound' THEN amount ELSE 0 END) as shielded_volume,
+                    COUNT(CASE WHEN direction = 'inbound' THEN 1 ELSE NULL END) as shielded_tx_count,
+                    SUM(CASE WHEN direction = 'outbound' THEN amount ELSE 0 END) as unshielded_volume,
+                    COUNT(CASE WHEN direction = 'outbound' THEN 1 ELSE NULL END) as unshielded_tx_count,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 ELSE NULL END) as pending_tx_count,
+                    COUNT(CASE WHEN status = 'expired' THEN 1 ELSE NULL END) as expired_tx_count,
+                    MAX(timestamp) as last_updated
+                FROM
+                    ibc_transfers
+                WHERE
+                    timestamp > NOW() - INTERVAL '30 days'
+                GROUP BY
+                    client_id
+            )
+            SELECT
+                c.client_id,
+                COALESCE(s.shielded_volume, 0) as shielded_volume,
+                COALESCE(s.shielded_tx_count, 0) as shielded_tx_count,
+                COALESCE(s.unshielded_volume, 0) as unshielded_volume,
+                COALESCE(s.unshielded_tx_count, 0) as unshielded_tx_count,
+                (COALESCE(s.shielded_volume, 0) + COALESCE(s.unshielded_volume, 0)) as total_volume,
+                (COALESCE(s.shielded_tx_count, 0) + COALESCE(s.unshielded_tx_count, 0)) as total_tx_count,
+                COALESCE(s.pending_tx_count, 0) as pending_tx_count,
+                COALESCE(s.expired_tx_count, 0) as expired_tx_count,
+                s.last_updated
+            FROM
+                ibc_clients c
+            LEFT JOIN
+                client_stats s ON c.client_id = s.client_id
+            ORDER BY
+                total_volume DESC
+            ",
+        )
+            .execute(dbtx.as_mut())
+            .await?;
+
+        sqlx::query(
+            r"
+            CREATE OR REPLACE VIEW ibc_client_stats_with_periods AS
+            -- All-time stats
+            SELECT
+                c.client_id,
+                'all_time' AS period,
+                COALESCE(s.shielded_volume, 0) as shielded_volume,
+                COALESCE(s.shielded_tx_count, 0) as shielded_tx_count,
+                COALESCE(s.unshielded_volume, 0) as unshielded_volume,
+                COALESCE(s.unshielded_tx_count, 0) as unshielded_tx_count,
+                (COALESCE(s.shielded_volume, 0) + COALESCE(s.unshielded_volume, 0)) as total_volume,
+                (COALESCE(s.shielded_tx_count, 0) + COALESCE(s.unshielded_tx_count, 0)) as total_tx_count,
+                COALESCE(s.pending_tx_count, 0) as pending_tx_count,
+                COALESCE(s.expired_tx_count, 0) as expired_tx_count,
+                s.last_updated
+            FROM
+                ibc_clients c
+            LEFT JOIN (
+                SELECT
+                    client_id,
+                    SUM(CASE WHEN direction = 'inbound' THEN amount ELSE 0 END) as shielded_volume,
+                    COUNT(CASE WHEN direction = 'inbound' THEN 1 ELSE NULL END) as shielded_tx_count,
+                    SUM(CASE WHEN direction = 'outbound' THEN amount ELSE 0 END) as unshielded_volume,
+                    COUNT(CASE WHEN direction = 'outbound' THEN 1 ELSE NULL END) as unshielded_tx_count,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 ELSE NULL END) as pending_tx_count,
+                    COUNT(CASE WHEN status = 'expired' THEN 1 ELSE NULL END) as expired_tx_count,
+                    MAX(timestamp) as last_updated
+                FROM
+                    ibc_transfers
+                GROUP BY
+                    client_id
+            ) s ON c.client_id = s.client_id
+
+            UNION ALL
+
+            -- 24h stats
+            SELECT
+                c.client_id,
+                '24h' AS period,
+                COALESCE(s.shielded_volume, 0) as shielded_volume,
+                COALESCE(s.shielded_tx_count, 0) as shielded_tx_count,
+                COALESCE(s.unshielded_volume, 0) as unshielded_volume,
+                COALESCE(s.unshielded_tx_count, 0) as unshielded_tx_count,
+                (COALESCE(s.shielded_volume, 0) + COALESCE(s.unshielded_volume, 0)) as total_volume,
+                (COALESCE(s.shielded_tx_count, 0) + COALESCE(s.unshielded_tx_count, 0)) as total_tx_count,
+                COALESCE(s.pending_tx_count, 0) as pending_tx_count,
+                COALESCE(s.expired_tx_count, 0) as expired_tx_count,
+                s.last_updated
+            FROM
+                ibc_clients c
+            LEFT JOIN (
+                SELECT
+                    client_id,
+                    SUM(CASE WHEN direction = 'inbound' THEN amount ELSE 0 END) as shielded_volume,
+                    COUNT(CASE WHEN direction = 'inbound' THEN 1 ELSE NULL END) as shielded_tx_count,
+                    SUM(CASE WHEN direction = 'outbound' THEN amount ELSE 0 END) as unshielded_volume,
+                    COUNT(CASE WHEN direction = 'outbound' THEN 1 ELSE NULL END) as unshielded_tx_count,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 ELSE NULL END) as pending_tx_count,
+                    COUNT(CASE WHEN status = 'expired' THEN 1 ELSE NULL END) as expired_tx_count,
+                    MAX(timestamp) as last_updated
+                FROM
+                    ibc_transfers
+                WHERE
+                    timestamp > NOW() - INTERVAL '24 hours'
+                GROUP BY
+                    client_id
+            ) s ON c.client_id = s.client_id
+
+            UNION ALL
+
+            -- 30d stats
+            SELECT
+                c.client_id,
+                '30d' AS period,
+                COALESCE(s.shielded_volume, 0) as shielded_volume,
+                COALESCE(s.shielded_tx_count, 0) as shielded_tx_count,
+                COALESCE(s.unshielded_volume, 0) as unshielded_volume,
+                COALESCE(s.unshielded_tx_count, 0) as unshielded_tx_count,
+                (COALESCE(s.shielded_volume, 0) + COALESCE(s.unshielded_volume, 0)) as total_volume,
+                (COALESCE(s.shielded_tx_count, 0) + COALESCE(s.unshielded_tx_count, 0)) as total_tx_count,
+                COALESCE(s.pending_tx_count, 0) as pending_tx_count,
+                COALESCE(s.expired_tx_count, 0) as expired_tx_count,
+                s.last_updated
+            FROM
+                ibc_clients c
+            LEFT JOIN (
+                SELECT
+                    client_id,
+                    SUM(CASE WHEN direction = 'inbound' THEN amount ELSE 0 END) as shielded_volume,
+                    COUNT(CASE WHEN direction = 'inbound' THEN 1 ELSE NULL END) as shielded_tx_count,
+                    SUM(CASE WHEN direction = 'outbound' THEN amount ELSE 0 END) as unshielded_volume,
+                    COUNT(CASE WHEN direction = 'outbound' THEN 1 ELSE NULL END) as unshielded_tx_count,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 ELSE NULL END) as pending_tx_count,
+                    COUNT(CASE WHEN status = 'expired' THEN 1 ELSE NULL END) as expired_tx_count,
+                    MAX(timestamp) as last_updated
+                FROM
+                    ibc_transfers
+                WHERE
+                    timestamp > NOW() - INTERVAL '30 days'
+                GROUP BY
+                    client_id
+            ) s ON c.client_id = s.client_id
+            ",
+        )
+            .execute(dbtx.as_mut())
+            .await?;
 
         Ok(())
     }
