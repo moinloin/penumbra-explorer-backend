@@ -339,7 +339,6 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    // Still insert into ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         INSERT INTO ibc_stats (
@@ -444,8 +443,6 @@ pub async fn process_events(
                             .execute(dbtx.as_mut())
                             .await?;
 
-                        // Counterparty channel will be updated later when we see it in ack events
-
                         debug!(
                             "Processed channel_open_init: {} -> {}",
                             channel_id, client_id
@@ -543,14 +540,11 @@ pub async fn process_events(
                     Direction::Outbound => src_channel,
                 };
 
-                // The counterparty channel is the opposite of our channel
                 let counterparty_channel = match direction {
                     Direction::Inbound => src_channel,
                     Direction::Outbound => dst_channel,
                 };
 
-                // Update the counterparty channel if it's not already set
-                // This serves as a fallback in case we missed the channel_open_ack event
                 sqlx::query(
                     r"
                     UPDATE ibc_channels
@@ -659,7 +653,6 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    // Update ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         UPDATE ibc_stats
@@ -674,15 +667,14 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    // Record in the new ibc_transfers table - FIXED VERSION
                     if let Err(e) = record_transfer(
                         dbtx,
                         &client_id,
                         our_channel,
                         direction,
-                        "0", // Amount is unknown for pending transfers
+                        "0",
                         timestamp,
-                        Some(tx_hash.to_vec()), // Convert to Vec<u8>
+                        Some(tx_hash.to_vec()),
                         TransactionStatus::Pending,
                     ).await {
                         error!("Failed to record pending transfer: {}", e);
@@ -758,7 +750,6 @@ pub async fn process_events(
                     let client_id: String = row.get(0);
                     let tx_hash: Vec<u8> = row.try_get(1)?;
 
-                    // Update ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         UPDATE ibc_stats
@@ -773,7 +764,6 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    // Update the transfer status in ibc_transfers
                     if let Err(e) = update_transfer_status(dbtx, &tx_hash, status).await {
                         error!("Failed to update transfer status: {}", e);
                     }
@@ -826,7 +816,6 @@ pub async fn process_events(
                     let client_id: String = row.get(0);
                     let tx_hash: Vec<u8> = row.try_get(1)?;
 
-                    // Update ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         UPDATE ibc_stats
@@ -842,7 +831,6 @@ pub async fn process_events(
                         .execute(dbtx.as_mut())
                         .await?;
 
-                    // Update the transfer status in ibc_transfers
                     if let Err(e) = update_transfer_status(dbtx, &tx_hash, TransactionStatus::Expired).await {
                         error!("Failed to update transfer status: {}", e);
                     }
@@ -903,7 +891,6 @@ pub async fn process_events(
                             let previous_status: String = row.try_get(2).unwrap_or_default();
 
                             if previous_status == "pending" {
-                                // Update ibc_stats for backward compatibility
                                 sqlx::query(
                                     r"
                                     UPDATE ibc_stats
@@ -919,7 +906,6 @@ pub async fn process_events(
                                     .await?;
                             }
 
-                            // Update transfer status in ibc_transfers
                             if let Err(e) = update_transfer_status(dbtx, &tx_hash, TransactionStatus::Error).await {
                                 error!("Failed to update transfer status for refund: {}", e);
                             }
@@ -992,7 +978,6 @@ pub async fn process_events(
                                 .execute(dbtx.as_mut())
                                 .await?;
 
-                            // Note: Counterparty channel will be updated when processing packet events
 
                             resolved_client_id = Some(selected_client);
                         }
@@ -1016,7 +1001,6 @@ pub async fn process_events(
                             .execute(dbtx.as_mut())
                             .await?;
 
-                        // Note: Counterparty channel will be updated when processing packet events
 
                         resolved_client_id = Some(selected_client);
                     } else {
@@ -1027,7 +1011,6 @@ pub async fn process_events(
                     }
 
                     if let Some(client_id) = resolved_client_id {
-                        // Update ibc_stats for backward compatibility
                         match sqlx::query(
                             r"
                             UPDATE ibc_stats
@@ -1063,7 +1046,6 @@ pub async fn process_events(
                             Err(e) => {
                                 error!("Error updating legacy stats for inbound transfer: {}", e);
 
-                                // Try a fallback update for legacy stats
                                 if let Err(e) = sqlx::query(
                                     r"
                                     UPDATE ibc_stats
@@ -1082,7 +1064,6 @@ pub async fn process_events(
                             }
                         }
 
-                        // Record in the new ibc_transfers table - FIXED VERSION
                         if let Err(e) = record_transfer(
                             dbtx,
                             &client_id,
@@ -1090,7 +1071,7 @@ pub async fn process_events(
                             Direction::Inbound,
                             &amount_raw,
                             timestamp,
-                            event.tx_hash().map(|tx| tx.to_vec()), // Convert to Option<Vec<u8>>
+                            event.tx_hash().map(|tx| tx.to_vec()),
                             TransactionStatus::Completed,
                         ).await {
                             error!("Failed to record inbound transfer: {}", e);
@@ -1163,7 +1144,6 @@ pub async fn process_events(
                                 .execute(dbtx.as_mut())
                                 .await?;
 
-                            // Note: Counterparty channel will be updated when processing packet events
 
                             resolved_client_id = Some(selected_client);
                         }
@@ -1187,7 +1167,6 @@ pub async fn process_events(
                             .execute(dbtx.as_mut())
                             .await?;
 
-                        // Note: Counterparty channel will be updated when processing packet events
 
                         resolved_client_id = Some(selected_client);
                     } else {
@@ -1198,7 +1177,6 @@ pub async fn process_events(
                     }
 
                     if let Some(client_id) = resolved_client_id {
-                        // Update ibc_stats for backward compatibility
                         match sqlx::query(
                             r#"
                             UPDATE ibc_stats
@@ -1234,7 +1212,6 @@ pub async fn process_events(
                             Err(e) => {
                                 error!("Error updating legacy stats for outbound transfer: {}", e);
 
-                                // Try a fallback update for legacy stats
                                 if let Err(e) = sqlx::query(
                                     r"
                                     UPDATE ibc_stats
@@ -1253,7 +1230,6 @@ pub async fn process_events(
                             }
                         }
 
-                        // Record in the new ibc_transfers table - FIXED VERSION
                         if let Err(e) = record_transfer(
                             dbtx,
                             &client_id,
@@ -1261,7 +1237,7 @@ pub async fn process_events(
                             Direction::Outbound,
                             &amount_raw,
                             timestamp,
-                            event.tx_hash().map(|tx| tx.to_vec()), // Convert to Option<Vec<u8>>
+                            event.tx_hash().map(|tx| tx.to_vec()),
                             TransactionStatus::Completed,
                         ).await {
                             error!("Failed to record outbound transfer: {}", e);
@@ -1336,7 +1312,6 @@ pub async fn update_old_pending_transactions(
         let client_id: String = row.get(0);
         let tx_hash: Vec<u8> = row.get(1);
 
-        // Update legacy stats for backward compatibility
         let result = sqlx::query(
             r"
             UPDATE ibc_stats
@@ -1355,7 +1330,6 @@ pub async fn update_old_pending_transactions(
             warn!("Failed to update legacy stats for client {}: {}", client_id, e);
         }
 
-        // Update in the ibc_transfers table too
         if let Err(e) = update_transfer_status(dbtx, &tx_hash, TransactionStatus::Error).await {
             warn!("Failed to update transfer status to error: {}", e);
         }
