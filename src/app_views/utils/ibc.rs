@@ -60,6 +60,7 @@ fn extract_number_from_channel(channel_id: &str) -> Option<u64> {
 ///
 /// # Errors
 /// Returns an error if database operations fail
+#[allow(clippy::too_many_arguments)]
 pub async fn record_transfer(
     dbtx: &mut PgTransaction<'_>,
     client_id: &str,
@@ -71,12 +72,7 @@ pub async fn record_transfer(
     status: TransactionStatus,
 ) -> Result<(), anyhow::Error> {
     // Try to parse the amount as numeric - DIRECTLY bind as numeric instead of string
-    let amount_value = if let Ok(parsed) = amount.parse::<i64>() {
-        parsed
-    } else {
-        // If unparseable, use 0 as a safe fallback
-        0
-    };
+    let amount_value = amount.parse::<i64>().unwrap_or_default();
 
     let tx_status = status.to_string();
 
