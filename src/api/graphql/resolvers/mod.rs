@@ -10,7 +10,7 @@ use async_graphql::Object;
 pub use block::{get as resolve_block, resolve_blocks, resolve_blocks_collection};
 pub use ibc::{
     resolve_ibc_channel_pairs, resolve_ibc_channel_pairs_by_client_id, resolve_ibc_stats,
-    resolve_ibc_stats_by_client_id,
+    resolve_ibc_stats_by_client_id, resolve_total_shielded_volume,
 }; // Updated this line
 pub use search::resolve_search;
 pub use stats::resolve_stats;
@@ -182,5 +182,13 @@ impl QueryRoot {
         client_id: String,
     ) -> async_graphql::Result<Vec<crate::api::graphql::types::ibc::ChannelPair>> {
         resolve_ibc_channel_pairs_by_client_id(ctx, client_id).await
+    }
+
+    /// Get total shielded volume across all IBC clients
+    async fn ibc_total_shielded_volume(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+    ) -> async_graphql::Result<crate::api::graphql::types::ibc::TotalShieldedVolume> {
+        resolve_total_shielded_volume(ctx).await
     }
 }
