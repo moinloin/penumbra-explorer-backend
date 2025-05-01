@@ -1,4 +1,4 @@
-use crate::api::graphql::types::ibc::{ChannelPair, Stats};
+use crate::api::graphql::types::ibc::{ChannelPair, Stats, TotalShieldedVolume};
 use async_graphql::{Context, Result};
 
 /// Resolves IBC stats with optional filtering
@@ -49,4 +49,12 @@ pub async fn resolve_ibc_channel_pairs_by_client_id(
     client_id: String,
 ) -> Result<Vec<ChannelPair>> {
     ChannelPair::get_by_client_id(ctx, client_id).await
+}
+
+/// Resolves total shielded volume across all IBC clients
+///
+/// # Errors
+/// Returns an error if the database query fails
+pub async fn resolve_total_shielded_volume(ctx: &Context<'_>) -> Result<TotalShieldedVolume> {
+    TotalShieldedVolume::get(ctx).await
 }
