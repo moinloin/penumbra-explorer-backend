@@ -1,17 +1,17 @@
 mod block;
+mod ibc;
 mod search;
 mod stats;
 mod subscription;
 mod transaction;
-mod ibc;
 
 use async_graphql::Object;
 
 pub use block::{get as resolve_block, resolve_blocks, resolve_blocks_collection};
+pub use ibc::{resolve_ibc_stats, resolve_ibc_stats_by_client_id}; // Add this line
 pub use search::resolve_search;
 pub use stats::resolve_stats;
 pub use subscription::Root as SubscriptionRoot;
-pub use ibc::{resolve_ibc_stats, resolve_ibc_stats_by_client_id}; // Add this line
 pub use transaction::{resolve_transaction, resolve_transactions, resolve_transactions_collection};
 
 /// Root query type that combines all GraphQL queries
