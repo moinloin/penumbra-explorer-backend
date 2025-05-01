@@ -8,10 +8,11 @@ use async_graphql::{Context, Result};
 pub async fn resolve_ibc_stats(
     ctx: &Context<'_>,
     client_id: Option<String>,
+    time_period: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<Stats>> {
-    Stats::get_all(ctx, client_id, limit, offset).await
+    Stats::get_all(ctx, client_id, time_period, limit, offset).await
 }
 
 /// Resolves an IBC stats entry by `client_id`
@@ -21,6 +22,7 @@ pub async fn resolve_ibc_stats(
 pub async fn resolve_ibc_stats_by_client_id(
     ctx: &Context<'_>,
     client_id: String,
+    time_period: Option<String>,
 ) -> Result<Option<Stats>> {
-    Stats::get_by_client_id(ctx, client_id).await
+    Stats::get_by_client_id(ctx, client_id, time_period).await
 }
