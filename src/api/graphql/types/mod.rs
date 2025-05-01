@@ -14,13 +14,13 @@ pub use block::*;
 pub use event::*;
 pub use ibc::Stats as IbcStats;
 pub use inputs::{
-    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, IbcStatsFilter,
-    LatestBlock, LatestTransactions, TransactionFilter, TransactionRange, TransactionsSelector,
+    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, IbcStatsFilter, LatestBlock,
+    LatestTransactions, TransactionFilter, TransactionRange, TransactionsSelector,
 };
 pub use stats::*;
 pub use subscription::*;
 pub use transaction::{
-    extract_transaction_body, DbRawTransaction, Fee, IbcStatus, RangeDirection, Transaction,
-    TransactionBody, TransactionParameters, string_to_ibc_status,
+    extract_transaction_body, string_to_ibc_status, DbRawTransaction, Fee, IbcStatus,
+    RangeDirection, Transaction, TransactionBody, TransactionParameters,
 };
 pub use unions::*;
