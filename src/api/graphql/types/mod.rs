@@ -1,7 +1,7 @@
 mod asset;
 mod block;
 mod event;
-mod ibc; // Add this line
+pub mod ibc; // Add this line
 pub mod inputs;
 mod stats;
 #[allow(clippy::module_name_repetitions)]
@@ -12,9 +12,9 @@ pub mod unions;
 pub use asset::*;
 pub use block::*;
 pub use event::*;
-pub use ibc::*; // Add this line
+pub use ibc::Stats as IbcStats;
 pub use inputs::{
-    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, IbcStatsFilter, // Add IbcStatsFilter
+    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, IbcStatsFilter,
     LatestBlock, LatestTransactions, TransactionFilter, TransactionRange, TransactionsSelector,
 };
 pub use stats::*;
