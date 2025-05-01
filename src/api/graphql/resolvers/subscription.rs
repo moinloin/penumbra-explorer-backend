@@ -1,8 +1,10 @@
 use crate::api::graphql::{
-    pubsub::PubSub,
     pubsub::ibc,
+    pubsub::PubSub,
     scalars::DateTime,
-    types::subscription::{BlockUpdate, TransactionCountUpdate, TransactionUpdate, IbcTransactionUpdate},
+    types::subscription::{
+        BlockUpdate, IbcTransactionUpdate, TransactionCountUpdate, TransactionUpdate,
+    },
 };
 use async_graphql::{Context, Result, Subscription};
 use futures_util::stream::{Stream, StreamExt};
@@ -133,29 +135,33 @@ impl Root {
         let initial_txs = match &client_id {
             Some(id) => {
                 match ibc::get_ibc_transactions_by_client(pool.as_ref(), id, limit, offset).await {
-                    Ok(txs) => txs.into_iter()
-                        .map(|(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
-                            IbcTransactionUpdate {
-                                tx_hash: hex::encode_upper(&tx_hash),
-                                client_id,
-                                status,
-                                block_height,
-                                timestamp: DateTime(timestamp),
-                                is_status_update: false,
-                                raw: raw_data,
-                            }
-                        })
+                    Ok(txs) => txs
+                        .into_iter()
+                        .map(
+                            |(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
+                                IbcTransactionUpdate {
+                                    tx_hash: hex::encode_upper(&tx_hash),
+                                    client_id,
+                                    status,
+                                    block_height,
+                                    timestamp: DateTime(timestamp),
+                                    is_status_update: false,
+                                    raw: raw_data,
+                                }
+                            },
+                        )
                         .collect::<Vec<_>>(),
                     Err(e) => {
                         error!("Failed to get initial IBC transactions by client: {}", e);
                         Vec::new()
                     }
                 }
-            },
-            None => {
-                match ibc::get_all_ibc_transactions(pool.as_ref(), limit, offset).await {
-                    Ok(txs) => txs.into_iter()
-                        .map(|(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
+            }
+            None => match ibc::get_all_ibc_transactions(pool.as_ref(), limit, offset).await {
+                Ok(txs) => txs
+                    .into_iter()
+                    .map(
+                        |(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
                             IbcTransactionUpdate {
                                 tx_hash: hex::encode_upper(&tx_hash),
                                 client_id,
@@ -165,14 +171,14 @@ impl Root {
                                 is_status_update: false,
                                 raw: raw_data,
                             }
-                        })
-                        .collect::<Vec<_>>(),
-                    Err(e) => {
-                        error!("Failed to get all initial IBC transactions: {}", e);
-                        Vec::new()
-                    }
+                        },
+                    )
+                    .collect::<Vec<_>>(),
+                Err(e) => {
+                    error!("Failed to get all initial IBC transactions: {}", e);
+                    Vec::new()
                 }
-            }
+            },
         };
 
         let initial_stream = futures_util::stream::iter(initial_txs);
@@ -204,13 +210,13 @@ impl Root {
                                     is_status_update: event.is_status_update,
                                     raw: raw_data,
                                 })
-                            },
+                            }
                             Err(e) => {
                                 error!("Failed to get transaction details: {}", e);
                                 None
                             }
                         }
-                    },
+                    }
                     Err(e) => {
                         error!("Error receiving IBC transaction update: {}", e);
                         None
@@ -354,13 +360,13 @@ impl Root {
                                     is_status_update: event.is_status_update,
                                     raw: raw_data,
                                 })
-                            },
+                            }
                             Err(e) => {
                                 error!("Failed to get transaction details: {}", e);
                                 None
                             }
                         }
-                    },
+                    }
                     Err(_) => None,
                 }
             }
@@ -379,9 +385,9 @@ async fn get_block_data(
     let row = sqlx::query_as::<_, (chrono::DateTime<chrono::Utc>, i32)>(
         "SELECT timestamp, num_transactions FROM explorer_block_details WHERE height = $1",
     )
-        .bind(height)
-        .fetch_one(pool.as_ref())
-        .await?;
+    .bind(height)
+    .fetch_one(pool.as_ref())
+    .await?;
 
     Ok(row)
 }
@@ -393,9 +399,9 @@ async fn get_transaction_data(
     let row = sqlx::query_as::<_, (Vec<u8>, String)>(
         "SELECT tx_hash, raw_data FROM explorer_transactions WHERE block_height = $1 LIMIT 1",
     )
-        .bind(block_height)
-        .fetch_one(pool.as_ref())
-        .await?;
+    .bind(block_height)
+    .fetch_one(pool.as_ref())
+    .await?;
 
     let hash_hex = hex::encode_upper(&row.0);
 
@@ -419,9 +425,9 @@ async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpd
         "SELECT height, timestamp, num_transactions FROM explorer_block_details
          ORDER BY height DESC LIMIT $1",
     )
-        .bind(i64::from(limit))
-        .fetch_all(pool.as_ref())
-        .await?;
+    .bind(i64::from(limit))
+    .fetch_all(pool.as_ref())
+    .await?;
 
     let blocks = rows
         .into_iter()
@@ -444,9 +450,9 @@ async fn get_latest_transactions(
         "SELECT block_height, tx_hash, raw_data FROM explorer_transactions
          ORDER BY block_height DESC LIMIT $1",
     )
-        .bind(i64::from(limit))
-        .fetch_all(pool.as_ref())
-        .await?;
+    .bind(i64::from(limit))
+    .fetch_all(pool.as_ref())
+    .await?;
 
     let transactions = rows
         .into_iter()
@@ -469,31 +475,43 @@ async fn get_latest_ibc_transactions(
     pool: Arc<PgPool>,
     limit: i32,
 ) -> Result<Vec<IbcTransactionUpdate>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, (Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Vec<u8>,
+            String,
+            String,
+            i64,
+            chrono::DateTime<chrono::Utc>,
+            String,
+        ),
+    >(
         "SELECT tx_hash, ibc_client_id, ibc_status, block_height, timestamp, raw_data
          FROM explorer_transactions
          WHERE ibc_client_id IS NOT NULL
          ORDER BY timestamp DESC LIMIT $1",
     )
-        .bind(i64::from(limit))
-        .fetch_all(pool.as_ref())
-        .await?;
+    .bind(i64::from(limit))
+    .fetch_all(pool.as_ref())
+    .await?;
 
     let transactions = rows
         .into_iter()
-        .map(|(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
-            let hash = hex::encode_upper(&tx_hash);
+        .map(
+            |(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
+                let hash = hex::encode_upper(&tx_hash);
 
-            IbcTransactionUpdate {
-                tx_hash: hash,
-                client_id,
-                status,
-                block_height,
-                timestamp: DateTime(timestamp),
-                is_status_update: false,
-                raw: raw_data,
-            }
-        })
+                IbcTransactionUpdate {
+                    tx_hash: hash,
+                    client_id,
+                    status,
+                    block_height,
+                    timestamp: DateTime(timestamp),
+                    is_status_update: false,
+                    raw: raw_data,
+                }
+            },
+        )
         .collect();
 
     Ok(transactions)
@@ -504,32 +522,44 @@ async fn get_latest_ibc_transactions_by_client(
     client_id: &str,
     limit: i32,
 ) -> Result<Vec<IbcTransactionUpdate>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, (Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Vec<u8>,
+            String,
+            String,
+            i64,
+            chrono::DateTime<chrono::Utc>,
+            String,
+        ),
+    >(
         "SELECT tx_hash, ibc_client_id, ibc_status, block_height, timestamp, raw_data
          FROM explorer_transactions
          WHERE ibc_client_id = $1
          ORDER BY timestamp DESC LIMIT $2",
     )
-        .bind(client_id)
-        .bind(i64::from(limit))
-        .fetch_all(pool.as_ref())
-        .await?;
+    .bind(client_id)
+    .bind(i64::from(limit))
+    .fetch_all(pool.as_ref())
+    .await?;
 
     let transactions = rows
         .into_iter()
-        .map(|(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
-            let hash = hex::encode_upper(&tx_hash);
+        .map(
+            |(tx_hash, client_id, status, block_height, timestamp, raw_data)| {
+                let hash = hex::encode_upper(&tx_hash);
 
-            IbcTransactionUpdate {
-                tx_hash: hash,
-                client_id,
-                status,
-                block_height,
-                timestamp: DateTime(timestamp),
-                is_status_update: false,
-                raw: raw_data,
-            }
-        })
+                IbcTransactionUpdate {
+                    tx_hash: hash,
+                    client_id,
+                    status,
+                    block_height,
+                    timestamp: DateTime(timestamp),
+                    is_status_update: false,
+                    raw: raw_data,
+                }
+            },
+        )
         .collect();
 
     Ok(transactions)
