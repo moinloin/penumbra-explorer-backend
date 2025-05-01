@@ -56,6 +56,105 @@ fn extract_number_from_channel(channel_id: &str) -> Option<u64> {
     None
 }
 
+/// Record an individual IBC transfer in the time series table
+///
+/// # Errors
+/// Returns an error if database operations fail
+pub async fn record_transfer(
+    dbtx: &mut PgTransaction<'_>,
+    client_id: &str,
+    channel_id: &str,
+    direction: Direction,
+    amount: &str,
+    timestamp: DateTime<Utc>,
+    tx_hash: Option<Vec<u8>>,
+    status: TransactionStatus,
+) -> Result<(), anyhow::Error> {
+    // Try to parse the amount as numeric - DIRECTLY bind as numeric instead of string
+    let amount_value = if let Ok(parsed) = amount.parse::<i64>() {
+        parsed
+    } else {
+        // If unparseable, use 0 as a safe fallback
+        0
+    };
+
+    let tx_status = status.to_string();
+
+    match sqlx::query(
+        r"
+        INSERT INTO ibc_transfers (
+            client_id,
+            channel_id,
+            direction,
+            amount,
+            timestamp,
+            tx_hash,
+            status
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ",
+    )
+        .bind(client_id)
+        .bind(channel_id)
+        .bind(direction.to_string())
+        .bind(amount_value) // Bind as numeric i64 value directly
+        .bind(timestamp)
+        .bind(tx_hash)
+        .bind(&tx_status)
+        .execute(dbtx.as_mut())
+        .await {
+        Ok(_) => {
+            debug!(
+                "Recorded {} IBC transfer: client={}, channel={}, amount={}, status={}",
+                direction, client_id, channel_id, amount_value, tx_status
+            );
+            Ok(())
+        }
+        Err(e) => {
+            error!(
+                "Failed to record {} IBC transfer: {}",
+                direction, e
+            );
+            Err(e.into())
+        }
+    }
+}
+
+/// Update the status of an IBC transfer
+///
+/// # Errors
+/// Returns an error if database operations fail
+pub async fn update_transfer_status(
+    dbtx: &mut PgTransaction<'_>,
+    tx_hash: &[u8],
+    status: TransactionStatus,
+) -> Result<(), anyhow::Error> {
+    match sqlx::query(
+        r"
+        UPDATE ibc_transfers
+        SET status = $2
+        WHERE tx_hash = $1
+        ",
+    )
+        .bind(tx_hash)
+        .bind(status.to_string())
+        .execute(dbtx.as_mut())
+        .await {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                debug!("Updated transfer status for tx hash: {}, new status: {}", hex::encode(tx_hash), status);
+            } else {
+                debug!("No transfer found with tx hash: {}", hex::encode(tx_hash));
+            }
+            Ok(())
+        }
+        Err(e) => {
+            error!("Failed to update transfer status: {}", e);
+            Err(e.into())
+        }
+    }
+}
+
 /// Checks if a specific sequence has a refund event in the event list
 ///
 /// This function looks for:
@@ -234,12 +333,13 @@ pub async fn process_events(
                             last_active_time = $3
                         ",
                     )
-                    .bind(client_id)
-                    .bind(height as i64)
-                    .bind(timestamp)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(client_id)
+                        .bind(height as i64)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
+                    // Still insert into ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         INSERT INTO ibc_stats (
@@ -253,10 +353,10 @@ pub async fn process_events(
                         ON CONFLICT (client_id) DO NOTHING
                         ",
                     )
-                    .bind(client_id)
-                    .bind(timestamp)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(client_id)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
                     if !known_clients.contains(&client_id.to_string()) {
                         known_clients.push(client_id.to_string());
@@ -279,11 +379,11 @@ pub async fn process_events(
                         ON CONFLICT (client_id) DO NOTHING
                         ",
                     )
-                    .bind(client_id)
-                    .bind(height as i64)
-                    .bind(timestamp)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(client_id)
+                        .bind(height as i64)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
                     if !known_clients.contains(&client_id.to_string()) {
                         known_clients.push(client_id.to_string());
@@ -307,15 +407,15 @@ pub async fn process_events(
 
                     sqlx::query(
                         r"
-                        UPDATE ibc_channels 
+                        UPDATE ibc_channels
                         SET counterparty_channel_id = $2
                         WHERE channel_id = $1
                         ",
                     )
-                    .bind(channel_id)
-                    .bind(counterparty_channel_id)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(channel_id)
+                        .bind(counterparty_channel_id)
+                        .execute(dbtx.as_mut())
+                        .await?;
                 }
             }
             "channel_open_init" => {
@@ -338,11 +438,11 @@ pub async fn process_events(
                                 connection_id = $3
                             ",
                         )
-                        .bind(channel_id)
-                        .bind(&client_id)
-                        .bind(connection_id)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                            .bind(channel_id)
+                            .bind(&client_id)
+                            .bind(connection_id)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                         // Counterparty channel will be updated later when we see it in ack events
 
@@ -371,11 +471,11 @@ pub async fn process_events(
                                     connection_id = $3
                                 ",
                             )
-                            .bind(channel_id)
-                            .bind(selected_client)
-                            .bind(connection_id)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                                .bind(channel_id)
+                                .bind(selected_client)
+                                .bind(connection_id)
+                                .execute(dbtx.as_mut())
+                                .await?;
 
                             debug!(
                                 "Associated channel {} with client {} (deterministic mapping)",
@@ -395,11 +495,11 @@ pub async fn process_events(
                                 connection_id = $3
                             ",
                         )
-                        .bind(channel_id)
-                        .bind(default_client)
-                        .bind(connection_id)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                            .bind(channel_id)
+                            .bind(default_client)
+                            .bind(connection_id)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                         debug!(
                             "Associated channel {} with first available client {}",
@@ -453,25 +553,25 @@ pub async fn process_events(
                 // This serves as a fallback in case we missed the channel_open_ack event
                 sqlx::query(
                     r"
-                    UPDATE ibc_channels 
+                    UPDATE ibc_channels
                     SET counterparty_channel_id = $2
                     WHERE channel_id = $1
                     AND (counterparty_channel_id IS NULL OR counterparty_channel_id = '')
                     ",
                 )
-                .bind(our_channel)
-                .bind(counterparty_channel)
-                .execute(dbtx.as_mut())
-                .await?;
+                    .bind(our_channel)
+                    .bind(counterparty_channel)
+                    .execute(dbtx.as_mut())
+                    .await?;
 
                 let mut final_client_id: Option<String> = None;
 
                 let db_client_id = sqlx::query_scalar::<_, Option<String>>(
                     "SELECT client_id FROM ibc_channels WHERE channel_id = $1",
                 )
-                .bind(our_channel)
-                .fetch_optional(dbtx.as_mut())
-                .await?;
+                    .bind(our_channel)
+                    .fetch_optional(dbtx.as_mut())
+                    .await?;
 
                 if let Some(client) = db_client_id {
                     final_client_id = client;
@@ -497,16 +597,16 @@ pub async fn process_events(
                             r"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id, counterparty_channel_id)
                             VALUES ($1, $2, 'auto-connection', $3)
-                            ON CONFLICT (channel_id) 
+                            ON CONFLICT (channel_id)
                             DO UPDATE SET
                                 counterparty_channel_id = $3
                             ",
                         )
-                        .bind(our_channel)
-                        .bind(&selected_client)
-                        .bind(counterparty_channel)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                            .bind(our_channel)
+                            .bind(&selected_client)
+                            .bind(counterparty_channel)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                         final_client_id = Some(selected_client);
                     } else {
@@ -521,22 +621,23 @@ pub async fn process_events(
                             r"
                             INSERT INTO ibc_channels (channel_id, client_id, connection_id, counterparty_channel_id)
                             VALUES ($1, $2, 'auto-connection', $3)
-                            ON CONFLICT (channel_id) 
+                            ON CONFLICT (channel_id)
                             DO UPDATE SET
                                 counterparty_channel_id = $3
                             ",
                         )
-                        .bind(our_channel)
-                        .bind(&selected_client)
-                        .bind(counterparty_channel)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                            .bind(our_channel)
+                            .bind(&selected_client)
+                            .bind(counterparty_channel)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                         final_client_id = Some(selected_client);
                     }
                 }
 
                 if let (Some(client_id), Some(tx_hash)) = (final_client_id, event.tx_hash()) {
+                    // Update explorer transaction
                     sqlx::query(
                         r"
                         UPDATE explorer_transactions
@@ -549,15 +650,16 @@ pub async fn process_events(
                         WHERE tx_hash = $1
                         ",
                     )
-                    .bind(tx_hash)
-                    .bind(our_channel)
-                    .bind(&client_id)
-                    .bind(TransactionStatus::Pending.to_string())
-                    .bind(direction.to_string())
-                    .bind(sequence)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(tx_hash)
+                        .bind(our_channel)
+                        .bind(&client_id)
+                        .bind(TransactionStatus::Pending.to_string())
+                        .bind(direction.to_string())
+                        .bind(sequence)
+                        .execute(dbtx.as_mut())
+                        .await?;
 
+                    // Update ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         UPDATE ibc_stats
@@ -567,10 +669,24 @@ pub async fn process_events(
                         WHERE client_id = $1
                         ",
                     )
-                    .bind(&client_id)
-                    .bind(timestamp)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(&client_id)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await?;
+
+                    // Record in the new ibc_transfers table - FIXED VERSION
+                    if let Err(e) = record_transfer(
+                        dbtx,
+                        &client_id,
+                        our_channel,
+                        direction,
+                        "0", // Amount is unknown for pending transfers
+                        timestamp,
+                        Some(tx_hash.to_vec()), // Convert to Vec<u8>
+                        TransactionStatus::Pending,
+                    ).await {
+                        error!("Failed to record pending transfer: {}", e);
+                    }
 
                     debug!(
                         "Processed send_packet for channel {} with client {}",
@@ -631,17 +747,18 @@ pub async fn process_events(
                     SELECT ibc_client_id, tx_hash FROM updated_tx
                     ",
                 )
-                .bind(status.to_string())
-                .bind(sequence)
-                .bind(dst_channel)
-                .bind(src_channel)
-                .fetch_all(dbtx.as_mut())
-                .await?;
+                    .bind(status.to_string())
+                    .bind(sequence)
+                    .bind(dst_channel)
+                    .bind(src_channel)
+                    .fetch_all(dbtx.as_mut())
+                    .await?;
 
                 for row in updated_rows {
                     let client_id: String = row.get(0);
-                    let tx_hash: String = row.try_get(1).unwrap_or_default();
+                    let tx_hash: Vec<u8> = row.try_get(1)?;
 
+                    // Update ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         UPDATE ibc_stats
@@ -651,18 +768,23 @@ pub async fn process_events(
                         WHERE client_id = $1
                         ",
                     )
-                    .bind(&client_id)
-                    .bind(timestamp)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(&client_id)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await?;
+
+                    // Update the transfer status in ibc_transfers
+                    if let Err(e) = update_transfer_status(dbtx, &tx_hash, status).await {
+                        error!("Failed to update transfer status: {}", e);
+                    }
 
                     if status == TransactionStatus::Error {
                         debug!("Updated transaction {} to ERROR for client {} (error indicators found)",
-                               tx_hash, client_id);
+                               hex::encode(&tx_hash), client_id);
                     } else {
                         debug!(
                             "Updated transaction {} to COMPLETED for client {}",
-                            tx_hash, client_id
+                            hex::encode(&tx_hash), client_id
                         );
                     }
                 }
@@ -688,21 +810,23 @@ pub async fn process_events(
                             (ibc_direction = 'outbound' AND ibc_channel_id = $4)
                         )
                         AND ibc_status = 'pending'
-                        RETURNING ibc_client_id
+                        RETURNING ibc_client_id, tx_hash
                     )
-                    SELECT ibc_client_id FROM updated_tx
+                    SELECT ibc_client_id, tx_hash FROM updated_tx
                     ",
                 )
-                .bind(TransactionStatus::Expired.to_string())
-                .bind(sequence)
-                .bind(dst_channel)
-                .bind(src_channel)
-                .fetch_all(dbtx.as_mut())
-                .await?;
+                    .bind(TransactionStatus::Expired.to_string())
+                    .bind(sequence)
+                    .bind(dst_channel)
+                    .bind(src_channel)
+                    .fetch_all(dbtx.as_mut())
+                    .await?;
 
                 for row in updated_rows {
                     let client_id: String = row.get(0);
+                    let tx_hash: Vec<u8> = row.try_get(1)?;
 
+                    // Update ibc_stats for backward compatibility
                     sqlx::query(
                         r"
                         UPDATE ibc_stats
@@ -713,10 +837,15 @@ pub async fn process_events(
                         WHERE client_id = $1
                         ",
                     )
-                    .bind(&client_id)
-                    .bind(timestamp)
-                    .execute(dbtx.as_mut())
-                    .await?;
+                        .bind(&client_id)
+                        .bind(timestamp)
+                        .execute(dbtx.as_mut())
+                        .await?;
+
+                    // Update the transfer status in ibc_transfers
+                    if let Err(e) = update_transfer_status(dbtx, &tx_hash, TransactionStatus::Expired).await {
+                        error!("Failed to update transfer status: {}", e);
+                    }
 
                     debug!("Updated transaction to expired for client {}", client_id);
                 }
@@ -763,17 +892,18 @@ pub async fn process_events(
                             SELECT ibc_client_id, tx_hash, ibc_status FROM updated_tx
                             ",
                         )
-                        .bind(TransactionStatus::Error.to_string())
-                        .bind(&seq)
-                        .fetch_all(dbtx.as_mut())
-                        .await?;
+                            .bind(TransactionStatus::Error.to_string())
+                            .bind(&seq)
+                            .fetch_all(dbtx.as_mut())
+                            .await?;
 
                         for row in updated_rows {
                             let client_id: String = row.get(0);
-                            let tx_hash: String = row.try_get(1).unwrap_or_default();
+                            let tx_hash: Vec<u8> = row.try_get(1)?;
                             let previous_status: String = row.try_get(2).unwrap_or_default();
 
                             if previous_status == "pending" {
+                                // Update ibc_stats for backward compatibility
                                 sqlx::query(
                                     r"
                                     UPDATE ibc_stats
@@ -783,15 +913,20 @@ pub async fn process_events(
                                     WHERE client_id = $1
                                     ",
                                 )
-                                .bind(&client_id)
-                                .bind(timestamp)
-                                .execute(dbtx.as_mut())
-                                .await?;
+                                    .bind(&client_id)
+                                    .bind(timestamp)
+                                    .execute(dbtx.as_mut())
+                                    .await?;
+                            }
+
+                            // Update transfer status in ibc_transfers
+                            if let Err(e) = update_transfer_status(dbtx, &tx_hash, TransactionStatus::Error).await {
+                                error!("Failed to update transfer status for refund: {}", e);
                             }
 
                             debug!(
                                 "Set transaction {} to ERROR due to direct refund event with REASON_ERROR (sequence {})",
-                                tx_hash, seq
+                                hex::encode(&tx_hash), seq
                             );
                         }
                     }
@@ -827,9 +962,9 @@ pub async fn process_events(
                     let db_client_id = sqlx::query_scalar::<_, Option<String>>(
                         "SELECT client_id FROM ibc_channels WHERE channel_id = $1",
                     )
-                    .bind(channel_id)
-                    .fetch_optional(dbtx.as_mut())
-                    .await?;
+                        .bind(channel_id)
+                        .fetch_optional(dbtx.as_mut())
+                        .await?;
 
                     if let Some(client) = db_client_id {
                         resolved_client_id = client;
@@ -852,10 +987,10 @@ pub async fn process_events(
                                 ON CONFLICT (channel_id) DO NOTHING
                                 ",
                             )
-                            .bind(channel_id)
-                            .bind(&selected_client)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                                .bind(channel_id)
+                                .bind(&selected_client)
+                                .execute(dbtx.as_mut())
+                                .await?;
 
                             // Note: Counterparty channel will be updated when processing packet events
 
@@ -876,10 +1011,10 @@ pub async fn process_events(
                             ON CONFLICT (channel_id) DO NOTHING
                             ",
                         )
-                        .bind(channel_id)
-                        .bind(&selected_client)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                            .bind(channel_id)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                         // Note: Counterparty channel will be updated when processing packet events
 
@@ -892,6 +1027,7 @@ pub async fn process_events(
                     }
 
                     if let Some(client_id) = resolved_client_id {
+                        // Update ibc_stats for backward compatibility
                         match sqlx::query(
                             r"
                             UPDATE ibc_stats
@@ -912,40 +1048,52 @@ pub async fn process_events(
                             WHERE client_id = $1
                             ",
                         )
-                        .bind(&client_id)
-                        .bind(&amount_raw)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await
+                            .bind(&client_id)
+                            .bind(&amount_raw)
+                            .bind(timestamp)
+                            .execute(dbtx.as_mut())
+                            .await
                         {
                             Ok(_) => {
                                 debug!(
-                                    "Processed inbound transfer: client={}, amount={}",
+                                    "Updated legacy stats for inbound transfer: client={}, amount={}",
                                     client_id, amount_raw
                                 );
                             }
                             Err(e) => {
-                                error!("Error updating stats for inbound transfer: {}. Using fallback.", e);
+                                error!("Error updating legacy stats for inbound transfer: {}", e);
 
-                                sqlx::query(
+                                // Try a fallback update for legacy stats
+                                if let Err(e) = sqlx::query(
                                     r"
-                                        UPDATE ibc_stats
-                                        SET
-                                            shielded_tx_count = shielded_tx_count + 1,
-                                            last_updated = $2
-                                        WHERE client_id = $1
-                                        ",
+                                    UPDATE ibc_stats
+                                    SET
+                                        shielded_tx_count = shielded_tx_count + 1,
+                                        last_updated = $2
+                                    WHERE client_id = $1
+                                    ",
                                 )
-                                .bind(&client_id)
-                                .bind(timestamp)
-                                .execute(dbtx.as_mut())
-                                .await?;
-
-                                debug!(
-                                    "Processed inbound transfer (count only): client={}",
-                                    client_id
-                                );
+                                    .bind(&client_id)
+                                    .bind(timestamp)
+                                    .execute(dbtx.as_mut())
+                                    .await {
+                                    error!("Failed to update legacy stats (fallback) for inbound transfer: {}", e);
+                                }
                             }
+                        }
+
+                        // Record in the new ibc_transfers table - FIXED VERSION
+                        if let Err(e) = record_transfer(
+                            dbtx,
+                            &client_id,
+                            channel_id,
+                            Direction::Inbound,
+                            &amount_raw,
+                            timestamp,
+                            event.tx_hash().map(|tx| tx.to_vec()), // Convert to Option<Vec<u8>>
+                            TransactionStatus::Completed,
+                        ).await {
+                            error!("Failed to record inbound transfer: {}", e);
                         }
                     } else {
                         warn!(
@@ -985,9 +1133,9 @@ pub async fn process_events(
                     let db_client_id = sqlx::query_scalar::<_, Option<String>>(
                         "SELECT client_id FROM ibc_channels WHERE channel_id = $1",
                     )
-                    .bind(channel_id)
-                    .fetch_optional(dbtx.as_mut())
-                    .await?;
+                        .bind(channel_id)
+                        .fetch_optional(dbtx.as_mut())
+                        .await?;
 
                     if let Some(client) = db_client_id {
                         resolved_client_id = client;
@@ -1010,10 +1158,10 @@ pub async fn process_events(
                                 ON CONFLICT (channel_id) DO NOTHING
                                 ",
                             )
-                            .bind(channel_id)
-                            .bind(&selected_client)
-                            .execute(dbtx.as_mut())
-                            .await?;
+                                .bind(channel_id)
+                                .bind(&selected_client)
+                                .execute(dbtx.as_mut())
+                                .await?;
 
                             // Note: Counterparty channel will be updated when processing packet events
 
@@ -1034,10 +1182,10 @@ pub async fn process_events(
                             ON CONFLICT (channel_id) DO NOTHING
                             ",
                         )
-                        .bind(channel_id)
-                        .bind(&selected_client)
-                        .execute(dbtx.as_mut())
-                        .await?;
+                            .bind(channel_id)
+                            .bind(&selected_client)
+                            .execute(dbtx.as_mut())
+                            .await?;
 
                         // Note: Counterparty channel will be updated when processing packet events
 
@@ -1050,6 +1198,7 @@ pub async fn process_events(
                     }
 
                     if let Some(client_id) = resolved_client_id {
+                        // Update ibc_stats for backward compatibility
                         match sqlx::query(
                             r#"
                             UPDATE ibc_stats
@@ -1070,40 +1219,52 @@ pub async fn process_events(
                             WHERE client_id = $1
                             "#,
                         )
-                        .bind(&client_id)
-                        .bind(&amount_raw)
-                        .bind(timestamp)
-                        .execute(dbtx.as_mut())
-                        .await
+                            .bind(&client_id)
+                            .bind(&amount_raw)
+                            .bind(timestamp)
+                            .execute(dbtx.as_mut())
+                            .await
                         {
                             Ok(_) => {
                                 debug!(
-                                    "Processed outbound transfer: client={}, amount={}",
+                                    "Updated legacy stats for outbound transfer: client={}, amount={}",
                                     client_id, amount_raw
                                 );
                             }
                             Err(e) => {
-                                error!("Error updating stats for outbound transfer: {}. Using fallback.", e);
+                                error!("Error updating legacy stats for outbound transfer: {}", e);
 
-                                sqlx::query(
+                                // Try a fallback update for legacy stats
+                                if let Err(e) = sqlx::query(
                                     r"
-                                        UPDATE ibc_stats
-                                        SET
-                                            unshielded_tx_count = unshielded_tx_count + 1,
-                                            last_updated = $2
-                                        WHERE client_id = $1
-                                        ",
+                                    UPDATE ibc_stats
+                                    SET
+                                        unshielded_tx_count = unshielded_tx_count + 1,
+                                        last_updated = $2
+                                    WHERE client_id = $1
+                                    ",
                                 )
-                                .bind(&client_id)
-                                .bind(timestamp)
-                                .execute(dbtx.as_mut())
-                                .await?;
-
-                                debug!(
-                                    "Processed outbound transfer (count only): client={}",
-                                    client_id
-                                );
+                                    .bind(&client_id)
+                                    .bind(timestamp)
+                                    .execute(dbtx.as_mut())
+                                    .await {
+                                    error!("Failed to update legacy stats (fallback) for outbound transfer: {}", e);
+                                }
                             }
+                        }
+
+                        // Record in the new ibc_transfers table - FIXED VERSION
+                        if let Err(e) = record_transfer(
+                            dbtx,
+                            &client_id,
+                            channel_id,
+                            Direction::Outbound,
+                            &amount_raw,
+                            timestamp,
+                            event.tx_hash().map(|tx| tx.to_vec()), // Convert to Option<Vec<u8>>
+                            TransactionStatus::Completed,
+                        ).await {
+                            error!("Failed to record outbound transfer: {}", e);
                         }
                     } else {
                         warn!(
@@ -1152,16 +1313,16 @@ pub async fn update_old_pending_transactions(
             WHERE tx.block_height = bd.height
             AND bd.timestamp < $2
             AND tx.ibc_status = 'pending'
-            RETURNING tx.ibc_client_id
+            RETURNING tx.ibc_client_id, tx.tx_hash
         )
-        SELECT ibc_client_id FROM updated_tx
+        SELECT ibc_client_id, tx_hash FROM updated_tx
         WHERE ibc_client_id IS NOT NULL
         ",
     )
-    .bind(TransactionStatus::Error.to_string())
-    .bind(day_ago)
-    .fetch_all(dbtx.as_mut())
-    .await?;
+        .bind(TransactionStatus::Error.to_string())
+        .bind(day_ago)
+        .fetch_all(dbtx.as_mut())
+        .await?;
 
     let updated_count = updated_rows.len();
     if updated_count > 0 {
@@ -1173,7 +1334,9 @@ pub async fn update_old_pending_transactions(
 
     for row in updated_rows {
         let client_id: String = row.get(0);
+        let tx_hash: Vec<u8> = row.get(1);
 
+        // Update legacy stats for backward compatibility
         let result = sqlx::query(
             r"
             UPDATE ibc_stats
@@ -1183,13 +1346,18 @@ pub async fn update_old_pending_transactions(
             WHERE client_id = $2
             ",
         )
-        .bind(Utc::now())
-        .bind(&client_id)
-        .execute(dbtx.as_mut())
-        .await;
+            .bind(Utc::now())
+            .bind(&client_id)
+            .execute(dbtx.as_mut())
+            .await;
 
         if let Err(e) = result {
-            warn!("Failed to update stats for client {}: {}", client_id, e);
+            warn!("Failed to update legacy stats for client {}: {}", client_id, e);
+        }
+
+        // Update in the ibc_transfers table too
+        if let Err(e) = update_transfer_status(dbtx, &tx_hash, TransactionStatus::Error).await {
+            warn!("Failed to update transfer status to error: {}", e);
         }
     }
 
