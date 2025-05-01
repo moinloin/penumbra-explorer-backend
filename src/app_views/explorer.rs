@@ -257,7 +257,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create the new ibc_transfers table
         sqlx::query(
             r"
     CREATE TABLE IF NOT EXISTS ibc_transfers (
@@ -395,7 +394,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create 24h stats view
         sqlx::query(
             r"
             CREATE OR REPLACE VIEW ibc_client_summary_24h AS
@@ -438,7 +436,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create 30d stats view
         sqlx::query(
             r"
             CREATE OR REPLACE VIEW ibc_client_summary_30d AS
@@ -481,7 +478,6 @@ impl AppView for Explorer {
             .execute(dbtx.as_mut())
             .await?;
 
-        // Create a combined view with all periods
         sqlx::query(
             r"
             CREATE OR REPLACE VIEW ibc_client_stats_with_periods AS
