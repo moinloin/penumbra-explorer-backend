@@ -51,5 +51,10 @@ pub struct BlockFilter {
 #[derive(InputObject)]
 pub struct TransactionFilter {
     pub hash: Option<String>,
-    pub client_id: Option<String>, // Added client_id filter
+    pub client_id: Option<String>, // Keep client_id filter
+}
+
+#[derive(InputObject)]
+pub struct IbcStatsFilter {
+    pub client_id: Option<String>,
 }
