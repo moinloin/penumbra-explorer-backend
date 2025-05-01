@@ -4,13 +4,16 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
 mod triggers;
+pub mod ibc; // Only define the module once, and make it public
 pub use triggers::start;
+use ibc::IbcTransactionEvent;
 
 #[derive(Clone)]
 pub struct PubSub {
     blocks_tx: broadcast::Sender<i64>,
     transactions_tx: broadcast::Sender<i64>,
     transaction_count_tx: broadcast::Sender<i64>,
+    ibc_transactions_tx: broadcast::Sender<IbcTransactionEvent>,
 }
 
 impl Default for PubSub {
@@ -25,10 +28,12 @@ impl PubSub {
         let (blocks_tx, _) = broadcast::channel(1000);
         let (transactions_tx, _) = broadcast::channel(1000);
         let (transaction_count_tx, _) = broadcast::channel(1000);
+        let (ibc_transactions_tx, _) = broadcast::channel(1000);
         Self {
             blocks_tx,
             transactions_tx,
             transaction_count_tx,
+            ibc_transactions_tx,
         }
     }
 
@@ -45,6 +50,11 @@ impl PubSub {
     #[must_use]
     pub fn transaction_count_subscribe(&self) -> broadcast::Receiver<i64> {
         self.transaction_count_tx.subscribe()
+    }
+
+    #[must_use]
+    pub fn ibc_transactions_subscribe(&self) -> broadcast::Receiver<IbcTransactionEvent> {
+        self.ibc_transactions_tx.subscribe()
     }
 
     pub fn publish_block(&self, height: i64) {
@@ -87,6 +97,21 @@ impl PubSub {
                     debug!("No receivers for transaction count update");
                 } else {
                     warn!("Failed to publish transaction count update: {}", e);
+                }
+            }
+        }
+    }
+
+    pub fn publish_ibc_transaction(&self, event: IbcTransactionEvent) {
+        match self.ibc_transactions_tx.send(event) {
+            Ok(_) => debug!("Published IBC transaction update"),
+            Err(e) => {
+                // Handle the error case
+                let receiver_count = self.ibc_transactions_tx.receiver_count();
+                if receiver_count == 0 {
+                    debug!("No receivers for IBC transaction update");
+                } else {
+                    warn!("Failed to publish IBC transaction update: {}", e);
                 }
             }
         }
