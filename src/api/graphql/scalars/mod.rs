@@ -1,5 +1,5 @@
-mod datetime;
 mod bigdecimal;
+mod datetime;
 
 use crate::api::graphql::resolvers::{QueryRoot, SubscriptionRoot};
 use async_graphql::{EmptyMutation, SchemaBuilder};
@@ -14,5 +14,5 @@ pub fn register_scalars(
     bigdecimal::register(builder)
 }
 
-pub use datetime::DateTime;
-pub use bigdecimal::Decimal; // Export our wrapper type
+pub use bigdecimal::Decimal;
+pub use datetime::DateTime; // Export our wrapper type
