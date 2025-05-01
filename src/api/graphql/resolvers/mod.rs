@@ -9,8 +9,8 @@ use async_graphql::Object;
 
 pub use block::{get as resolve_block, resolve_blocks, resolve_blocks_collection};
 pub use ibc::{
-    resolve_ibc_stats, resolve_ibc_stats_by_client_id,
-    resolve_ibc_channel_pairs, resolve_ibc_channel_pairs_by_client_id
+    resolve_ibc_channel_pairs, resolve_ibc_channel_pairs_by_client_id, resolve_ibc_stats,
+    resolve_ibc_stats_by_client_id,
 }; // Updated this line
 pub use search::resolve_search;
 pub use stats::resolve_stats;
