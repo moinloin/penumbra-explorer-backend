@@ -1,4 +1,3 @@
-// src/api/graphql/resolvers/transaction.rs
 use crate::api::graphql::{
     context::ApiContext,
     types::{
@@ -24,7 +23,6 @@ pub async fn resolve_transaction(
         return Ok(None);
     };
 
-    // Updated SQL query to include ibc_client_id and ibc_status
     let row = sqlx::query(
         r"
         SELECT
@@ -58,12 +56,10 @@ pub async fn resolve_transaction(
         let _chain_id: Option<String> = r.get("chain_id");
         let raw_data: String = r.get("raw_data");
         let raw_json_str: String = r.get("raw_json");
-        // Get client_id and ibc_status from query result
         let client_id: Option<String> = r.get("ibc_client_id");
         let ibc_status_str: String = r.get("ibc_status");
         let ibc_status = string_to_ibc_status(Some(&ibc_status_str));
 
-        // Parse the JSON string
         let json_value = match serde_json::from_str::<serde_json::Value>(&raw_json_str) {
             Ok(value) => value,
             Err(_) => serde_json::json!({}),
@@ -131,9 +127,9 @@ pub async fn resolve_transactions(
         };
 
         // Handle client_id filter if present
-        if let Some(_client_id) = &selector.client_id {
+        if let Some(client_id) = &selector.client_id {
             sqlx::query(&query)
-                .bind(_client_id)
+                .bind(client_id)
                 .bind(&hash_bytes)
                 .bind(i64::from(range.limit))
                 .fetch_all(db)
@@ -147,9 +143,9 @@ pub async fn resolve_transactions(
         }
     } else if let Some(latest) = &selector.latest {
         // Handle client_id filter if present
-        if let Some(_client_id) = &selector.client_id {
+        if let Some(client_id) = &selector.client_id {
             sqlx::query(&query)
-                .bind(_client_id)
+                .bind(client_id)
                 .bind(i64::from(latest.limit))
                 .fetch_all(db)
                 .await?
@@ -161,9 +157,9 @@ pub async fn resolve_transactions(
         }
     } else {
         // Handle client_id filter if present
-        if let Some(_client_id) = &selector.client_id {
+        if let Some(client_id) = &selector.client_id {
             sqlx::query(&query)
-                .bind(_client_id)
+                .bind(client_id)
                 .fetch_all(db)
                 .await?
         } else {
@@ -216,7 +212,7 @@ pub async fn resolve_transactions_collection(
         if let Some(client_id) = &filter.client_id {
             where_clauses.push(format!("ibc_client_id = ${param_index}"));
             params.push(client_id.clone().into_bytes());
-            param_index += 1;
+            // Don't increment param_index as it's not used after this point
         }
     }
 
@@ -369,7 +365,6 @@ fn build_transactions_query(selector: &TransactionsSelector, base: &str) -> (Str
     }
 
     if let Some(range) = &selector.range {
-        // Instead of hardcoding param_count, calculate it based on presence of client_id
         param_count = if selector.client_id.is_some() { 2 } else { 1 };
 
         let ref_query = "(SELECT timestamp FROM explorer_transactions WHERE tx_hash = $";
@@ -392,13 +387,11 @@ fn build_transactions_query(selector: &TransactionsSelector, base: &str) -> (Str
         }
     }
 
-    // Apply WHERE clauses if any exist
     if !where_clauses.is_empty() {
         query.push_str(" WHERE ");
         query.push_str(&where_clauses.join(" "));
     }
 
-    // Add ORDER BY and LIMIT clauses
     if let Some(range) = &selector.range {
         match range.direction {
             RangeDirection::Next => {
