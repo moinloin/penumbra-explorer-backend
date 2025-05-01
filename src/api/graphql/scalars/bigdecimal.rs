@@ -43,14 +43,14 @@ impl ScalarType for Decimal {
         match value {
             Value::String(s) => BigDecimal::from_str(&s)
                 .map(Decimal)
-                .map_err(|e| InputValueError::custom(format!("Invalid decimal: {}", e))),
+                .map_err(|e| InputValueError::custom(format!("Invalid decimal: {e}"))),
             Value::Number(ref n) => {
                 if let Some(num) = n.as_i64() {
                     Ok(Decimal(BigDecimal::from(num)))
                 } else if let Some(num) = n.as_f64() {
                     BigDecimal::from_str(&num.to_string())
                         .map(Decimal)
-                        .map_err(|e| InputValueError::custom(format!("Invalid decimal: {}", e)))
+                        .map_err(|e| InputValueError::custom(format!("Invalid decimal: {e}")))
                 } else {
                     Err(InputValueError::expected_type(value))
                 }
