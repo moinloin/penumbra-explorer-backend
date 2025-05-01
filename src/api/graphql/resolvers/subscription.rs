@@ -239,7 +239,8 @@ impl Root {
         ctx: &Context<'_>
     ) -> Result<impl Stream<Item = TotalShieldedVolumeUpdate>> {
         let pubsub = ctx.data::<PubSub>()?.clone();
-        let pool = Arc::new(ctx.data::<PgPool>()?.clone());
+        // Pool is unused here since we call TotalShieldedVolume::get which uses ctx directly
+        let _pool = Arc::new(ctx.data::<PgPool>()?.clone());
 
         // Get initial total shielded volume
         let initial_value = match TotalShieldedVolume::get(ctx).await {
