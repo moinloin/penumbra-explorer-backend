@@ -33,6 +33,13 @@ pub struct Stats {
     pub last_updated: Option<DateTime>,
 }
 
+#[derive(SimpleObject)]
+#[graphql(rename_fields = "camelCase")]
+pub struct TotalShieldedVolume {
+    /// Total shielded volume across all IBC clients
+    pub value: String,
+}
+
 impl ChannelPair {
     /// Gets channel pairs for a specific client ID
     ///
@@ -249,9 +256,9 @@ impl Stats {
             FROM {view_name}
             WHERE client_id = $1"
         ))
-        .bind(client_id)
-        .fetch_optional(db)
-        .await?;
+            .bind(client_id)
+            .fetch_optional(db)
+            .await?;
 
         Ok(row.map(|row| Stats {
             client_id: row.get("client_id"),
@@ -265,5 +272,30 @@ impl Stats {
                 .get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_updated")
                 .map(DateTime),
         }))
+    }
+}
+
+impl TotalShieldedVolume {
+    /// Gets total shielded volume across all IBC clients
+    ///
+    /// # Errors
+    /// Returns an error if the database query fails
+    pub async fn get(ctx: &Context<'_>) -> Result<Self> {
+        let db = &ctx
+            .data_unchecked::<crate::api::graphql::context::ApiContext>()
+            .db;
+
+        let total = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT
+                COALESCE(SUM(shielded_volume), '0')::TEXT
+            FROM
+                ibc_client_summary
+            "#
+        )
+            .fetch_one(db)
+            .await?;
+
+        Ok(Self { value: total })
     }
 }
