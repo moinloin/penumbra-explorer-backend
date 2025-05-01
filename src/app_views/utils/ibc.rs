@@ -549,7 +549,7 @@ pub async fn process_events(
                     "Updating counterparty for channel {} to {} (direction: {})",
                     our_channel, counterparty_channel, direction
                 );
-                
+
                 sqlx::query(
                     r"
                     UPDATE ibc_channels
@@ -561,7 +561,7 @@ pub async fn process_events(
                 .bind(counterparty_channel)
                 .execute(dbtx.as_mut())
                 .await?;
-                
+
                 if let Some(rows_affected) = sqlx::query(
                     r"
                     UPDATE ibc_channels
