@@ -4,7 +4,8 @@ use crate::api::graphql::{
     resolvers::{QueryRoot, SubscriptionRoot},
     scalars,
     types::{
-        ibc::ChannelPair, Action, Block, BlockCollection, BlockUpdate, CollectionItem, Event, Fee,
+        ibc::{ChannelPair, TotalShieldedVolume}, // Added TotalShieldedVolume
+        Action, Block, BlockCollection, BlockUpdate, CollectionItem, Event, Fee,
         IbcStats, Transaction, TransactionBody, TransactionCollection, TransactionCountUpdate,
         TransactionParameters, TransactionUpdate,
     },
@@ -14,7 +15,7 @@ use sqlx::PgPool;
 
 #[allow(clippy::module_name_repetitions)]
 pub type PenumbraSchema =
-    AsyncGraphQLSchema<QueryRoot, async_graphql::EmptyMutation, SubscriptionRoot>;
+AsyncGraphQLSchema<QueryRoot, async_graphql::EmptyMutation, SubscriptionRoot>;
 
 #[allow(clippy::module_name_repetitions)]
 #[must_use]
@@ -50,7 +51,8 @@ pub fn create_schema(db_pool: PgPool) -> PenumbraSchema {
         .register_output_type::<BlockCollection>()
         .register_output_type::<TransactionCollection>()
         .register_output_type::<IbcStats>()
-        .register_output_type::<ChannelPair>();
+        .register_output_type::<ChannelPair>()
+        .register_output_type::<TotalShieldedVolume>(); // Added this line
 
     builder.finish()
 }
