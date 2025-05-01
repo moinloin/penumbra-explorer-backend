@@ -125,8 +125,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -134,8 +134,8 @@ impl AppView for Explorer {
             ON explorer_block_details(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -143,8 +143,8 @@ impl AppView for Explorer {
             ON explorer_block_details(validator_identity_key)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -167,8 +167,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -176,8 +176,8 @@ impl AppView for Explorer {
             ON explorer_transactions(block_height)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -185,8 +185,8 @@ impl AppView for Explorer {
             ON explorer_transactions(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -205,8 +205,8 @@ impl AppView for Explorer {
                 height DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -229,8 +229,8 @@ impl AppView for Explorer {
                 t.timestamp DESC
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -241,8 +241,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -254,8 +254,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -271,8 +271,8 @@ impl AppView for Explorer {
     )
     ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         // Create indices for efficient querying
         sqlx::query(
@@ -281,8 +281,8 @@ impl AppView for Explorer {
             ON ibc_transfers(client_id)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -290,8 +290,8 @@ impl AppView for Explorer {
             ON ibc_transfers(timestamp DESC)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -299,8 +299,8 @@ impl AppView for Explorer {
             ON ibc_transfers(direction)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
@@ -308,8 +308,8 @@ impl AppView for Explorer {
             ON ibc_transfers(status)
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         // Keep the legacy tables for backward compatibility
         sqlx::query(
@@ -326,8 +326,8 @@ impl AppView for Explorer {
             )
             ",
         )
-            .execute(dbtx.as_mut())
-            .await?;
+        .execute(dbtx.as_mut())
+        .await?;
 
         sqlx::query(
             r"
