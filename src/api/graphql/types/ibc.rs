@@ -119,9 +119,9 @@ impl Stats {
             FROM {view_name}
             WHERE client_id = $1"
         ))
-            .bind(client_id)
-            .fetch_optional(db)
-            .await?;
+        .bind(client_id)
+        .fetch_optional(db)
+        .await?;
 
         Ok(row.map(|row| Stats {
             client_id: row.get("client_id"),
