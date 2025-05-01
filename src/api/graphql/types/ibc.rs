@@ -3,6 +3,23 @@ use async_graphql::{Context, Result, SimpleObject};
 use sqlx::Row;
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "camelCase")]
+pub struct ChannelPair {
+    // Our local channel
+    pub channel_id: String,
+    // The channel ID on the counterparty chain
+    pub counterparty_channel_id: Option<String>,
+    // The client ID associated with this channel
+    pub client_id: String,
+    // The connection ID if available
+    pub connection_id: Option<String>,
+    // Count of pending transactions over this channel
+    pub pending_tx_count: i64,
+    // Count of completed transactions over this channel
+    pub completed_tx_count: i64,
+}
+
+#[derive(SimpleObject)]
 #[graphql(name = "IbcStats")]
 pub struct Stats {
     pub client_id: String,
@@ -14,6 +31,120 @@ pub struct Stats {
     pub expired_tx_count: i64,
     #[graphql(name = "lastUpdated")]
     pub last_updated: Option<DateTime>,
+}
+
+impl ChannelPair {
+    /// Gets channel pairs for a specific client ID
+    ///
+    /// # Errors
+    /// Returns an error if the database query fails
+    pub async fn get_by_client_id(
+        ctx: &Context<'_>,
+        client_id: String,
+    ) -> Result<Vec<Self>> {
+        let db = &ctx
+            .data_unchecked::<crate::api::graphql::context::ApiContext>()
+            .db;
+
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                c.channel_id,
+                c.client_id,
+                c.connection_id,
+                c.counterparty_channel_id,
+                COUNT(CASE WHEN t.ibc_status = 'pending' THEN 1 ELSE NULL END) AS pending_tx_count,
+                COUNT(CASE WHEN t.ibc_status = 'completed' THEN 1 ELSE NULL END) AS completed_tx_count
+            FROM
+                ibc_channels c
+            LEFT JOIN
+                explorer_transactions t ON c.channel_id = t.ibc_channel_id
+            WHERE
+                c.client_id = $1
+            GROUP BY
+                c.channel_id, c.client_id, c.connection_id, c.counterparty_channel_id
+            ORDER BY
+                c.channel_id
+            "#,
+        )
+            .bind(client_id)
+            .fetch_all(db)
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| ChannelPair {
+                channel_id: row.get("channel_id"),
+                client_id: row.get("client_id"),
+                connection_id: row.get("connection_id"),
+                counterparty_channel_id: row.get("counterparty_channel_id"),
+                pending_tx_count: row.get("pending_tx_count"),
+                completed_tx_count: row.get("completed_tx_count"),
+            })
+            .collect())
+    }
+
+    /// Gets all channel pairs with optional filtering
+    ///
+    /// # Errors
+    /// Returns an error if the database query fails
+    pub async fn get_all(
+        ctx: &Context<'_>,
+        client_id: Option<String>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Self>> {
+        let db = &ctx
+            .data_unchecked::<crate::api::graphql::context::ApiContext>()
+            .db;
+
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+
+        let mut query =
+            r#"
+            SELECT
+                c.channel_id,
+                c.client_id,
+                c.connection_id,
+                c.counterparty_channel_id,
+                COUNT(CASE WHEN t.ibc_status = 'pending' THEN 1 ELSE NULL END) AS pending_tx_count,
+                COUNT(CASE WHEN t.ibc_status = 'completed' THEN 1 ELSE NULL END) AS completed_tx_count
+            FROM
+                ibc_channels c
+            LEFT JOIN
+                explorer_transactions t ON c.channel_id = t.ibc_channel_id
+            "#.to_string();
+
+        if client_id.is_some() {
+            query.push_str(" WHERE c.client_id = $1");
+        }
+
+        query.push_str(" GROUP BY c.channel_id, c.client_id, c.connection_id, c.counterparty_channel_id");
+        query.push_str(" ORDER BY c.channel_id");
+        query.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+
+        let rows = if let Some(client_id_val) = client_id {
+            sqlx::query(&query)
+                .bind(client_id_val)
+                .fetch_all(db)
+                .await?
+        } else {
+            sqlx::query(&query).fetch_all(db).await?
+        };
+
+        Ok(rows
+            .into_iter()
+            .map(|row| ChannelPair {
+                channel_id: row.get("channel_id"),
+                client_id: row.get("client_id"),
+                connection_id: row.get("connection_id"),
+                counterparty_channel_id: row.get("counterparty_channel_id"),
+                pending_tx_count: row.get("pending_tx_count"),
+                completed_tx_count: row.get("completed_tx_count"),
+            })
+            .collect())
+    }
 }
 
 impl Stats {
@@ -119,9 +250,9 @@ impl Stats {
             FROM {view_name}
             WHERE client_id = $1"
         ))
-        .bind(client_id)
-        .fetch_optional(db)
-        .await?;
+            .bind(client_id)
+            .fetch_optional(db)
+            .await?;
 
         Ok(row.map(|row| Stats {
             client_id: row.get("client_id"),
