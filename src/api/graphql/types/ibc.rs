@@ -1,14 +1,15 @@
 use crate::api::graphql::scalars::DateTime;
 use async_graphql::{Context, Result, SimpleObject};
 use sqlx::Row;
+use std::fmt;
 
 #[derive(SimpleObject)]
 #[graphql(name = "IbcStats")]
 pub struct Stats {
     pub client_id: String,
-    pub shielded_volume: i64,
+    pub shielded_volume: String,
     pub shielded_tx_count: i64,
-    pub unshielded_volume: i64,
+    pub unshielded_volume: String,
     pub unshielded_tx_count: i64,
     pub pending_tx_count: i64,
     pub expired_tx_count: i64,
@@ -17,6 +18,15 @@ pub struct Stats {
 }
 
 impl Stats {
+    /// Gets the appropriate view name based on the time period
+    fn get_view_name(time_period: Option<&str>) -> &'static str {
+        match time_period {
+            Some("24h") => "ibc_client_summary_24h",
+            Some("30d") => "ibc_client_summary_30d",
+            _ => "ibc_client_summary",
+        }
+    }
+
     /// Gets IBC stats with optional filtering
     ///
     /// # Errors
@@ -24,6 +34,7 @@ impl Stats {
     pub async fn get_all(
         ctx: &Context<'_>,
         client_id: Option<String>,
+        time_period: Option<String>,
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<Self>> {
@@ -33,18 +44,19 @@ impl Stats {
 
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
+        let view_name = Self::get_view_name(time_period.as_deref());
 
-        let mut query = String::from(
+        let mut query = format!(
             "SELECT
                 client_id,
-                shielded_volume,
+                shielded_volume::TEXT as shielded_volume,
                 shielded_tx_count,
-                unshielded_volume,
+                unshielded_volume::TEXT as unshielded_volume,
                 unshielded_tx_count,
                 pending_tx_count,
                 expired_tx_count,
                 last_updated
-            FROM ibc_stats",
+            FROM {view_name}"
         );
 
         if client_id.is_some() {
@@ -84,27 +96,33 @@ impl Stats {
     ///
     /// # Errors
     /// Returns an error if the database query fails
-    pub async fn get_by_client_id(ctx: &Context<'_>, client_id: String) -> Result<Option<Self>> {
+    pub async fn get_by_client_id(
+        ctx: &Context<'_>,
+        client_id: String,
+        time_period: Option<String>,
+    ) -> Result<Option<Self>> {
         let db = &ctx
             .data_unchecked::<crate::api::graphql::context::ApiContext>()
             .db;
 
-        let row = sqlx::query(
+        let view_name = Self::get_view_name(time_period.as_deref());
+
+        let row = sqlx::query(&format!(
             "SELECT
                 client_id,
-                shielded_volume,
+                shielded_volume::TEXT as shielded_volume,
                 shielded_tx_count,
-                unshielded_volume,
+                unshielded_volume::TEXT as unshielded_volume,
                 unshielded_tx_count,
                 pending_tx_count,
                 expired_tx_count,
                 last_updated
-            FROM ibc_stats
-            WHERE client_id = $1",
-        )
-        .bind(client_id)
-        .fetch_optional(db)
-        .await?;
+            FROM {view_name}
+            WHERE client_id = $1"
+        ))
+            .bind(client_id)
+            .fetch_optional(db)
+            .await?;
 
         Ok(row.map(|row| Stats {
             client_id: row.get("client_id"),
