@@ -249,7 +249,8 @@ impl AppView for Explorer {
     CREATE TABLE IF NOT EXISTS ibc_channels (
         channel_id TEXT PRIMARY KEY,
         client_id TEXT NOT NULL REFERENCES ibc_clients(client_id),
-        connection_id TEXT
+        connection_id TEXT,
+        counterparty_channel_id TEXT
     )
     ",
         )

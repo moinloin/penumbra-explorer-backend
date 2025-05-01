@@ -2,6 +2,8 @@
 use crate::api::graphql::{
     context::ApiContext,
     scalars::DateTime,
+    // Import the string_to_ibc_status function from the transaction module
+    types::transaction::string_to_ibc_status,
     types::{Event, Transaction},
 };
 use async_graphql::{Context, Object, Result};
@@ -41,21 +43,23 @@ impl Block {
         let db = &ctx.data_unchecked::<ApiContext>().db;
         let rows = sqlx::query(
             r"
-            SELECT
-                tx_hash,
-                block_height,
-                timestamp,
-                fee_amount::TEXT as fee_amount_str,
-                chain_id,
-                raw_data,
-                raw_json
-            FROM
-                explorer_transactions
-            WHERE
-                block_height = $1
-            ORDER BY
-                timestamp ASC
-            ",
+        SELECT
+            tx_hash,
+            block_height,
+            timestamp,
+            fee_amount::TEXT as fee_amount_str,
+            chain_id,
+            raw_data,
+            raw_json,
+            ibc_client_id,
+            COALESCE(ibc_status, 'unknown') as ibc_status
+        FROM
+            explorer_transactions
+        WHERE
+            block_height = $1
+        ORDER BY
+            timestamp ASC
+        ",
         )
         .bind(i64::from(self.height))
         .fetch_all(db)
@@ -70,6 +74,9 @@ impl Block {
             let _fee_amount_str: String = row.get("fee_amount_str");
             let raw_data: String = row.get("raw_data");
             let raw_json_str: String = row.get("raw_json");
+            let client_id: Option<String> = row.get("ibc_client_id");
+            let ibc_status_str: String = row.get("ibc_status");
+            let ibc_status = string_to_ibc_status(Some(&ibc_status_str));
 
             if !raw_json_str.is_empty() {
                 // First parse the JSON for metadata extraction, but use the original string for storage
@@ -86,6 +93,8 @@ impl Block {
                         raw_events: extract_events_from_json(&json),
                         // Store the original string to preserve DB ordering
                         raw_json: serde_json::Value::String(raw_json_str.clone()),
+                        client_id,
+                        ibc_status,
                     });
                 }
             }
@@ -93,7 +102,6 @@ impl Block {
 
         Ok(transactions)
     }
-
     #[graphql(name = "rawEvents")]
     #[allow(clippy::unused_async)]
     async fn raw_events(&self) -> Result<Vec<Event>> {

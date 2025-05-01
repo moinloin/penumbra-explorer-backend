@@ -1,4 +1,5 @@
 mod block;
+mod ibc;
 mod search;
 mod stats;
 mod subscription;
@@ -7,6 +8,7 @@ mod transaction;
 use async_graphql::Object;
 
 pub use block::{get as resolve_block, resolve_blocks, resolve_blocks_collection};
+pub use ibc::{resolve_ibc_stats, resolve_ibc_stats_by_client_id}; // Add this line
 pub use search::resolve_search;
 pub use stats::resolve_stats;
 pub use subscription::Root as SubscriptionRoot;
@@ -134,6 +136,24 @@ impl QueryRoot {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> async_graphql::Result<Vec<crate::api::graphql::types::DbRawTransaction>> {
-        crate::api::graphql::types::DbRawTransaction::get_all(ctx, limit, offset).await
+        crate::api::graphql::types::DbRawTransaction::get_all(ctx, limit, offset, None).await
+    }
+    async fn ibc_stats(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        client_id: Option<String>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> async_graphql::Result<Vec<crate::api::graphql::types::IbcStats>> {
+        resolve_ibc_stats(ctx, client_id, limit, offset).await
+    }
+
+    /// Get IBC stats by client ID
+    async fn ibc_stats_by_client_id(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        client_id: String,
+    ) -> async_graphql::Result<Option<crate::api::graphql::types::IbcStats>> {
+        resolve_ibc_stats_by_client_id(ctx, client_id).await
     }
 }
