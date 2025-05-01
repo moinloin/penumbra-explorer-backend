@@ -4,6 +4,7 @@ use tokio::time::Interval;
 use tracing::{debug, error, info};
 
 #[derive(Clone, Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct IbcTransactionEvent {
     pub tx_hash: Vec<u8>,
     pub client_id: String,
@@ -93,7 +94,7 @@ async fn get_recent_ibc_transactions(
     pool: &Pool<Postgres>,
 ) -> Result<Vec<(Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>)>, sqlx::Error> {
     sqlx::query_as::<_, (Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>)>(
-        r#"
+        r"
         SELECT
             tx_hash,
             ibc_client_id,
@@ -107,12 +108,16 @@ async fn get_recent_ibc_transactions(
         ORDER BY
             timestamp DESC
         LIMIT 100
-        "#
+        "
     )
         .fetch_all(pool)
         .await
 }
 
+/// Returns IBC transactions for a specific client ID with pagination
+/// 
+/// # Errors
+/// Returns a `sqlx::Error` if the database query fails
 pub async fn get_ibc_transactions_by_client(
     pool: &Pool<Postgres>,
     client_id: &str,
@@ -120,7 +125,7 @@ pub async fn get_ibc_transactions_by_client(
     offset: i32,
 ) -> Result<Vec<(Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>, sqlx::Error> {
     sqlx::query_as::<_, (Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>(
-        r#"
+        r"
         SELECT
             tx_hash,
             ibc_client_id,
@@ -135,7 +140,7 @@ pub async fn get_ibc_transactions_by_client(
         ORDER BY
             timestamp DESC
         LIMIT $2 OFFSET $3
-        "#
+        "
     )
         .bind(client_id)
         .bind(limit)
@@ -144,13 +149,17 @@ pub async fn get_ibc_transactions_by_client(
         .await
 }
 
+/// Returns all IBC transactions with pagination
+/// 
+/// # Errors
+/// Returns a `sqlx::Error` if the database query fails
 pub async fn get_all_ibc_transactions(
     pool: &Pool<Postgres>,
     limit: i32,
     offset: i32,
 ) -> Result<Vec<(Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>, sqlx::Error> {
     sqlx::query_as::<_, (Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>(
-        r#"
+        r"
         SELECT
             tx_hash,
             ibc_client_id,
@@ -165,7 +174,7 @@ pub async fn get_all_ibc_transactions(
         ORDER BY
             timestamp DESC
         LIMIT $1 OFFSET $2
-        "#
+        "
     )
         .bind(limit)
         .bind(offset)
@@ -173,12 +182,16 @@ pub async fn get_all_ibc_transactions(
         .await
 }
 
+/// Returns details for a specific transaction by hash
+/// 
+/// # Errors
+/// Returns a `sqlx::Error` if the database query fails
 pub async fn get_transaction_details(
     pool: &Pool<Postgres>,
     tx_hash: &[u8],
 ) -> Result<(i64, chrono::DateTime<chrono::Utc>, String, String), sqlx::Error> {
     let row = sqlx::query_as::<_, (i64, chrono::DateTime<chrono::Utc>, String, String)>(
-        r#"
+        r"
         SELECT
             block_height,
             timestamp,
@@ -188,7 +201,7 @@ pub async fn get_transaction_details(
             explorer_transactions
         WHERE
             tx_hash = $1
-        "#
+        "
     )
         .bind(tx_hash)
         .fetch_one(pool)
