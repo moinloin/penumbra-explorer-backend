@@ -4,8 +4,8 @@ use crate::api::graphql::{
     resolvers::{QueryRoot, SubscriptionRoot},
     scalars,
     types::{
-        Action, Block, BlockCollection, BlockUpdate, CollectionItem, Event, Fee, IbcStats, ibc::ChannelPair,
-        Transaction, TransactionBody, TransactionCollection, TransactionCountUpdate,
+        ibc::ChannelPair, Action, Block, BlockCollection, BlockUpdate, CollectionItem, Event, Fee,
+        IbcStats, Transaction, TransactionBody, TransactionCollection, TransactionCountUpdate,
         TransactionParameters, TransactionUpdate,
     },
 };
