@@ -5,9 +5,20 @@ use crate::api::graphql::{
     scalars,
     types::{
         ibc::{ChannelPair, TotalShieldedVolume}, // Added TotalShieldedVolume
-        Action, Block, BlockCollection, BlockUpdate, CollectionItem, Event, Fee,
-        IbcStats, Transaction, TransactionBody, TransactionCollection, TransactionCountUpdate,
-        TransactionParameters, TransactionUpdate,
+        Action,
+        Block,
+        BlockCollection,
+        BlockUpdate,
+        CollectionItem,
+        Event,
+        Fee,
+        IbcStats,
+        Transaction,
+        TransactionBody,
+        TransactionCollection,
+        TransactionCountUpdate,
+        TransactionParameters,
+        TransactionUpdate,
     },
 };
 use async_graphql::Schema as AsyncGraphQLSchema;
@@ -15,7 +26,7 @@ use sqlx::PgPool;
 
 #[allow(clippy::module_name_repetitions)]
 pub type PenumbraSchema =
-AsyncGraphQLSchema<QueryRoot, async_graphql::EmptyMutation, SubscriptionRoot>;
+    AsyncGraphQLSchema<QueryRoot, async_graphql::EmptyMutation, SubscriptionRoot>;
 
 #[allow(clippy::module_name_repetitions)]
 #[must_use]
