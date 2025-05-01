@@ -8,7 +8,10 @@ mod transaction;
 use async_graphql::Object;
 
 pub use block::{get as resolve_block, resolve_blocks, resolve_blocks_collection};
-pub use ibc::{resolve_ibc_stats, resolve_ibc_stats_by_client_id}; // Add this line
+pub use ibc::{
+    resolve_ibc_channel_pairs, resolve_ibc_channel_pairs_by_client_id, resolve_ibc_stats,
+    resolve_ibc_stats_by_client_id, resolve_total_shielded_volume,
+}; // Updated this line
 pub use search::resolve_search;
 pub use stats::resolve_stats;
 pub use subscription::Root as SubscriptionRoot;
@@ -138,6 +141,8 @@ impl QueryRoot {
     ) -> async_graphql::Result<Vec<crate::api::graphql::types::DbRawTransaction>> {
         crate::api::graphql::types::DbRawTransaction::get_all(ctx, limit, offset, None).await
     }
+
+    /// Get IBC stats with optional filtering
     async fn ibc_stats(
         &self,
         ctx: &async_graphql::Context<'_>,
@@ -157,5 +162,33 @@ impl QueryRoot {
         time_period: Option<String>,
     ) -> async_graphql::Result<Option<crate::api::graphql::types::IbcStats>> {
         resolve_ibc_stats_by_client_id(ctx, client_id, time_period).await
+    }
+
+    /// Get IBC channel pairs with optional filtering
+    async fn ibc_channel_pairs(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        client_id: Option<String>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> async_graphql::Result<Vec<crate::api::graphql::types::ibc::ChannelPair>> {
+        resolve_ibc_channel_pairs(ctx, client_id, limit, offset).await
+    }
+
+    /// Get IBC channel pairs for a specific client ID
+    async fn ibc_channel_pairs_by_client_id(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        client_id: String,
+    ) -> async_graphql::Result<Vec<crate::api::graphql::types::ibc::ChannelPair>> {
+        resolve_ibc_channel_pairs_by_client_id(ctx, client_id).await
+    }
+
+    /// Get total shielded volume across all IBC clients
+    async fn ibc_total_shielded_volume(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+    ) -> async_graphql::Result<crate::api::graphql::types::ibc::TotalShieldedVolume> {
+        resolve_total_shielded_volume(ctx).await
     }
 }

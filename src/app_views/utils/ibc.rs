@@ -544,18 +544,47 @@ pub async fn process_events(
                     Direction::Outbound => dst_channel,
                 };
 
+                // Update counterparty channel ID and also add debugging
+                debug!(
+                    "Updating counterparty for channel {} to {} (direction: {})",
+                    our_channel, counterparty_channel, direction
+                );
+
                 sqlx::query(
                     r"
                     UPDATE ibc_channels
                     SET counterparty_channel_id = $2
                     WHERE channel_id = $1
-                    AND (counterparty_channel_id IS NULL OR counterparty_channel_id = '')
                     ",
                 )
                 .bind(our_channel)
                 .bind(counterparty_channel)
                 .execute(dbtx.as_mut())
                 .await?;
+
+                if let Some(rows_affected) = sqlx::query(
+                    r"
+                    UPDATE ibc_channels
+                    SET counterparty_channel_id = $2
+                    WHERE channel_id = $1
+                    AND connection_id = 'auto-connection'
+                    AND (counterparty_channel_id IS NULL OR counterparty_channel_id = '')
+                    ",
+                )
+                .bind(counterparty_channel)
+                .bind(our_channel)
+                .execute(dbtx.as_mut())
+                .await
+                .ok()
+                .map(|r| r.rows_affected())
+                {
+                    if rows_affected > 0 {
+                        debug!(
+                            "Also updated reverse mapping: {} -> {}",
+                            counterparty_channel, our_channel
+                        );
+                    }
+                }
 
                 let mut final_client_id: Option<String> = None;
 

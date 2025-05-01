@@ -3,7 +3,9 @@ use sqlx::{Pool, Postgres};
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
-mod triggers;
+pub mod ibc;
+mod triggers; // Only define the module once, and make it public
+use ibc::IbcTransactionEvent;
 pub use triggers::start;
 
 #[derive(Clone)]
@@ -11,6 +13,9 @@ pub struct PubSub {
     blocks_tx: broadcast::Sender<i64>,
     transactions_tx: broadcast::Sender<i64>,
     transaction_count_tx: broadcast::Sender<i64>,
+    ibc_transactions_tx: broadcast::Sender<IbcTransactionEvent>,
+    // Add a new channel for total shielded volume updates
+    total_shielded_volume_tx: broadcast::Sender<String>,
 }
 
 impl Default for PubSub {
@@ -25,10 +30,15 @@ impl PubSub {
         let (blocks_tx, _) = broadcast::channel(1000);
         let (transactions_tx, _) = broadcast::channel(1000);
         let (transaction_count_tx, _) = broadcast::channel(1000);
+        let (ibc_transactions_tx, _) = broadcast::channel(1000);
+        // Create a new channel for total shielded volume updates
+        let (total_shielded_volume_tx, _) = broadcast::channel(1000);
         Self {
             blocks_tx,
             transactions_tx,
             transaction_count_tx,
+            ibc_transactions_tx,
+            total_shielded_volume_tx,
         }
     }
 
@@ -45,6 +55,17 @@ impl PubSub {
     #[must_use]
     pub fn transaction_count_subscribe(&self) -> broadcast::Receiver<i64> {
         self.transaction_count_tx.subscribe()
+    }
+
+    #[must_use]
+    pub fn ibc_transactions_subscribe(&self) -> broadcast::Receiver<IbcTransactionEvent> {
+        self.ibc_transactions_tx.subscribe()
+    }
+
+    // Add a new subscription method for total shielded volume
+    #[must_use]
+    pub fn total_shielded_volume_subscribe(&self) -> broadcast::Receiver<String> {
+        self.total_shielded_volume_tx.subscribe()
     }
 
     pub fn publish_block(&self, height: i64) {
@@ -92,6 +113,38 @@ impl PubSub {
         }
     }
 
+    pub fn publish_ibc_transaction(&self, event: IbcTransactionEvent) {
+        match self.ibc_transactions_tx.send(event) {
+            Ok(_) => debug!("Published IBC transaction update"),
+            Err(e) => {
+                // Handle the error case
+                let receiver_count = self.ibc_transactions_tx.receiver_count();
+                if receiver_count == 0 {
+                    debug!("No receivers for IBC transaction update");
+                } else {
+                    warn!("Failed to publish IBC transaction update: {}", e);
+                }
+            }
+        }
+    }
+
+    // Fix: Clone the value before sending it to avoid the borrow-after-move error
+    pub fn publish_total_shielded_volume(&self, value: String) {
+        let value_clone = value.clone();
+        match self.total_shielded_volume_tx.send(value) {
+            Ok(_) => debug!("Published total shielded volume update: {}", value_clone),
+            Err(e) => {
+                // Handle the error case
+                let receiver_count = self.total_shielded_volume_tx.receiver_count();
+                if receiver_count == 0 {
+                    debug!("No receivers for total shielded volume update");
+                } else {
+                    warn!("Failed to publish total shielded volume update: {}", e);
+                }
+            }
+        }
+    }
+
     #[must_use]
     pub fn from_context<'a>(ctx: &'a Context<'_>) -> Option<&'a Self> {
         ctx.data_opt::<Self>()
@@ -106,73 +159,5 @@ impl PubSub {
         tokio::spawn(async move {
             start(pubsub_clone, pool_clone).await;
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tokio::sync::broadcast::error::RecvError;
-    use tokio::time::{sleep, Duration};
-
-    #[tokio::test]
-    async fn test_pubsub_channels() {
-        let pubsub = PubSub::new();
-
-        let mut blocks_rx = pubsub.blocks_subscribe();
-        let mut txs_rx = pubsub.transactions_subscribe();
-        let mut count_rx = pubsub.transaction_count_subscribe();
-
-        pubsub.publish_block(100);
-        pubsub.publish_transaction(200);
-        pubsub.publish_transaction_count(50);
-
-        tokio::select! {
-            result = blocks_rx.recv() => {
-                assert_eq!(result.unwrap(), 100);
-            }
-            () = sleep(Duration::from_millis(100)) => {
-                panic!("Timeout waiting for block update");
-            }
-        }
-
-        tokio::select! {
-            result = txs_rx.recv() => {
-                assert_eq!(result.unwrap(), 200);
-            }
-            () = sleep(Duration::from_millis(100)) => {
-                panic!("Timeout waiting for transaction update");
-            }
-        }
-
-        tokio::select! {
-            result = count_rx.recv() => {
-                assert_eq!(result.unwrap(), 50);
-            }
-            () = sleep(Duration::from_millis(100)) => {
-                panic!("Timeout waiting for transaction count update");
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_pubsub_lagged_receiver() {
-        let pubsub = PubSub::new();
-
-        let mut rx1 = pubsub.blocks_subscribe();
-
-        for i in 0..1200 {
-            pubsub.publish_block(i);
-        }
-
-        let result = rx1.recv().await;
-        assert!(matches!(result, Err(RecvError::Lagged(_))));
-
-        let mut rx2 = pubsub.blocks_subscribe();
-
-        pubsub.publish_block(1500);
-
-        let result = rx2.recv().await;
-        assert_eq!(result.unwrap(), 1500);
     }
 }

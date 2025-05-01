@@ -2,6 +2,7 @@ use sqlx::{Pool, Postgres};
 use tokio::time::{interval, Duration};
 use tracing::{debug, error, info};
 
+use super::ibc;
 use super::PubSub;
 
 /// Starts all subscription triggers as concurrent tasks
@@ -19,7 +20,9 @@ pub async fn start(pubsub: PubSub, pool: Pool<Postgres>) {
 }
 
 /// Sets up `PostgreSQL` notification triggers for real-time updates
+#[allow(clippy::too_many_lines)]
 async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
+    // Existing triggers setup
     sqlx::query(
         r"
         CREATE OR REPLACE FUNCTION notify_block_update()
@@ -45,6 +48,42 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
         $$ LANGUAGE plpgsql;
     ").execute(pool).await?;
 
+    sqlx::query(
+        r"
+        CREATE OR REPLACE FUNCTION notify_ibc_transaction_update()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            -- Only notify if this is an IBC transaction
+            IF NEW.ibc_client_id IS NOT NULL THEN
+                PERFORM pg_notify('explorer_ibc_tx_update', encode(NEW.tx_hash, 'hex'));
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    ",
+    )
+    .execute(pool)
+    .await?;
+
+    // Add a new trigger function for total shielded volume updates
+    sqlx::query(
+        r"
+        CREATE OR REPLACE FUNCTION notify_total_shielded_volume_update()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            -- Notify when an IBC transaction is completed or status changes
+            IF (TG_OP = 'INSERT' AND NEW.ibc_status IN ('completed', 'pending')) OR
+               (TG_OP = 'UPDATE' AND NEW.ibc_status != OLD.ibc_status) THEN
+                PERFORM pg_notify('explorer_total_shielded_volume_update', 'updated');
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    ",
+    )
+    .execute(pool)
+    .await?;
+
     let _ = sqlx::query("DROP TRIGGER IF EXISTS block_update_trigger ON explorer_block_details")
         .execute(pool)
         .await;
@@ -52,6 +91,16 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
         sqlx::query("DROP TRIGGER IF EXISTS transaction_update_trigger ON explorer_transactions")
             .execute(pool)
             .await;
+    let _ = sqlx::query(
+        "DROP TRIGGER IF EXISTS ibc_transaction_update_trigger ON explorer_transactions",
+    )
+    .execute(pool)
+    .await;
+    let _ = sqlx::query(
+        "DROP TRIGGER IF EXISTS total_shielded_volume_update_trigger ON explorer_transactions",
+    )
+    .execute(pool)
+    .await;
 
     sqlx::query(
         r"
@@ -73,6 +122,27 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        r"
+        CREATE TRIGGER ibc_transaction_update_trigger
+        AFTER INSERT OR UPDATE OF ibc_status ON explorer_transactions
+        FOR EACH ROW EXECUTE FUNCTION notify_ibc_transaction_update();
+    ",
+    )
+    .execute(pool)
+    .await?;
+
+    // Add trigger for total shielded volume updates
+    sqlx::query(
+        r"
+        CREATE TRIGGER total_shielded_volume_update_trigger
+        AFTER INSERT OR UPDATE OF ibc_status ON explorer_transactions
+        FOR EACH ROW EXECUTE FUNCTION notify_total_shielded_volume_update();
+    ",
+    )
+    .execute(pool)
+    .await?;
+
     info!("Successfully set up database notification triggers");
     Ok(())
 }
@@ -85,11 +155,17 @@ async fn fallback_polling(pubsub: PubSub, pool: Pool<Postgres>) {
     let blocks_interval = interval(Duration::from_secs(1));
     let txs_interval = interval(Duration::from_secs(1));
     let count_interval = interval(Duration::from_secs(1));
+    let ibc_txs_interval = interval(Duration::from_secs(2));
+    // Add a new interval for total shielded volume (check every 5 seconds to reduce DB load)
+    let total_shielded_volume_interval = interval(Duration::from_secs(5));
 
     tokio::join!(
         poll_blocks(pubsub.clone(), pool.clone(), blocks_interval),
         poll_transactions(pubsub.clone(), pool.clone(), txs_interval),
-        poll_transaction_count(pubsub, pool, count_interval)
+        poll_transaction_count(pubsub.clone(), pool.clone(), count_interval),
+        ibc::poll_ibc_transactions(pubsub.clone(), pool.clone(), ibc_txs_interval),
+        // Add total shielded volume polling
+        poll_total_shielded_volume(pubsub, pool, total_shielded_volume_interval)
     );
 }
 
@@ -166,6 +242,30 @@ async fn poll_transaction_count(
     }
 }
 
+/// Polls for changes in total shielded volume
+async fn poll_total_shielded_volume(
+    pubsub: PubSub,
+    pool: Pool<Postgres>,
+    mut interval: tokio::time::Interval,
+) {
+    let mut last_value: Option<String> = None;
+
+    loop {
+        interval.tick().await;
+
+        match get_total_shielded_volume(&pool).await {
+            Ok(value) => {
+                if last_value.is_none() || last_value.as_ref().unwrap() != &value {
+                    debug!("Polling: Total shielded volume changed to {}", value);
+                    pubsub.publish_total_shielded_volume(value.clone());
+                    last_value = Some(value);
+                }
+            }
+            Err(e) => error!("Error fetching total shielded volume: {}", e),
+        }
+    }
+}
+
 async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, sqlx::Error> {
     let result = sqlx::query_as::<_, (i64,)>(
         "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1",
@@ -192,4 +292,20 @@ async fn get_transaction_count(pool: &Pool<Postgres>) -> Result<i64, sqlx::Error
         .await?;
 
     Ok(result.0)
+}
+
+/// Gets the current total shielded volume from the database
+async fn get_total_shielded_volume(pool: &Pool<Postgres>) -> Result<String, sqlx::Error> {
+    let result = sqlx::query_scalar::<_, String>(
+        r"
+        SELECT
+            COALESCE(SUM(shielded_volume), '0')::TEXT
+        FROM
+            ibc_client_summary
+        ",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(result)
 }
