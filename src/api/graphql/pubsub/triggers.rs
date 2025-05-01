@@ -2,8 +2,8 @@ use sqlx::{Pool, Postgres};
 use tokio::time::{interval, Duration};
 use tracing::{debug, error, info};
 
-use super::PubSub;
 use super::ibc;
+use super::PubSub;
 
 /// Starts all subscription triggers as concurrent tasks
 pub async fn start(pubsub: PubSub, pool: Pool<Postgres>) {
@@ -32,8 +32,8 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
         $$ LANGUAGE plpgsql;
     ",
     )
-        .execute(pool)
-        .await?;
+    .execute(pool)
+    .await?;
 
     sqlx::query(r"
         CREATE OR REPLACE FUNCTION notify_transaction_update()
@@ -47,7 +47,8 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
     ").execute(pool).await?;
 
     // Add a trigger function for IBC transactions
-    sqlx::query(r"
+    sqlx::query(
+        r"
         CREATE OR REPLACE FUNCTION notify_ibc_transaction_update()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -58,7 +59,10 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    ").execute(pool).await?;
+    ",
+    )
+    .execute(pool)
+    .await?;
 
     let _ = sqlx::query("DROP TRIGGER IF EXISTS block_update_trigger ON explorer_block_details")
         .execute(pool)
@@ -67,10 +71,11 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
         sqlx::query("DROP TRIGGER IF EXISTS transaction_update_trigger ON explorer_transactions")
             .execute(pool)
             .await;
-    let _ =
-        sqlx::query("DROP TRIGGER IF EXISTS ibc_transaction_update_trigger ON explorer_transactions")
-            .execute(pool)
-            .await;
+    let _ = sqlx::query(
+        "DROP TRIGGER IF EXISTS ibc_transaction_update_trigger ON explorer_transactions",
+    )
+    .execute(pool)
+    .await;
 
     sqlx::query(
         r"
@@ -79,8 +84,8 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
         FOR EACH ROW EXECUTE FUNCTION notify_block_update();
     ",
     )
-        .execute(pool)
-        .await?;
+    .execute(pool)
+    .await?;
 
     sqlx::query(
         r"
@@ -89,8 +94,8 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
         FOR EACH ROW EXECUTE FUNCTION notify_transaction_update();
     ",
     )
-        .execute(pool)
-        .await?;
+    .execute(pool)
+    .await?;
 
     // Add trigger for IBC transactions
     sqlx::query(
@@ -100,8 +105,8 @@ async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::
         FOR EACH ROW EXECUTE FUNCTION notify_ibc_transaction_update();
     ",
     )
-        .execute(pool)
-        .await?;
+    .execute(pool)
+    .await?;
 
     info!("Successfully set up database notification triggers");
     Ok(())
@@ -204,8 +209,8 @@ async fn get_latest_block_height(pool: &Pool<Postgres>) -> Result<Option<i64>, s
     let result = sqlx::query_as::<_, (i64,)>(
         "SELECT height FROM explorer_block_details ORDER BY height DESC LIMIT 1",
     )
-        .fetch_optional(pool)
-        .await?;
+    .fetch_optional(pool)
+    .await?;
 
     Ok(result.map(|r| r.0))
 }
@@ -214,8 +219,8 @@ async fn get_latest_transaction_height(pool: &Pool<Postgres>) -> Result<Option<i
     let result = sqlx::query_as::<_, (i64,)>(
         "SELECT block_height FROM explorer_transactions ORDER BY timestamp DESC LIMIT 1",
     )
-        .fetch_optional(pool)
-        .await?;
+    .fetch_optional(pool)
+    .await?;
 
     Ok(result.map(|r| r.0))
 }
