@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use sqlx::{Pool, Postgres};
+use std::collections::HashMap;
 use tokio::time::Interval;
 use tracing::{debug, error, info};
 
@@ -30,7 +30,8 @@ impl IbcTransactionTracker {
         // Check if we need to prune the cache
         if self.seen_transactions.len() >= self.max_entries {
             // Simple pruning strategy: clear half the cache when full
-            let keys_to_remove: Vec<Vec<u8>> = self.seen_transactions
+            let keys_to_remove: Vec<Vec<u8>> = self
+                .seen_transactions
                 .keys()
                 .take(self.max_entries / 2)
                 .cloned()
@@ -39,7 +40,10 @@ impl IbcTransactionTracker {
             for key in keys_to_remove {
                 self.seen_transactions.remove(&key);
             }
-            debug!("Pruned IBC transaction tracker cache (removed {} entries)", self.max_entries / 2);
+            debug!(
+                "Pruned IBC transaction tracker cache (removed {} entries)",
+                self.max_entries / 2
+            );
         }
 
         // Check if this is a status update or a new transaction
@@ -48,7 +52,8 @@ impl IbcTransactionTracker {
             None => false,
         };
 
-        self.seen_transactions.insert(tx_hash.clone(), status.to_string());
+        self.seen_transactions
+            .insert(tx_hash.clone(), status.to_string());
 
         is_status_update
     }
@@ -72,7 +77,10 @@ pub async fn poll_ibc_transactions(
                     let is_status_update = tracker.check_and_update(&tx_hash, &status);
 
                     if is_status_update {
-                        debug!("Detected status change for IBC transaction: new status = {}", status);
+                        debug!(
+                            "Detected status change for IBC transaction: new status = {}",
+                            status
+                        );
                     }
 
                     let event = IbcTransactionEvent {
@@ -108,14 +116,14 @@ async fn get_recent_ibc_transactions(
         ORDER BY
             timestamp DESC
         LIMIT 100
-        "
+        ",
     )
-        .fetch_all(pool)
-        .await
+    .fetch_all(pool)
+    .await
 }
 
 /// Returns IBC transactions for a specific client ID with pagination
-/// 
+///
 /// # Errors
 /// Returns a `sqlx::Error` if the database query fails
 pub async fn get_ibc_transactions_by_client(
@@ -123,8 +131,28 @@ pub async fn get_ibc_transactions_by_client(
     client_id: &str,
     limit: i32,
     offset: i32,
-) -> Result<Vec<(Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>, sqlx::Error> {
-    sqlx::query_as::<_, (Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>(
+) -> Result<
+    Vec<(
+        Vec<u8>,
+        String,
+        String,
+        i64,
+        chrono::DateTime<chrono::Utc>,
+        String,
+    )>,
+    sqlx::Error,
+> {
+    sqlx::query_as::<
+        _,
+        (
+            Vec<u8>,
+            String,
+            String,
+            i64,
+            chrono::DateTime<chrono::Utc>,
+            String,
+        ),
+    >(
         r"
         SELECT
             tx_hash,
@@ -140,25 +168,45 @@ pub async fn get_ibc_transactions_by_client(
         ORDER BY
             timestamp DESC
         LIMIT $2 OFFSET $3
-        "
+        ",
     )
-        .bind(client_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await
+    .bind(client_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
 }
 
 /// Returns all IBC transactions with pagination
-/// 
+///
 /// # Errors
 /// Returns a `sqlx::Error` if the database query fails
 pub async fn get_all_ibc_transactions(
     pool: &Pool<Postgres>,
     limit: i32,
     offset: i32,
-) -> Result<Vec<(Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>, sqlx::Error> {
-    sqlx::query_as::<_, (Vec<u8>, String, String, i64, chrono::DateTime<chrono::Utc>, String)>(
+) -> Result<
+    Vec<(
+        Vec<u8>,
+        String,
+        String,
+        i64,
+        chrono::DateTime<chrono::Utc>,
+        String,
+    )>,
+    sqlx::Error,
+> {
+    sqlx::query_as::<
+        _,
+        (
+            Vec<u8>,
+            String,
+            String,
+            i64,
+            chrono::DateTime<chrono::Utc>,
+            String,
+        ),
+    >(
         r"
         SELECT
             tx_hash,
@@ -174,16 +222,16 @@ pub async fn get_all_ibc_transactions(
         ORDER BY
             timestamp DESC
         LIMIT $1 OFFSET $2
-        "
+        ",
     )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
 }
 
 /// Returns details for a specific transaction by hash
-/// 
+///
 /// # Errors
 /// Returns a `sqlx::Error` if the database query fails
 pub async fn get_transaction_details(
@@ -201,11 +249,11 @@ pub async fn get_transaction_details(
             explorer_transactions
         WHERE
             tx_hash = $1
-        "
+        ",
     )
-        .bind(tx_hash)
-        .fetch_one(pool)
-        .await?;
+    .bind(tx_hash)
+    .fetch_one(pool)
+    .await?;
 
     Ok((row.0, row.1, row.2, row.3))
 }
