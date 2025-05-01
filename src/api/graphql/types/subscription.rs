@@ -38,3 +38,10 @@ pub struct IbcTransactionUpdate {
     /// Raw transaction data
     pub raw: String,
 }
+
+#[derive(SimpleObject, Clone)]
+#[graphql(rename_fields = "camelCase")]
+pub struct TotalShieldedVolumeUpdate {
+    /// Total shielded volume across all IBC clients
+    pub value: String,
+}

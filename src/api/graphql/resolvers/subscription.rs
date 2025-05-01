@@ -3,8 +3,10 @@ use crate::api::graphql::{
     pubsub::PubSub,
     scalars::DateTime,
     types::subscription::{
-        BlockUpdate, IbcTransactionUpdate, TransactionCountUpdate, TransactionUpdate,
+        BlockUpdate, IbcTransactionUpdate, TotalShieldedVolumeUpdate, TransactionCountUpdate,
+        TransactionUpdate,
     },
+    types::ibc::TotalShieldedVolume,
 };
 use async_graphql::{Context, Result, Subscription};
 use futures_util::stream::{Stream, StreamExt};
@@ -230,6 +232,50 @@ impl Root {
         Ok(combined_stream)
     }
 
+    /// Subscribe to total shielded volume updates
+    #[allow(clippy::unused_async)]
+    async fn total_shielded_volume(
+        &self,
+        ctx: &Context<'_>
+    ) -> Result<impl Stream<Item = TotalShieldedVolumeUpdate>> {
+        let pubsub = ctx.data::<PubSub>()?.clone();
+        let pool = Arc::new(ctx.data::<PgPool>()?.clone());
+
+        // Get initial total shielded volume
+        let initial_value = match TotalShieldedVolume::get(ctx).await {
+            Ok(value) => value.value,
+            Err(e) => {
+                // Fix: Use debug format for async_graphql::Error
+                error!("Failed to get initial total shielded volume: {:?}", e);
+                "0".to_string()
+            }
+        };
+
+        // Create initial stream that emits the current value once
+        let initial_stream = futures_util::stream::once(async move {
+            TotalShieldedVolumeUpdate { value: initial_value }
+        });
+
+        // Create stream for real-time updates
+        let receiver = pubsub.total_shielded_volume_subscribe();
+        let stream = tokio_stream::wrappers::BroadcastStream::new(receiver);
+
+        let real_time_stream = stream.filter_map(move |result| {
+            async move {
+                match result {
+                    Ok(value) => Some(TotalShieldedVolumeUpdate { value }),
+                    Err(e) => {
+                        error!("Error receiving total shielded volume update: {}", e);
+                        None
+                    }
+                }
+            }
+        });
+
+        // Fix: Chain the streams together instead of using select + filter_map
+        Ok(initial_stream.chain(real_time_stream))
+    }
+
     async fn latest_blocks(
         &self,
         ctx: &Context<'_>,
@@ -385,9 +431,9 @@ async fn get_block_data(
     let row = sqlx::query_as::<_, (chrono::DateTime<chrono::Utc>, i32)>(
         "SELECT timestamp, num_transactions FROM explorer_block_details WHERE height = $1",
     )
-    .bind(height)
-    .fetch_one(pool.as_ref())
-    .await?;
+        .bind(height)
+        .fetch_one(pool.as_ref())
+        .await?;
 
     Ok(row)
 }
@@ -399,9 +445,9 @@ async fn get_transaction_data(
     let row = sqlx::query_as::<_, (Vec<u8>, String)>(
         "SELECT tx_hash, raw_data FROM explorer_transactions WHERE block_height = $1 LIMIT 1",
     )
-    .bind(block_height)
-    .fetch_one(pool.as_ref())
-    .await?;
+        .bind(block_height)
+        .fetch_one(pool.as_ref())
+        .await?;
 
     let hash_hex = hex::encode_upper(&row.0);
 
@@ -425,9 +471,9 @@ async fn get_latest_blocks(pool: Arc<PgPool>, limit: i32) -> Result<Vec<BlockUpd
         "SELECT height, timestamp, num_transactions FROM explorer_block_details
          ORDER BY height DESC LIMIT $1",
     )
-    .bind(i64::from(limit))
-    .fetch_all(pool.as_ref())
-    .await?;
+        .bind(i64::from(limit))
+        .fetch_all(pool.as_ref())
+        .await?;
 
     let blocks = rows
         .into_iter()
@@ -450,9 +496,9 @@ async fn get_latest_transactions(
         "SELECT block_height, tx_hash, raw_data FROM explorer_transactions
          ORDER BY block_height DESC LIMIT $1",
     )
-    .bind(i64::from(limit))
-    .fetch_all(pool.as_ref())
-    .await?;
+        .bind(i64::from(limit))
+        .fetch_all(pool.as_ref())
+        .await?;
 
     let transactions = rows
         .into_iter()
@@ -491,9 +537,9 @@ async fn get_latest_ibc_transactions(
          WHERE ibc_client_id IS NOT NULL
          ORDER BY timestamp DESC LIMIT $1",
     )
-    .bind(i64::from(limit))
-    .fetch_all(pool.as_ref())
-    .await?;
+        .bind(i64::from(limit))
+        .fetch_all(pool.as_ref())
+        .await?;
 
     let transactions = rows
         .into_iter()
@@ -538,10 +584,10 @@ async fn get_latest_ibc_transactions_by_client(
          WHERE ibc_client_id = $1
          ORDER BY timestamp DESC LIMIT $2",
     )
-    .bind(client_id)
-    .bind(i64::from(limit))
-    .fetch_all(pool.as_ref())
-    .await?;
+        .bind(client_id)
+        .bind(i64::from(limit))
+        .fetch_all(pool.as_ref())
+        .await?;
 
     let transactions = rows
         .into_iter()
