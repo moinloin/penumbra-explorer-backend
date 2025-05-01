@@ -1,20 +1,21 @@
-// src/api/graphql/types/mod.rs
 mod asset;
 mod block;
 mod event;
+mod ibc; // Add this line
 pub mod inputs;
 mod stats;
 #[allow(clippy::module_name_repetitions)]
 pub mod subscription;
-pub mod transaction; // Make the transaction module public
+mod transaction;
 pub mod unions;
 
 pub use asset::*;
 pub use block::*;
 pub use event::*;
+pub use ibc::*; // Add this line
 pub use inputs::{
-    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, LatestBlock,
-    LatestTransactions, TransactionFilter, TransactionRange, TransactionsSelector,
+    BlockFilter, BlockHeightRange, BlocksSelector, CollectionLimit, IbcStatsFilter, // Add IbcStatsFilter
+    LatestBlock, LatestTransactions, TransactionFilter, TransactionRange, TransactionsSelector,
 };
 pub use stats::*;
 pub use subscription::*;
