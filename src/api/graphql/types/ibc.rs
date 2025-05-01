@@ -4,19 +4,9 @@ use crate::api::graphql::{
 use async_graphql::{Context, Result, SimpleObject};
 use sqlx::Row;
 
-/// Converts a string to an IBC status
-#[must_use]
-pub fn string_to_ibc_status(status: &str) -> &'static str {
-    match status.to_lowercase().as_str() {
-        "active" | "online" => "active",
-        "expired" => "expired",
-        "pending" => "pending",
-        _ => "unknown",
-    }
-}
-
 #[derive(SimpleObject)]
-pub struct IbcStats {
+#[graphql(name = "IbcStats")]
+pub struct Stats {
     pub client_id: String,
     pub shielded_volume: i64,
     pub shielded_tx_count: i64,
@@ -28,7 +18,7 @@ pub struct IbcStats {
     pub last_updated: Option<DateTime>,
 }
 
-impl IbcStats {
+impl Stats {
     /// Gets IBC stats with optional filtering
     ///
     /// # Errors
@@ -78,7 +68,7 @@ impl IbcStats {
         Ok(rows
             .into_iter()
             .map(|row| {
-                IbcStats {
+                Stats {
                     client_id: row.get("client_id"),
                     shielded_volume: row.get("shielded_volume"),
                     shielded_tx_count: row.get("shielded_tx_count"),
@@ -94,7 +84,7 @@ impl IbcStats {
             .collect())
     }
 
-    /// Gets a specific IBC stats entry by client_id
+    /// Gets a specific IBC stats entry by `client_id`
     ///
     /// # Errors
     /// Returns an error if the database query fails
@@ -119,7 +109,7 @@ impl IbcStats {
             .await?;
 
         Ok(row.map(|row| {
-            IbcStats {
+            Stats {
                 client_id: row.get("client_id"),
                 shielded_volume: row.get("shielded_volume"),
                 shielded_tx_count: row.get("shielded_tx_count"),
