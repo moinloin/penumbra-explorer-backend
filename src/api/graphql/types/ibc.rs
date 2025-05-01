@@ -38,10 +38,7 @@ impl ChannelPair {
     ///
     /// # Errors
     /// Returns an error if the database query fails
-    pub async fn get_by_client_id(
-        ctx: &Context<'_>,
-        client_id: String,
-    ) -> Result<Vec<Self>> {
+    pub async fn get_by_client_id(ctx: &Context<'_>, client_id: String) -> Result<Vec<Self>> {
         let db = &ctx
             .data_unchecked::<crate::api::graphql::context::ApiContext>()
             .db;
@@ -120,7 +117,9 @@ impl ChannelPair {
             query.push_str(" WHERE c.client_id = $1");
         }
 
-        query.push_str(" GROUP BY c.channel_id, c.client_id, c.connection_id, c.counterparty_channel_id");
+        query.push_str(
+            " GROUP BY c.channel_id, c.client_id, c.connection_id, c.counterparty_channel_id",
+        );
         query.push_str(" ORDER BY c.channel_id");
         query.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
 
@@ -250,9 +249,9 @@ impl Stats {
             FROM {view_name}
             WHERE client_id = $1"
         ))
-            .bind(client_id)
-            .fetch_optional(db)
-            .await?;
+        .bind(client_id)
+        .fetch_optional(db)
+        .await?;
 
         Ok(row.map(|row| Stats {
             client_id: row.get("client_id"),
