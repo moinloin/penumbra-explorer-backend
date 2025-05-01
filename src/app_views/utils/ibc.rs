@@ -304,7 +304,7 @@ pub async fn process_events(
                         "Found channel_open_ack for channel {} with counterparty channel {}",
                         channel_id, counterparty_channel_id
                     );
-                    
+
                     sqlx::query(
                         r"
                         UPDATE ibc_channels 
@@ -317,7 +317,7 @@ pub async fn process_events(
                     .execute(dbtx.as_mut())
                     .await?;
                 }
-            },
+            }
             "channel_open_init" => {
                 if let (Some(channel_id), Some(connection_id)) = (
                     find_attribute_value(event, "channel_id"),
@@ -343,7 +343,7 @@ pub async fn process_events(
                         .bind(connection_id)
                         .execute(dbtx.as_mut())
                         .await?;
-                        
+
                         // Counterparty channel will be updated later when we see it in ack events
 
                         debug!(
@@ -442,7 +442,7 @@ pub async fn process_events(
                     Direction::Inbound => dst_channel,
                     Direction::Outbound => src_channel,
                 };
-                
+
                 // The counterparty channel is the opposite of our channel
                 let counterparty_channel = match direction {
                     Direction::Inbound => src_channel,
@@ -856,7 +856,7 @@ pub async fn process_events(
                             .bind(&selected_client)
                             .execute(dbtx.as_mut())
                             .await?;
-                            
+
                             // Note: Counterparty channel will be updated when processing packet events
 
                             resolved_client_id = Some(selected_client);
@@ -880,7 +880,7 @@ pub async fn process_events(
                         .bind(&selected_client)
                         .execute(dbtx.as_mut())
                         .await?;
-                        
+
                         // Note: Counterparty channel will be updated when processing packet events
 
                         resolved_client_id = Some(selected_client);
@@ -1014,7 +1014,7 @@ pub async fn process_events(
                             .bind(&selected_client)
                             .execute(dbtx.as_mut())
                             .await?;
-                            
+
                             // Note: Counterparty channel will be updated when processing packet events
 
                             resolved_client_id = Some(selected_client);
@@ -1038,7 +1038,7 @@ pub async fn process_events(
                         .bind(&selected_client)
                         .execute(dbtx.as_mut())
                         .await?;
-                        
+
                         // Note: Counterparty channel will be updated when processing packet events
 
                         resolved_client_id = Some(selected_client);
