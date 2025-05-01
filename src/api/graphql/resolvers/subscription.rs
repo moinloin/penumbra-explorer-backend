@@ -1,6 +1,6 @@
 use crate::api::graphql::{
     pubsub::PubSub,
-    pubsub::ibc::{self, IbcTransactionEvent},
+    pubsub::ibc,
     scalars::DateTime,
     types::subscription::{BlockUpdate, TransactionCountUpdate, TransactionUpdate, IbcTransactionUpdate},
 };
