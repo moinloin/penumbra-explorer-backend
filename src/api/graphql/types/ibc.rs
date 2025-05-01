@@ -47,7 +47,7 @@ impl ChannelPair {
             .db;
 
         let rows = sqlx::query(
-            r#"
+            r"
             SELECT
                 c.channel_id,
                 c.client_id,
@@ -65,7 +65,7 @@ impl ChannelPair {
                 c.channel_id, c.client_id, c.connection_id, c.counterparty_channel_id
             ORDER BY
                 c.channel_id
-            "#,
+            ",
         )
             .bind(client_id)
             .fetch_all(db)
@@ -102,7 +102,7 @@ impl ChannelPair {
         let offset = offset.unwrap_or(0);
 
         let mut query =
-            r#"
+            r"
             SELECT
                 c.channel_id,
                 c.client_id,
@@ -114,7 +114,7 @@ impl ChannelPair {
                 ibc_channels c
             LEFT JOIN
                 explorer_transactions t ON c.channel_id = t.ibc_channel_id
-            "#.to_string();
+            ".to_string();
 
         if client_id.is_some() {
             query.push_str(" WHERE c.client_id = $1");
@@ -122,7 +122,7 @@ impl ChannelPair {
 
         query.push_str(" GROUP BY c.channel_id, c.client_id, c.connection_id, c.counterparty_channel_id");
         query.push_str(" ORDER BY c.channel_id");
-        query.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+        query.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
 
         let rows = if let Some(client_id_val) = client_id {
             sqlx::query(&query)
