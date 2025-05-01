@@ -20,6 +20,7 @@ pub async fn start(pubsub: PubSub, pool: Pool<Postgres>) {
 }
 
 /// Sets up `PostgreSQL` notification triggers for real-time updates
+#[allow(clippy::too_many_lines)]
 async fn setup_notification_triggers(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
     // Existing triggers setup
     sqlx::query(
