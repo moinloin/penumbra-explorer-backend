@@ -155,13 +155,10 @@ pub async fn resolve_transactions(
                 .fetch_all(db)
                 .await?
         }
+    } else if let Some(client_id) = &selector.client_id {
+        sqlx::query(&query).bind(client_id).fetch_all(db).await?
     } else {
-        // Handle client_id filter if present
-        if let Some(client_id) = &selector.client_id {
-            sqlx::query(&query).bind(client_id).fetch_all(db).await?
-        } else {
-            sqlx::query(&query).fetch_all(db).await?
-        }
+        sqlx::query(&query).fetch_all(db).await?
     };
 
     let mut transactions = process_transaction_rows(rows)?;
@@ -179,6 +176,10 @@ pub async fn resolve_transactions(
 ///
 /// # Errors
 /// Returns an error if database queries fail
+///
+/// # Panics
+/// This function may panic if the `hash_bytes_storage` is accessed while None,
+/// which shouldn't occur due to the logic flow that only accesses the storage when it's initialized.
 pub async fn resolve_transactions_collection(
     ctx: &async_graphql::Context<'_>,
     limit: CollectionLimit,
@@ -186,30 +187,32 @@ pub async fn resolve_transactions_collection(
 ) -> Result<TransactionCollection> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
+    // Create storage for our potential hash bytes
+    let mut hash_bytes_storage: Option<Vec<u8>> = None;
+
     let mut count_query = String::from("SELECT COUNT(*) FROM explorer_transactions");
     let mut where_clauses = Vec::new();
-    let mut params = Vec::new();
-    let mut param_index = 1;
+    let mut param_count = 0;
 
-    // Build WHERE clauses and collect parameters
+    // Build WHERE clauses
     if let Some(filter) = &filter {
         if let Some(hash) = &filter.hash {
-            let Ok(hash_bytes) = hex::decode(hash.trim_start_matches("0x")) else {
+            if let Ok(hash_bytes) = hex::decode(hash.trim_start_matches("0x")) {
+                hash_bytes_storage = Some(hash_bytes);
+                param_count += 1;
+                where_clauses.push(format!("tx_hash = ${param_count}"));
+            } else {
                 return Ok(TransactionCollection {
                     items: vec![],
                     total: 0,
                 });
-            };
-            where_clauses.push(format!("tx_hash = ${param_index}"));
-            params.push(hash_bytes);
-            param_index += 1;
+            }
         }
 
         // Add client_id filter
-        if let Some(client_id) = &filter.client_id {
-            where_clauses.push(format!("ibc_client_id = ${param_index}"));
-            params.push(client_id.clone().into_bytes());
-            // Don't increment param_index as it's not used after this point
+        if filter.client_id.is_some() {
+            param_count += 1;
+            where_clauses.push(format!("ibc_client_id = ${param_count}"));
         }
     }
 
@@ -219,11 +222,18 @@ pub async fn resolve_transactions_collection(
         count_query.push_str(&where_clauses.join(" AND "));
     }
 
-    // Execute count query with parameters
+    // Build count query
     let mut count_query_builder = sqlx::query_scalar::<_, i64>(&count_query);
 
-    for param in &params {
-        count_query_builder = count_query_builder.bind(param.as_slice());
+    // Bind parameters to count query
+    if let Some(filter) = &filter {
+        if let Some(hash_bytes) = &hash_bytes_storage {
+            count_query_builder = count_query_builder.bind(hash_bytes.as_slice());
+        }
+
+        if let Some(client_id) = &filter.client_id {
+            count_query_builder = count_query_builder.bind(client_id);
+        }
     }
 
     let total_count = count_query_builder.fetch_one(db).await?;
@@ -262,10 +272,18 @@ pub async fn resolve_transactions_collection(
 
     query.push_str(&format!(" LIMIT {length} OFFSET {offset}"));
 
+    // Build data query
     let mut query_builder = sqlx::query(&query);
 
-    for param in &params {
-        query_builder = query_builder.bind(param.as_slice());
+    // Bind parameters to data query
+    if let Some(filter) = &filter {
+        if let Some(hash_bytes) = &hash_bytes_storage {
+            query_builder = query_builder.bind(hash_bytes.as_slice());
+        }
+
+        if let Some(client_id) = &filter.client_id {
+            query_builder = query_builder.bind(client_id);
+        }
     }
 
     let rows = query_builder.fetch_all(db).await?;
@@ -288,7 +306,6 @@ fn process_transaction_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Vec<Tran
         let timestamp: chrono::DateTime<chrono::Utc> = row.get("block_timestamp");
         let raw_data: String = row.get("raw_data");
         let raw_json_str: String = row.get("raw_json");
-        // Get client_id and ibc_status from row
         let client_id: Option<String> = row.get("ibc_client_id");
         let ibc_status_str: String = row.get("ibc_status");
         let ibc_status = string_to_ibc_status(Some(&ibc_status_str));
