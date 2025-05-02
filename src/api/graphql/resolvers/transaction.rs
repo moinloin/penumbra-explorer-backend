@@ -100,6 +100,7 @@ pub async fn resolve_transactions(
 ) -> Result<Vec<Transaction>> {
     let db = &ctx.data_unchecked::<ApiContext>().db;
 
+    // Updated base query to include ibc_client_id and ibc_status
     let base_query = r"
         SELECT
             t.tx_hash,
@@ -141,6 +142,7 @@ pub async fn resolve_transactions(
                 .await?
         }
     } else if let Some(latest) = &selector.latest {
+        // Handle client_id filter if present
         if let Some(client_id) = &selector.client_id {
             sqlx::query(&query)
                 .bind(client_id)
@@ -153,12 +155,10 @@ pub async fn resolve_transactions(
                 .fetch_all(db)
                 .await?
         }
+    } else if let Some(client_id) = &selector.client_id {
+        sqlx::query(&query).bind(client_id).fetch_all(db).await?
     } else {
-        if let Some(client_id) = &selector.client_id {
-            sqlx::query(&query).bind(client_id).fetch_all(db).await?
-        } else {
-            sqlx::query(&query).fetch_all(db).await?
-        }
+        sqlx::query(&query).fetch_all(db).await?
     };
 
     let mut transactions = process_transaction_rows(rows)?;
@@ -176,10 +176,10 @@ pub async fn resolve_transactions(
 ///
 /// # Errors
 /// Returns an error if database queries fail
-/// Resolves transactions with pagination and optional filtering
 ///
-/// # Errors
-/// Returns an error if database queries fail
+/// # Panics
+/// This function may panic if the `hash_bytes_storage` is accessed while None,
+/// which shouldn't occur due to the logic flow that only accesses the storage when it's initialized.
 pub async fn resolve_transactions_collection(
     ctx: &async_graphql::Context<'_>,
     limit: CollectionLimit,
@@ -210,7 +210,7 @@ pub async fn resolve_transactions_collection(
         }
 
         // Add client_id filter
-        if let Some(_) = &filter.client_id {
+        if filter.client_id.is_some() {
             param_count += 1;
             where_clauses.push(format!("ibc_client_id = ${param_count}"));
         }
@@ -227,8 +227,8 @@ pub async fn resolve_transactions_collection(
 
     // Bind parameters to count query
     if let Some(filter) = &filter {
-        if hash_bytes_storage.is_some() {
-            count_query_builder = count_query_builder.bind(hash_bytes_storage.as_ref().unwrap().as_slice());
+        if let Some(hash_bytes) = &hash_bytes_storage {
+            count_query_builder = count_query_builder.bind(hash_bytes.as_slice());
         }
 
         if let Some(client_id) = &filter.client_id {
@@ -277,8 +277,8 @@ pub async fn resolve_transactions_collection(
 
     // Bind parameters to data query
     if let Some(filter) = &filter {
-        if hash_bytes_storage.is_some() {
-            query_builder = query_builder.bind(hash_bytes_storage.as_ref().unwrap().as_slice());
+        if let Some(hash_bytes) = &hash_bytes_storage {
+            query_builder = query_builder.bind(hash_bytes.as_slice());
         }
 
         if let Some(client_id) = &filter.client_id {
