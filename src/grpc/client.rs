@@ -44,7 +44,6 @@ pub struct Any {
     pub value: Vec<u8>,
 }
 
-// For querying client connections
 #[derive(Clone, PartialEq, Eq, Message)]
 pub struct QueryClientConnectionsRequest {
     #[prost(string, tag = "1")]
