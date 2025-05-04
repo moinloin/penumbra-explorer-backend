@@ -6,7 +6,6 @@ use super::client::{
     CLIENT_STATUS_ACTIVE, CLIENT_STATUS_EXPIRED, CLIENT_STATUS_FROZEN, CLIENT_STATUS_UNKNOWN
 };
 
-// Breaking down the function to reduce cognitive complexity
 async fn check_client_statuses(client: &GrpcClient) {
     match query_all_clients(client).await {
         Ok(statuses) => {
@@ -74,10 +73,8 @@ async fn check_ibc_clients() {
     info!("Running scheduled IBC client status check");
     let client = GrpcClient::new("grpc.penumbra.silentvalidator.com", 443);
 
-    // Check client statuses
     check_client_statuses(&client).await;
 
-    // Check client channels
     check_client_channels(&client).await;
 }
 
