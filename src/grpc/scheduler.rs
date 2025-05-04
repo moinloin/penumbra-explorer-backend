@@ -1,10 +1,10 @@
+use super::client::{
+    query_all_client_channels, query_all_clients, GrpcClient, CLIENT_STATUS_ACTIVE,
+    CLIENT_STATUS_EXPIRED, CLIENT_STATUS_FROZEN, CLIENT_STATUS_UNKNOWN,
+};
 use std::time::Duration;
 use tokio::time;
 use tracing::{error, info};
-use super::client::{
-    query_all_clients, query_all_client_channels, GrpcClient,
-    CLIENT_STATUS_ACTIVE, CLIENT_STATUS_EXPIRED, CLIENT_STATUS_FROZEN, CLIENT_STATUS_UNKNOWN
-};
 
 async fn check_client_statuses(client: &GrpcClient) {
     match query_all_clients(client).await {
@@ -29,7 +29,11 @@ async fn check_client_statuses(client: &GrpcClient) {
 
             info!(
                 "IBC clients: Total: {}, Active: {}, Expired: {}, Frozen: {}, Unknown: {}",
-                statuses.len(), active_count, expired_count, frozen_count, unknown_count
+                statuses.len(),
+                active_count,
+                expired_count,
+                frozen_count,
+                unknown_count
             );
 
             info!("=== IBC Client Status Summary ===");
@@ -52,7 +56,11 @@ async fn check_client_channels(client: &GrpcClient) {
                 if channels.is_empty() {
                     info!("Client: {} - No open channels found", client_id);
                 } else {
-                    info!("Client: {} - Found {} open channels:", client_id, channels.len());
+                    info!(
+                        "Client: {} - Found {} open channels:",
+                        client_id,
+                        channels.len()
+                    );
                     for (port_id, channel_id, counterparty_channel_id) in channels {
                         info!(
                             "    Port: {}, Channel: {}, Counterparty Channel: {}",
@@ -73,8 +81,10 @@ async fn check_ibc_clients() {
     info!("Running scheduled IBC client status check");
     let client = GrpcClient::new("grpc.penumbra.silentvalidator.com", 443);
 
+    // Check client statuses
     check_client_statuses(&client).await;
 
+    // Check client channels
     check_client_channels(&client).await;
 }
 

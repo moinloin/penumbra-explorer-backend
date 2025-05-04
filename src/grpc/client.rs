@@ -44,6 +44,7 @@ pub struct Any {
     pub value: Vec<u8>,
 }
 
+// For querying client connections
 #[derive(Clone, PartialEq, Eq, Message)]
 pub struct QueryClientConnectionsRequest {
     #[prost(string, tag = "1")]
@@ -320,7 +321,10 @@ pub async fn query_client_connections(client: &GrpcClient, client_id: &str) -> R
 /// Returns an error if the gRPC call fails
 /// Returns a vector of tuples containing (`port_id`, `channel_id`, `counterparty_channel_id`)
 /// Only returns channels with `STATE_OPEN` status
-pub async fn query_connection_channels(client: &GrpcClient, connection: &str) -> Result<Vec<(String, String, String)>> {
+pub async fn query_connection_channels(
+    client: &GrpcClient,
+    connection: &str,
+) -> Result<Vec<(String, String, String)>> {
     let request = QueryConnectionChannelsRequest {
         connection: connection.to_string(),
     };
@@ -329,67 +333,75 @@ pub async fn query_connection_channels(client: &GrpcClient, connection: &str) ->
         .unary("/ibc.core.channel.v1.Query/ConnectionChannels", request)
         .await?;
 
-        let channels = response
-            .channels
-            .into_iter()
-            .filter(|channel| {
-                if let Ok(State::Open) = State::try_from(channel.state) {
-                    true
-                } else {
-                    info!("Skipping channel {} with non-open state {}", channel.channel_id, channel.state);
-                    false
-                }
-            })
-            .map(|channel| {
-                let counterparty_channel_id = channel
-                    .counterparty
-                    .as_ref()
-                    .map_or_else(|| "unknown".to_string(), |cp| cp.channel_id.clone());
+    let channels = response
+        .channels
+        .into_iter()
+        .filter(|channel| {
+            if let Ok(State::Open) = State::try_from(channel.state) {
+                true
+            } else {
+                info!(
+                    "Skipping channel {} with non-open state {}",
+                    channel.channel_id, channel.state
+                );
+                false
+            }
+        })
+        .map(|channel| {
+            let counterparty_channel_id = channel
+                .counterparty
+                .as_ref()
+                .map_or_else(|| "unknown".to_string(), |cp| cp.channel_id.clone());
 
-                (channel.port_id, channel.channel_id, counterparty_channel_id)
-            })
-            .collect();
+            (channel.port_id, channel.channel_id, counterparty_channel_id)
+        })
+        .collect();
 
-        Ok(channels)
+    Ok(channels)
+}
+
+/// # Errors
+/// Returns an error if the gRPC calls fail
+pub async fn query_all_client_channels(
+    client: &GrpcClient,
+) -> Result<Vec<(String, Vec<(String, String, String)>)>> {
+    let client_ids = query_all_client_ids(client).await?;
+
+    if client_ids.is_empty() {
+        info!("No IBC clients found");
+        return Ok(Vec::new());
     }
 
-    /// # Errors
-    /// Returns an error if the gRPC calls fail
-    pub async fn query_all_client_channels(client: &GrpcClient) -> Result<Vec<(String, Vec<(String, String, String)>)>> {
-        let client_ids = query_all_client_ids(client).await?;
+    let mut results = Vec::with_capacity(client_ids.len());
 
-        if client_ids.is_empty() {
-            info!("No IBC clients found");
-            return Ok(Vec::new());
-        }
+    for client_id in &client_ids {
+        let mut client_channels = Vec::new();
 
-        let mut results = Vec::with_capacity(client_ids.len());
-
-        for client_id in &client_ids {
-            let mut client_channels = Vec::new();
-
-            match query_client_connections(client, client_id).await {
-                Ok(connections) => {
-                    for connection in connections {
-                        match query_connection_channels(client, &connection).await {
-                            Ok(channels) => {
-                                for channel_info in channels {
-                                    client_channels.push(channel_info);
-                                }
+        match query_client_connections(client, client_id).await {
+            Ok(connections) => {
+                for connection in connections {
+                    match query_connection_channels(client, &connection).await {
+                        Ok(channels) => {
+                            for channel_info in channels {
+                                client_channels.push(channel_info);
                             }
-                            Err(e) => {
-                                error!("Error querying channels for connection {}: {}", connection, e);
-                            }
+                        }
+                        Err(e) => {
+                            error!(
+                                "Error querying channels for connection {}: {}",
+                                connection, e
+                            );
                         }
                     }
                 }
-                Err(e) => {
-                    error!("Error querying connections for client {}: {}", client_id, e);
-                }
             }
-
-            results.push((client_id.clone(), client_channels));
+            Err(e) => {
+                error!("Error querying connections for client {}: {}", client_id, e);
+            }
         }
 
-        Ok(results)
+        results.push((client_id.clone(), client_channels));
     }
+
+    Ok(results)
+}
